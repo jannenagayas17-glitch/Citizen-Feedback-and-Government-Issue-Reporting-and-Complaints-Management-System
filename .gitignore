@@ -1,0 +1,17 @@
+# Laravel
+backend/citizen-feedback-api/vendor/
+backend/citizen-feedback-api/node_modules/
+backend/citizen-feedback-api/.env
+backend/citizen-feedback-api/storage/*.key
+
+# Flutter
+mobile/citizen-feedback-app/.dart_tool/
+mobile/citizen-feedback-app/build/
+mobile/citizen-feedback-app/.idea/
+mobile/citizen-feedback-app/.packages
+mobile/citizen-feedback-app/.flutter-plugins
+mobile/citizen-feedback-app/.flutter-plugins-dependencies
+
+# General
+.DS_Store
+Thumbs.db
