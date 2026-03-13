@@ -2,40 +2,121 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\PasswordResetController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ReportController;
-use App\Http\Controllers\Api\ReportImageController;
-use App\Http\Controllers\Api\StatusHistoryController;
-use App\Http\Controllers\Api\AdminResponseController;
 use App\Http\Controllers\Api\DashboardController;
-use App\Http\Controllers\Api\UserManagementController;
 
-Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login', [AuthController::class, 'login']);
+/*
+|--------------------------------------------------------------------------
+| Public Routes
+|--------------------------------------------------------------------------
+| These routes do not require authentication
+|
+*/
 
-Route::middleware('auth:sanctum')->group(function (): void {
-    Route::get('/dashboard', [DashboardController::class, 'index']);
+Route::prefix('auth')->group(function () {
 
-    Route::get('/reports', [ReportController::class, 'index']);
-    Route::post('/reports', [ReportController::class, 'store']);
-    Route::get('/reports/{id}', [ReportController::class, 'show']);
-    Route::post('/reports/{reportId}/status', [StatusHistoryController::class, 'store']);
-    Route::post('/reports/{reportId}/responses', [AdminResponseController::class, 'store']);
-    Route::post('/reports/{reportId}/images', [ReportImageController::class, 'store']);
+    // LOGIN
+    Route::post('/login', [AuthController::class, 'login']);
 
-    Route::get('/categories', [CategoryController::class, 'index']);
-    Route::post('/categories', [CategoryController::class, 'store']);
+    // REGISTER (Citizen)
+    Route::post('/register', [AuthController::class, 'registerCitizen']);
 
-    Route::put('/user/profile', [AuthController::class, 'updateProfile']);
-    Route::put('/user/change-password', [AuthController::class, 'changePassword']);
+    // REGISTER (Government Request)
+    Route::post('/request-government-account', [AuthController::class, 'requestGovernmentAccount']);
 
-    Route::get('/users', [UserManagementController::class, 'index']);
-    Route::put('/users/{id}/role', [UserManagementController::class, 'updateRole']);
+    // GOOGLE LOGIN
+    Route::post('/google-login', [AuthController::class, 'googleLogin']);
 
-    Route::post('/logout', [AuthController::class, 'logout']);
+});
+
+
+/*
+|--------------------------------------------------------------------------
+| Password Reset Routes
+|--------------------------------------------------------------------------
+*/
+
+Route::post('/forgot-password', [PasswordResetController::class, 'sendResetLink']);
+
+Route::post('/reset-password', [PasswordResetController::class, 'resetPassword']);
+
+
+
+/*
+|--------------------------------------------------------------------------
+| Public Data
+|--------------------------------------------------------------------------
+*/
+
+Route::get('/categories', [CategoryController::class, 'index']);
+
+
+
+/*
+|--------------------------------------------------------------------------
+| Protected Routes
+|--------------------------------------------------------------------------
+| Requires authentication via Sanctum
+|
+*/
+
+Route::middleware('auth:sanctum')->group(function () {
+
+    /*
+    |--------------------------------------------------------------------------
+    | User
+    |--------------------------------------------------------------------------
+    */
+
     Route::get('/user', function (Request $request) {
         return $request->user();
     });
-    
+
+    Route::post('/logout', [AuthController::class, 'logout']);
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Reports / Complaints
+    |--------------------------------------------------------------------------
+    */
+
+    Route::prefix('reports')->group(function () {
+
+        Route::post('/', [ReportController::class, 'store']);        // submit complaint
+        Route::get('/', [ReportController::class, 'index']);         // user complaints
+        Route::get('/{id}', [ReportController::class, 'show']);      // complaint details
+
+    });
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Dashboard
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get('/dashboard', [DashboardController::class, 'index']);
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Admin Controls
+    |--------------------------------------------------------------------------
+    */
+
+    Route::prefix('admin')->group(function () {
+
+        Route::get('/reports', [ReportController::class, 'adminReports']);
+
+        Route::post('/verify-account/{id}', [AuthController::class, 'verifyAccount']);
+
+        Route::post('/deactivate-account/{id}', [AuthController::class, 'deactivateAccount']);
+
+    });
+
 });

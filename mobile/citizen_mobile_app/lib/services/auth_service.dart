@@ -1,0 +1,158 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+import '../config/api_config.dart';
+import '../utils/token_storage.dart';
+
+class AuthService {
+  Uri _buildUri(String endpoint) {
+    return Uri.parse('${ApiConfig.baseUrl}$endpoint');
+  }
+
+  Future<Map<String, String>> _headers({bool authRequired = false}) async {
+    final headers = <String, String>{
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+    };
+
+    if (authRequired) {
+      final token = await TokenStorage.getToken();
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+    }
+
+    return headers;
+  }
+
+  Future<Map<String, dynamic>> login({
+    required String email,
+    required String password,
+  }) async {
+    final response = await http.post(
+      _buildUri('/auth/login'),
+      headers: await _headers(),
+      body: jsonEncode({
+        'email': email,
+        'password': password,
+      }),
+    );
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+    if (response.statusCode == 200) {
+      final token = data['token']?.toString();
+      final user = data['user'] as Map<String, dynamic>?;
+
+      if (token == null || user == null) {
+        throw Exception('Invalid login response from server');
+      }
+
+      await TokenStorage.saveToken(token);
+      await TokenStorage.saveRole(user['role']?.toString() ?? 'citizen');
+
+      return data;
+    }
+
+    throw Exception(
+      data['message'] ??
+          (data['errors'] != null ? data['errors'].toString() : 'Login failed'),
+    );
+  }
+
+  Future<Map<String, dynamic>> register({
+    required String name,
+    required String email,
+    required String password,
+    required String passwordConfirmation,
+  }) async {
+    final response = await http.post(
+      _buildUri('/auth/register'),
+      headers: await _headers(),
+      body: jsonEncode({
+        'name': name,
+        'email': email,
+        'password': password,
+        'password_confirmation': passwordConfirmation,
+      }),
+    );
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final token = data['token']?.toString();
+      final user = data['user'] as Map<String, dynamic>?;
+
+      if (token == null || user == null) {
+        throw Exception('Invalid register response from server');
+      }
+
+      await TokenStorage.saveToken(token);
+      await TokenStorage.saveRole(user['role']?.toString() ?? 'citizen');
+
+      return data;
+    }
+
+    throw Exception(
+      data['message'] ??
+          (data['errors'] != null
+              ? data['errors'].toString()
+              : 'Registration failed'),
+    );
+  }
+
+  Future<Map<String, dynamic>> forgotPassword({
+    required String email,
+  }) async {
+    final response = await http.post(
+      _buildUri('/forgot-password'),
+      headers: await _headers(),
+      body: jsonEncode({
+        'email': email,
+      }),
+    );
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+    if (response.statusCode == 200) {
+      return data;
+    }
+
+    throw Exception(
+      data['message'] ??
+          (data['errors'] != null
+              ? data['errors'].toString()
+              : 'Failed to send reset link'),
+    );
+  }
+
+  Future<Map<String, dynamic>> getCurrentUser() async {
+    final response = await http.get(
+      _buildUri('/user'),
+      headers: await _headers(authRequired: true),
+    );
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200) {
+      return data as Map<String, dynamic>;
+    }
+
+    throw Exception('Failed to fetch user');
+  }
+
+  Future<void> logout() async {
+    final response = await http.post(
+      _buildUri('/logout'),
+      headers: await _headers(authRequired: true),
+    );
+
+    if (response.statusCode == 200) {
+      await TokenStorage.clearAll();
+      return;
+    }
+
+    await TokenStorage.clearAll();
+    throw Exception('Logout failed');
+  }
+}
