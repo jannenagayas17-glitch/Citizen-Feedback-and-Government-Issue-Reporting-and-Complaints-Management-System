@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'firebase' => [
+        'api_key' => env('FIREBASE_WEB_API_KEY', 'AIzaSyAfSwMnXXLZtCRdyp-nlBkPoz1QNek5cJ8'),
+        'verify_ssl' => env('FIREBASE_VERIFY_SSL', env('APP_ENV', 'production') !== 'local'),
+    ],
+
 ];

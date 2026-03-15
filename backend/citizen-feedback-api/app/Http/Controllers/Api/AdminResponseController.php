@@ -15,9 +15,9 @@ class AdminResponseController extends Controller
             'response' => 'required|string',
         ]);
 
-        if (!in_array($request->user()->role, ['admin', 'staff'])) {
+        if (!in_array($request->user()->role, ['admin', 'super_admin'])) {
             return response()->json([
-                'message' => 'Unauthorized. Only admin or staff can respond to reports.'
+                'message' => 'Unauthorized. Only admin or super admin can respond to reports.'
             ], 403);
         }
 

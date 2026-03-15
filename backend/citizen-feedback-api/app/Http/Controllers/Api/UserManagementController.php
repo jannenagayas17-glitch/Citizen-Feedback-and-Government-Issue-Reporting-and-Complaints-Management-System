@@ -10,7 +10,7 @@ class UserManagementController extends Controller
 {
     public function index(Request $request)
     {
-        if ($request->user()->role !== 'admin') {
+        if (!in_array($request->user()->role, ['admin', 'super_admin'])) {
             return response()->json([
                 'message' => 'Unauthorized'
             ], 403);
@@ -21,14 +21,14 @@ class UserManagementController extends Controller
 
     public function updateRole(Request $request, $id)
     {
-        if ($request->user()->role !== 'admin') {
+        if (!in_array($request->user()->role, ['admin', 'super_admin'])) {
             return response()->json([
                 'message' => 'Unauthorized'
             ], 403);
         }
 
         $request->validate([
-            'role' => 'required|string|in:citizen,admin,staff',
+            'role' => 'required|string|in:citizen,admin,super_admin',
         ]);
 
         $user = User::findOrFail($id);

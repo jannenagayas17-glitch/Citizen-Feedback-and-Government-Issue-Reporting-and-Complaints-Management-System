@@ -5,22 +5,31 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
+    public function registerCitizen(Request $request)
+    {
+        return $this->register($request);
+    }
+
     public function register(Request $request)
     {
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users,email',
+            'mobile_number' => 'nullable|string|max:30',
             'password' => 'required|string|min:8|confirmed',
         ]);
 
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
+            'mobile_number' => $request->mobile_number,
             'password' => Hash::make($request->password),
         ]);
 
@@ -30,6 +39,34 @@ class AuthController extends Controller
             'message' => 'User registered successfully',
             'user' => $user,
             'token' => $token,
+        ], 201);
+    }
+
+    public function requestGovernmentAccount(Request $request)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|string|email|max:255|unique:users,email',
+            'mobile_number' => 'required|string|max:30',
+            'password' => 'required|string|min:8',
+            'department' => 'required|string|max:255',
+            'job_title' => 'required|string|max:255',
+            'access_code' => 'required|string|max:255',
+        ]);
+
+        $user = User::create([
+            'name' => $request->name,
+            'email' => $request->email,
+            'mobile_number' => $request->mobile_number,
+            'password' => Hash::make($request->password),
+            'role' => 'pending_admin',
+            'department' => $request->department,
+            'job_title' => $request->job_title,
+        ]);
+
+        return response()->json([
+            'message' => 'Government account request submitted successfully',
+            'user' => $user,
         ], 201);
     }
 
@@ -52,6 +89,104 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'Login successful',
+            'user' => $user,
+            'token' => $token,
+        ]);
+    }
+
+    public function googleLogin(Request $request)
+    {
+        $request->validate([
+            'id_token' => 'required|string',
+        ]);
+
+        $firebaseApiKey = config('services.firebase.api_key');
+        $shouldVerifySsl = (bool) config('services.firebase.verify_ssl', true);
+
+        if (! $firebaseApiKey) {
+            throw ValidationException::withMessages([
+                'firebase' => ['Firebase API key is not configured on the server.'],
+            ]);
+        }
+
+        try {
+            $lookupResponse = Http::withOptions([
+                'verify' => $shouldVerifySsl,
+            ])
+                ->timeout(15)
+                ->retry(2, 400)
+                ->post(
+                'https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=' . $firebaseApiKey,
+                ['idToken' => $request->id_token]
+            );
+        } catch (\Throwable $e) {
+            $message = app()->isLocal()
+                ? 'Google token verification failed on the server: ' . $e->getMessage()
+                : 'Google token verification is temporarily unavailable.';
+
+            throw ValidationException::withMessages([
+                'google' => [$message],
+            ]);
+        }
+
+        if (! $lookupResponse->successful()) {
+            throw ValidationException::withMessages([
+                'google' => ['Unable to verify the Google sign-in token.'],
+            ]);
+        }
+
+        $firebaseUser = $lookupResponse->json('users.0');
+        $email = $firebaseUser['email'] ?? null;
+
+        if (! $firebaseUser || ! $email) {
+            throw ValidationException::withMessages([
+                'google' => ['Invalid Firebase account response.'],
+            ]);
+        }
+
+        if (! ($firebaseUser['emailVerified'] ?? false)) {
+            throw ValidationException::withMessages([
+                'email' => ['Google email must be verified.'],
+            ]);
+        }
+
+        $providerInfo = collect($firebaseUser['providerUserInfo'] ?? []);
+        $isGoogleProvider = $providerInfo->contains(function ($provider) {
+            return ($provider['providerId'] ?? null) === 'google.com';
+        });
+
+        if (! $isGoogleProvider) {
+            throw ValidationException::withMessages([
+                'google' => ['This sign-in token is not linked to Google.'],
+            ]);
+        }
+
+        $user = User::firstOrCreate(
+            ['email' => $email],
+            [
+                'name' => $firebaseUser['displayName'] ?? Str::before($email, '@'),
+                'password' => Hash::make(Str::random(32)),
+                'role' => 'citizen',
+                'firebase_uid' => $firebaseUser['localId'] ?? null,
+            ]
+        );
+
+        if (empty($user->name) && ! empty($firebaseUser['displayName'])) {
+            $user->name = $firebaseUser['displayName'];
+        }
+
+        if (empty($user->firebase_uid) && ! empty($firebaseUser['localId'])) {
+            $user->firebase_uid = $firebaseUser['localId'];
+        }
+
+        if ($user->isDirty()) {
+            $user->save();
+        }
+
+        $token = $user->createToken('mobile-token')->plainTextToken;
+
+        return response()->json([
+            'message' => 'Google login successful',
             'user' => $user,
             'token' => $token,
         ]);
@@ -108,5 +243,60 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'Password changed successfully',
         ]);
+    }
+
+    public function adminUsers(Request $request)
+    {
+        $this->ensureElevatedRole($request);
+
+        return response()->json(
+            User::query()
+                ->orderByRaw("case when role = 'super_admin' then 0 when role = 'admin' then 1 when role = 'pending_admin' then 2 else 3 end")
+                ->orderBy('name')
+                ->get()
+        );
+    }
+
+    public function verifyAccount(Request $request, $id)
+    {
+        $this->ensureElevatedRole($request);
+
+        $user = User::findOrFail($id);
+        $user->role = 'admin';
+        $user->save();
+
+        return response()->json([
+            'message' => 'Account verified successfully',
+            'user' => $user,
+        ]);
+    }
+
+    public function deactivateAccount(Request $request, $id)
+    {
+        $this->ensureElevatedRole($request);
+
+        $user = User::findOrFail($id);
+
+        if ($user->id === $request->user()->id) {
+            throw ValidationException::withMessages([
+                'user' => ['You cannot deactivate your own account.'],
+            ]);
+        }
+
+        $user->tokens()->delete();
+        $user->role = 'citizen';
+        $user->save();
+
+        return response()->json([
+            'message' => 'Account deactivated successfully',
+            'user' => $user,
+        ]);
+    }
+
+    private function ensureElevatedRole(Request $request): void
+    {
+        if (! in_array($request->user()->role, ['admin', 'super_admin'], true)) {
+            abort(403, 'Unauthorized action.');
+        }
     }
 }

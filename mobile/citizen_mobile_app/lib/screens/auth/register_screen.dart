@@ -1,6 +1,10 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
+
 import '../../services/auth_service.dart';
-import '../../services/google_auth_service.dart';
+import '../../utils/auth_redirect.dart';
+import '../../utils/app_routes.dart';
 
 enum RegisterMode { citizen, government }
 
@@ -18,24 +22,26 @@ class RegisterScreen extends StatefulWidget {
 
 class _RegisterScreenState extends State<RegisterScreen> {
   final AuthService _authService = AuthService();
-  final GoogleAuthService _googleAuthService = GoogleAuthService();
 
-  late RegisterMode _selectedMode;
-
-  final _nameController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
-
-  final _departmentController = TextEditingController();
-  final _jobTitleController = TextEditingController();
-  final _accessCodeController = TextEditingController();
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
 
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isLoading = false;
-  bool _isGoogleLoading = false;
+
+  RegisterMode _selectedMode = RegisterMode.citizen;
+  String? _selectedAdminType;
+
+  static const List<String> _adminTypes = [
+    'Assistant City Engineer',
+    'Engineering Office Supervisor',
+    'Engineering Staff/ Office Coordinator',
+  ];
 
   @override
   void initState() {
@@ -43,41 +49,53 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _selectedMode = widget.initialMode;
   }
 
-  Color get _primaryColor {
-    return _selectedMode == RegisterMode.citizen
-        ? const Color(0xFF2E6CF6)
-        : const Color(0xFF8A2BE2);
+  bool get _isCitizenMode => _selectedMode == RegisterMode.citizen;
+
+  String get _subtitle {
+    return _isCitizenMode
+        ? 'Create your citizen account'
+        : 'Register for an official account';
   }
 
-  String get _headerTitle {
-    return _selectedMode == RegisterMode.citizen
-        ? 'Create Account'
-        : 'Request Government Account';
+  String get _emailHint {
+    return _isCitizenMode
+        ? 'your.email@example.com'
+        : 'official@taclobancity.gov';
   }
 
-  String get _headerSubtitle {
-    return _selectedMode == RegisterMode.citizen
-        ? 'Join CivicReport as a citizen'
-        : 'Official access requires verification';
+  bool _isValidEmail(String email) {
+    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+    return emailRegex.hasMatch(email);
   }
 
-  String get _googleButtonText {
-    return _selectedMode == RegisterMode.citizen
-        ? 'Sign up with Google'
-        : 'Sign up with Google';
+  bool _isValidPhone(String phone) {
+    final digitsOnly = phone.replaceAll(RegExp(r'\D'), '');
+    return digitsOnly.length >= 10;
   }
 
-  Future<void> _registerCitizen() async {
+  Future<void> _submit() async {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
+    final phone = _phoneController.text.trim();
     final password = _passwordController.text.trim();
     final confirmPassword = _confirmPasswordController.text.trim();
 
     if (name.isEmpty ||
         email.isEmpty ||
+        phone.isEmpty ||
         password.isEmpty ||
         confirmPassword.isEmpty) {
       _showSnack('Please fill in all required fields');
+      return;
+    }
+
+    if (!_isValidEmail(email)) {
+      _showSnack('Enter a valid email address');
+      return;
+    }
+
+    if (!_isValidPhone(phone)) {
+      _showSnack('Enter a valid mobile number');
       return;
     }
 
@@ -86,91 +104,65 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
-    setState(() => _isLoading = true);
-
-    try {
-      final data = await _authService.register(
-        name: name,
-        email: email,
-        password: password,
-        passwordConfirmation: confirmPassword,
-      );
-
-      if (!mounted) return;
-
-      final user = data['user'] as Map<String, dynamic>;
-      final role = user['role']?.toString() ?? 'citizen';
-
-      _showSnack('Account created successfully');
-
-      if (role == 'super_admin') {
-        Navigator.pushReplacementNamed(context, '/super-admin-home');
-      } else if (role == 'admin') {
-        Navigator.pushReplacementNamed(context, '/admin-home');
-      } else {
-        Navigator.pushReplacementNamed(context, '/citizen-home');
-      }
-    } catch (e) {
-      if (!mounted) return;
-      _showSnack(e.toString().replaceFirst('Exception: ', ''));
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _requestGovernmentAccount() async {
-    final name = _nameController.text.trim();
-    final email = _emailController.text.trim();
-    final department = _departmentController.text.trim();
-    final jobTitle = _jobTitleController.text.trim();
-    final accessCode = _accessCodeController.text.trim();
-    final password = _passwordController.text.trim();
-
-    if (name.isEmpty ||
-        email.isEmpty ||
-        department.isEmpty ||
-        jobTitle.isEmpty ||
-        accessCode.isEmpty ||
-        password.isEmpty) {
-      _showSnack('Please fill in all required fields');
+    if (!_isCitizenMode && _selectedAdminType == null) {
+      _showSnack('Please select an admin type');
       return;
     }
 
-    // TODO: connect this to your Laravel request-account API later
-    _showSnack('Government account request flow is not connected yet');
-  }
-
-  Future<void> _signUpWithGoogle() async {
-    setState(() => _isGoogleLoading = true);
+    setState(() => _isLoading = true);
 
     try {
-      final credential = await _googleAuthService.signInWithGoogle();
-      final user = credential.user;
+      if (_isCitizenMode) {
+        final data = await _authService.register(
+          name: name,
+          email: email,
+          mobileNumber: phone,
+          password: password,
+          passwordConfirmation: confirmPassword,
+        );
 
-      if (!mounted) return;
+        if (!mounted) return;
 
-      if (user == null) {
-        _showSnack('Google sign-up failed');
-        return;
+        final user = data['user'] as Map<String, dynamic>? ?? {};
+        final role = AuthRedirect.normalizeRole(user['role']);
+        AuthRedirect.goToRoleHome(context, role);
+      } else {
+        final response = await _authService.requestGovernmentAccount(
+          name: name,
+          email: email,
+          mobileNumber: phone,
+          password: password,
+          department: 'Tacloban City Engineering Office',
+          jobTitle: _selectedAdminType!,
+          accessCode: 'GOV-REQUEST',
+        );
+
+        if (!mounted) return;
+
+        final user = response['user'] as Map<String, dynamic>?;
+        final token = response['token'];
+        if (user != null && token != null) {
+          AuthRedirect.goToRoleHome(context, user['role']);
+          return;
+        }
+
+        _showSnack(
+          response['message']?.toString() ??
+              'Admin account request submitted successfully',
+        );
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          AppRoutes.login,
+          (route) => false,
+        );
       }
-
-      _showSnack('Signed in as ${user.email ?? 'Google User'}');
-
-      // TODO:
-      // Send Firebase token to Laravel and route by role.
     } catch (e) {
       if (!mounted) return;
       _showSnack(e.toString().replaceFirst('Exception: ', ''));
     } finally {
-      if (mounted) setState(() => _isGoogleLoading = false);
-    }
-  }
-
-  void _submit() {
-    if (_selectedMode == RegisterMode.citizen) {
-      _registerCitizen();
-    } else {
-      _requestGovernmentAccount();
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -187,549 +179,452 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _phoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
-    _departmentController.dispose();
-    _jobTitleController.dispose();
-    _accessCodeController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final bool isCitizen = _selectedMode == RegisterMode.citizen;
-
     return Scaffold(
-      backgroundColor: const Color(0xFF151515),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 390),
-              child: Stack(
-                alignment: Alignment.topCenter,
-                children: [
-                  Container(
-                    margin: const EdgeInsets.only(top: 36),
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Color(0xFF163DAD),
-                          Color(0xFF0E2D8C),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          DecoratedBox(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xFF0C1727),
+                  Color(0xFF1E293B),
+                  Color(0xFF463327),
+                ],
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0.08,
+              child: Image.asset(
+                'assets/images/logo.png',
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                    child: Container(
+                      constraints: const BoxConstraints(maxWidth: 360),
+                      padding: const EdgeInsets.fromLTRB(22, 24, 22, 22),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.22),
+                        ),
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.white.withOpacity(0.22),
+                            Colors.white.withOpacity(0.10),
+                          ],
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.25),
+                            blurRadius: 24,
+                            offset: const Offset(0, 12),
+                          ),
                         ],
                       ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(0, 40, 0, 24),
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const SizedBox(height: 18),
-                          Container(
-                            width: 120,
-                            height: 120,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: const Color(0xFF0A0E6A),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(0xFF4C7BFF).withOpacity(0.25),
-                                  blurRadius: 40,
-                                  spreadRadius: 8,
+                          Center(
+                            child: Container(
+                              width: 88,
+                              height: 88,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white.withOpacity(0.16),
+                                border: Border.all(
+                                  color: const Color(0xFFD8B15A),
+                                  width: 2,
                                 ),
-                              ],
-                            ),
-                            child: ClipOval(
-                              child: Image.asset(
-                                'assets/images/logo.png',
-                                fit: BoxFit.cover,
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(6),
+                                child: ClipOval(
+                                  child: Image.asset(
+                                    'assets/images/logo.png',
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 18),
                           const Text(
-                            'CIVIC REPORT',
+                            'Create Account',
+                            textAlign: TextAlign.center,
                             style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w800,
                               color: Colors.white,
+                              fontSize: 31,
+                              fontWeight: FontWeight.w500,
+                              height: 1.1,
                             ),
                           ),
                           const SizedBox(height: 8),
-                          const Text(
-                            'Tacloban City Government · Your Voice Matters',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Color(0xFFD7E3FF),
-                            ),
+                          Text(
+                            _subtitle,
                             textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 28),
-                          Container(
-                            width: double.infinity,
-                            margin: const EdgeInsets.symmetric(horizontal: 16),
-                            padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF8F8F8),
-                              borderRadius: BorderRadius.circular(26),
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.78),
+                              fontSize: 16,
+                              fontWeight: FontWeight.w400,
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Container(
-                                      width: 42,
-                                      height: 42,
-                                      decoration: BoxDecoration(
-                                        color: isCitizen
-                                            ? const Color(0xFFE8F0FF)
-                                            : const Color(0xFFF0E8FF),
-                                        shape: BoxShape.circle,
+                          ),
+                          const SizedBox(height: 18),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Container(
+                                  height: 1,
+                                  color: Colors.white.withOpacity(0.16),
+                                ),
+                              ),
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 12),
+                                child: Text(
+                                  'ACCOUNT INFO',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.62),
+                                    fontSize: 13,
+                                    letterSpacing: 1.6,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: Container(
+                                  height: 1,
+                                  color: Colors.white.withOpacity(0.16),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          _buildLabel('Account Role'),
+                          const SizedBox(height: 8),
+                          _buildDropdownField<RegisterMode>(
+                            value: _selectedMode,
+                            items: const [
+                              DropdownMenuItem(
+                                value: RegisterMode.citizen,
+                                child: Text('Citizen'),
+                              ),
+                              DropdownMenuItem(
+                                value: RegisterMode.government,
+                                child: Text('Admin'),
+                              ),
+                            ],
+                            onChanged: (value) {
+                              if (value == null) return;
+                              setState(() {
+                                _selectedMode = value;
+                                if (_isCitizenMode) {
+                                  _selectedAdminType = null;
+                                }
+                              });
+                            },
+                          ),
+                          if (!_isCitizenMode) ...[
+                            const SizedBox(height: 14),
+                            _buildLabel('Admin Type'),
+                            const SizedBox(height: 8),
+                            _buildDropdownField<String>(
+                              value: _selectedAdminType,
+                              hint: 'Select admin type',
+                              items: _adminTypes
+                                  .map(
+                                    (type) => DropdownMenuItem(
+                                      value: type,
+                                      child: Text(type),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (value) {
+                                setState(() => _selectedAdminType = value);
+                              },
+                            ),
+                          ],
+                          const SizedBox(height: 14),
+                          _buildLabel('Full Name'),
+                          const SizedBox(height: 8),
+                          _buildTextField(
+                            controller: _nameController,
+                            hintText: 'Your full name',
+                            prefixIcon: Icons.person_outline,
+                          ),
+                          const SizedBox(height: 14),
+                          _buildLabel('Email Address'),
+                          const SizedBox(height: 8),
+                          _buildTextField(
+                            controller: _emailController,
+                            hintText: _emailHint,
+                            keyboardType: TextInputType.emailAddress,
+                            prefixIcon: Icons.email_outlined,
+                          ),
+                          const SizedBox(height: 14),
+                          _buildLabel('Mobile Number'),
+                          const SizedBox(height: 8),
+                          _buildTextField(
+                            controller: _phoneController,
+                            hintText: '09XX XXX XXXX',
+                            keyboardType: TextInputType.phone,
+                            prefixIcon: Icons.call_outlined,
+                          ),
+                          const SizedBox(height: 14),
+                          _buildLabel('Password'),
+                          const SizedBox(height: 8),
+                          _buildTextField(
+                            controller: _passwordController,
+                            hintText: '........',
+                            obscureText: _obscurePassword,
+                            prefixIcon: Icons.lock_outline,
+                            suffixIcon: IconButton(
+                              onPressed: () {
+                                setState(
+                                  () => _obscurePassword = !_obscurePassword,
+                                );
+                              },
+                              icon: Icon(
+                                _obscurePassword
+                                    ? Icons.visibility_off_outlined
+                                    : Icons.visibility_outlined,
+                                color: Colors.white.withOpacity(0.62),
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          _buildLabel('Confirm Password'),
+                          const SizedBox(height: 8),
+                          _buildTextField(
+                            controller: _confirmPasswordController,
+                            hintText: '........',
+                            obscureText: _obscureConfirmPassword,
+                            prefixIcon: Icons.lock_outline,
+                            suffixIcon: IconButton(
+                              onPressed: () {
+                                setState(
+                                  () => _obscureConfirmPassword =
+                                      !_obscureConfirmPassword,
+                                );
+                              },
+                              icon: Icon(
+                                _obscureConfirmPassword
+                                    ? Icons.visibility_off_outlined
+                                    : Icons.visibility_outlined,
+                                color: Colors.white.withOpacity(0.62),
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 22),
+                          SizedBox(
+                            height: 50,
+                            child: ElevatedButton(
+                              onPressed: _isLoading ? null : _submit,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF2563EB),
+                                foregroundColor: Colors.white,
+                                disabledBackgroundColor:
+                                    const Color(0xFF2563EB).withOpacity(0.5),
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                          Colors.white,
+                                        ),
                                       ),
-                                      child: Icon(
-                                        isCitizen
-                                            ? Icons.person_outline
-                                            : Icons.business_outlined,
-                                        color: _primaryColor,
+                                    )
+                                  : const Text(
+                                      'Register',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
                                       ),
                                     ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            _headerTitle,
-                                            style: const TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.w700,
-                                              color: Color(0xFF1F2937),
-                                            ),
-                                          ),
-                                          const SizedBox(height: 3),
-                                          Text(
-                                            _headerSubtitle,
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                              color: Color(0xFF6B7280),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Center(
+                            child: TextButton(
+                              onPressed: () {
+                                Navigator.pushNamedAndRemoveUntil(
+                                  context,
+                                  AppRoutes.login,
+                                  (route) => false,
+                                );
+                              },
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.white.withOpacity(0.84),
+                              ),
+                              child: RichText(
+                                text: TextSpan(
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.72),
+                                    fontSize: 15,
+                                  ),
+                                  children: const [
+                                    TextSpan(
+                                      text: 'Already have an account? ',
                                     ),
-                                    IconButton(
-                                      onPressed: () => Navigator.pop(context),
-                                      icon: const Icon(
-                                        Icons.close,
-                                        color: Color(0xFF9CA3AF),
+                                    TextSpan(
+                                      text: 'Login here',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w500,
                                       ),
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 14),
-                                const Divider(color: Color(0xFFE5E7EB)),
-                                const SizedBox(height: 18),
-
-                                _buildGoogleButton(),
-                                const SizedBox(height: 16),
-                                _buildDivider(),
-                                const SizedBox(height: 16),
-
-                                if (!isCitizen) ...[
-                                  Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.all(14),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFFFF7E8),
-                                      borderRadius: BorderRadius.circular(14),
-                                      border: Border.all(
-                                        color: const Color(0xFFF3D7A3),
-                                      ),
-                                    ),
-                                    child: const Row(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Icon(
-                                          Icons.info_outline,
-                                          color: Color(0xFFE28A12),
-                                          size: 20,
-                                        ),
-                                        SizedBox(width: 10),
-                                        Expanded(
-                                          child: Text(
-                                            'Government portal access is restricted to authorized city officials. You will need a valid government access code from your IT department.',
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              color: Color(0xFFB35B00),
-                                              height: 1.35,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 16),
-                                ],
-
-                                _buildLabel('Full Name *'),
-                                _buildInputField(
-                                  controller: _nameController,
-                                  hint: isCitizen ? 'Jane Smith' : 'John Official',
-                                  icon: Icons.person_outline,
-                                ),
-                                const SizedBox(height: 14),
-
-                                _buildLabel(isCitizen ? 'Email Address *' : 'Official Email *'),
-                                _buildInputField(
-                                  controller: _emailController,
-                                  hint: isCitizen
-                                      ? 'jane@email.com'
-                                      : 'official@taclobancity.gov',
-                                  icon: Icons.email_outlined,
-                                  keyboardType: TextInputType.emailAddress,
-                                ),
-                                const SizedBox(height: 14),
-
-                                _buildLabel(isCitizen ? 'Phone Number (optional)' : 'Phone (optional)'),
-                                _buildInputField(
-                                  controller: _phoneController,
-                                  hint: '+63 9XX XXX XXXX',
-                                  icon: Icons.phone_outlined,
-                                  keyboardType: TextInputType.phone,
-                                ),
-                                const SizedBox(height: 14),
-
-                                if (!isCitizen) ...[
-                                  _buildLabel('Department *'),
-                                  _buildInputField(
-                                    controller: _departmentController,
-                                    hint: 'Department name',
-                                    icon: Icons.apartment_outlined,
-                                  ),
-                                  const SizedBox(height: 14),
-
-                                  _buildLabel('Job Title *'),
-                                  _buildInputField(
-                                    controller: _jobTitleController,
-                                    hint: 'e.g. Field Supervisor',
-                                    icon: Icons.badge_outlined,
-                                  ),
-                                  const SizedBox(height: 14),
-
-                                  _buildLabel('Government Access Code *'),
-                                  _buildInputField(
-                                    controller: _accessCodeController,
-                                    hint: 'GOV-XXXX',
-                                    icon: Icons.shield_outlined,
-                                  ),
-                                  const SizedBox(height: 14),
-                                ],
-
-                                _buildLabel('Password *'),
-                                _buildPasswordField(
-                                  controller: _passwordController,
-                                  obscure: _obscurePassword,
-                                  onToggle: () {
-                                    setState(() => _obscurePassword = !_obscurePassword);
-                                  },
-                                  hint: 'Min. 8 characters',
-                                ),
-                                const SizedBox(height: 14),
-
-                                if (isCitizen) ...[
-                                  _buildLabel('Confirm Password *'),
-                                  _buildPasswordField(
-                                    controller: _confirmPasswordController,
-                                    obscure: _obscureConfirmPassword,
-                                    onToggle: () {
-                                      setState(() => _obscureConfirmPassword = !_obscureConfirmPassword);
-                                    },
-                                    hint: 'Repeat password',
-                                  ),
-                                  const SizedBox(height: 18),
-                                ] else
-                                  const SizedBox(height: 18),
-
-                                _buildPrimaryButton(
-                                  text: isCitizen ? 'Create Account' : 'Request Account',
-                                  onPressed: _submit,
-                                  isLoading: _isLoading,
-                                ),
-
-                                const SizedBox(height: 16),
-
-                                if (isCitizen)
-                                  const Center(
-                                    child: Text.rich(
-                                      TextSpan(
-                                        text: 'By creating an account, you agree to Tacloban City\'s\n',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Color(0xFF9CA3AF),
-                                          height: 1.5,
-                                        ),
-                                        children: [
-                                          TextSpan(
-                                            text: 'Terms of Service',
-                                            style: TextStyle(
-                                              color: Color(0xFF2E6CF6),
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          TextSpan(text: ' and '),
-                                          TextSpan(
-                                            text: 'Privacy Policy.',
-                                            style: TextStyle(
-                                              color: Color(0xFF2E6CF6),
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ),
-
-                                const SizedBox(height: 16),
-
-                                Center(
-                                  child: TextButton.icon(
-                                    onPressed: () => Navigator.pop(context),
-                                    icon: const Icon(
-                                      Icons.arrow_back,
-                                      size: 18,
-                                      color: Color(0xFF6B7280),
-                                    ),
-                                    label: const Text(
-                                      'Back to Sign In',
-                                      style: TextStyle(
-                                        color: Color(0xFF6B7280),
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ),
                   ),
-
-                  Positioned(
-                    top: 0,
-                    left: 24,
-                    child: Text(
-                      isCitizen ? 'Create Citizen Account' : 'Create Admin Account',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGoogleButton() {
-    return SizedBox(
-      width: double.infinity,
-      height: 46,
-      child: OutlinedButton(
-        onPressed: _isGoogleLoading ? null : _signUpWithGoogle,
-        style: OutlinedButton.styleFrom(
-          side: const BorderSide(color: Color(0xFFE5E7EB)),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          backgroundColor: Colors.white,
-        ),
-        child: _isGoogleLoading
-            ? SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  color: _primaryColor,
                 ),
-              )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text(
-                    'G',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.red,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    _googleButtonText,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF374151),
-                    ),
-                  ),
-                ],
               ),
-      ),
-    );
-  }
-
-  Widget _buildDivider() {
-    return Row(
-      children: const [
-        Expanded(child: Divider(color: Color(0xFFE5E7EB))),
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: 10),
-          child: Text(
-            'or fill in your details',
-            style: TextStyle(
-              fontSize: 12,
-              color: Color(0xFF9CA3AF),
             ),
           ),
-        ),
-        Expanded(child: Divider(color: Color(0xFFE5E7EB))),
-      ],
+        ],
+      ),
     );
   }
 
   Widget _buildLabel(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: Color(0xFF374151),
-        ),
+    return Text(
+      text,
+      style: TextStyle(
+        color: Colors.white.withOpacity(0.92),
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
       ),
     );
   }
 
-  Widget _buildInputField({
+  Widget _buildTextField({
     required TextEditingController controller,
-    required String hint,
-    required IconData icon,
-    TextInputType keyboardType = TextInputType.text,
+    required String hintText,
+    required IconData prefixIcon,
+    TextInputType? keyboardType,
+    bool obscureText = false,
+    Widget? suffixIcon,
   }) {
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
+      obscureText: obscureText,
+      style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: const TextStyle(color: Color(0xFF9CA3AF)),
-        prefixIcon: Icon(icon, color: const Color(0xFF9CA3AF), size: 20),
-        filled: true,
-        fillColor: const Color(0xFFF9FAFB),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+        hintText: hintText,
+        hintStyle: TextStyle(
+          color: Colors.white.withOpacity(0.45),
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: _primaryColor, width: 1.5),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPasswordField({
-    required TextEditingController controller,
-    required bool obscure,
-    required VoidCallback onToggle,
-    required String hint,
-  }) {
-    return TextField(
-      controller: controller,
-      obscureText: obscure,
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: const TextStyle(color: Color(0xFF9CA3AF)),
-        prefixIcon: const Icon(
-          Icons.lock_outline,
-          color: Color(0xFF9CA3AF),
+        prefixIcon: Icon(
+          prefixIcon,
+          color: Colors.white.withOpacity(0.65),
           size: 20,
         ),
-        suffixIcon: IconButton(
-          onPressed: onToggle,
-          icon: Icon(
-            obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-            color: const Color(0xFF9CA3AF),
-            size: 20,
+        suffixIcon: suffixIcon,
+        filled: true,
+        fillColor: Colors.white.withOpacity(0.12),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(
+            color: Colors.white.withOpacity(0.2),
           ),
         ),
-        filled: true,
-        fillColor: const Color(0xFFF9FAFB),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-        ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(
+            color: Colors.white.withOpacity(0.2),
+          ),
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: _primaryColor, width: 1.5),
+        focusedBorder: const OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(10)),
+          borderSide: BorderSide(
+            color: Color(0xFF3B82F6),
+            width: 1.3,
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildPrimaryButton({
-    required String text,
-    required VoidCallback onPressed,
-    required bool isLoading,
+  Widget _buildDropdownField<T>({
+    required T? value,
+    required List<DropdownMenuItem<T>> items,
+    required ValueChanged<T?> onChanged,
+    String? hint,
   }) {
-    return SizedBox(
-      width: double.infinity,
-      height: 52,
-      child: ElevatedButton(
-        onPressed: isLoading ? null : onPressed,
-        style: ElevatedButton.styleFrom(
-          elevation: 10,
-          shadowColor: _primaryColor.withOpacity(0.35),
-          backgroundColor: _primaryColor,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.2),
         ),
-        child: isLoading
-            ? const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 2.5,
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: value,
+          isExpanded: true,
+          dropdownColor: const Color(0xFF394355),
+          icon: Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: Colors.white.withOpacity(0.8),
+          ),
+          hint: hint == null
+              ? null
+              : Text(
+                  hint,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.45),
+                    fontSize: 15,
+                  ),
                 ),
-              )
-            : Text(
-                text,
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 15,
+          ),
+          onChanged: onChanged,
+          items: items,
+        ),
       ),
     );
   }

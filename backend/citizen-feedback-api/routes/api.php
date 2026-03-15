@@ -112,6 +112,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('admin')->group(function () {
 
         Route::get('/reports', [ReportController::class, 'adminReports']);
+        Route::post('/reports/{id}/status', [ReportController::class, 'updateStatus']);
+        Route::get('/users', [AuthController::class, 'adminUsers']);
 
         Route::post('/verify-account/{id}', [AuthController::class, 'verifyAccount']);
 

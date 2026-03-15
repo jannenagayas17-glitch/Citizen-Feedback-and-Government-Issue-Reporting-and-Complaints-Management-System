@@ -11,10 +11,10 @@ class DashboardController extends Controller
     {
         return response()->json([
             'total_reports' => Report::count(),
+            'new' => Report::where('status', 'New')->count(),
             'pending' => Report::where('status', 'Pending')->count(),
             'in_progress' => Report::where('status', 'In Progress')->count(),
             'resolved' => Report::where('status', 'Resolved')->count(),
-            'rejected' => Report::where('status', 'Rejected')->count(),
         ]);
     }
 }

@@ -1,4 +1,7 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
+
 import '../../services/auth_service.dart';
 
 enum ForgotPasswordMode { citizen, government }
@@ -27,45 +30,27 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     _selectedMode = widget.initialMode;
   }
 
-  Color get _primaryColor {
-    return _selectedMode == ForgotPasswordMode.citizen
-        ? const Color(0xFF2E6CF6)
-        : const Color(0xFF8A2BE2);
-  }
-
-  String get _titleText => 'Reset Password';
-
-  String get _subtitleText {
-    return _selectedMode == ForgotPasswordMode.citizen
-        ? 'Citizen account recovery'
-        : 'Government portal account recovery';
+  bool _isValidEmail(String email) {
+    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+    return emailRegex.hasMatch(email);
   }
 
   String get _emailHint {
     return _selectedMode == ForgotPasswordMode.citizen
-        ? 'your@email.com'
+        ? 'your.email@example.com'
         : 'official@taclobancity.gov';
-  }
-
-  bool _isValidEmail(String email) {
-    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-    return emailRegex.hasMatch(email);
   }
 
   Future<void> _sendResetLink() async {
     final email = _emailController.text.trim();
 
     if (email.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Email is required')),
-      );
+      _showSnack('Email is required');
       return;
     }
 
     if (!_isValidEmail(email)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid email address')),
-      );
+      _showSnack('Enter a valid email address');
       return;
     }
 
@@ -79,21 +64,22 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       final message =
           response['message']?.toString() ?? 'Password reset link sent successfully';
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
-
+      _showSnack(message);
       _emailController.clear();
     } catch (e) {
       if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
+      _showSnack(e.toString().replaceFirst('Exception: ', ''));
     } finally {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
+  }
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   @override
@@ -104,392 +90,211 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isCitizen = _selectedMode == ForgotPasswordMode.citizen;
-
     return Scaffold(
-      backgroundColor: const Color(0xFF151515),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 390),
-              child: Stack(
-                alignment: Alignment.topCenter,
-                children: [
-                  Container(
-                    margin: const EdgeInsets.only(top: 36),
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Color(0xFF163DAD),
-                          Color(0xFF0E2D8C),
-                        ],
-                      ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(0, 40, 0, 24),
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 18),
-                          Container(
-                            width: 120,
-                            height: 120,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: const Color(0xFF0A0E6A),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(0xFF4C7BFF).withOpacity(0.25),
-                                  blurRadius: 40,
-                                  spreadRadius: 8,
-                                ),
-                              ],
-                            ),
-                            child: ClipOval(
-                              child: Image.asset(
-                                'assets/images/logo.png',
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return const Icon(
-                                    Icons.account_balance,
-                                    color: Colors.white,
-                                    size: 54,
-                                  );
-                                },
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          const Text(
-                            'CIVIC REPORT',
-                            style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Tacloban City Government · Your Voice Matters',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Color(0xFFD7E3FF),
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 28),
-                          Container(
-                            width: double.infinity,
-                            margin: const EdgeInsets.symmetric(horizontal: 16),
-                            padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF8F8F8),
-                              borderRadius: BorderRadius.circular(26),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _buildModeToggle(),
-                                const SizedBox(height: 18),
-                                Row(
-                                  children: [
-                                    Container(
-                                      width: 42,
-                                      height: 42,
-                                      decoration: BoxDecoration(
-                                        color: isCitizen
-                                            ? const Color(0xFFE8F0FF)
-                                            : const Color(0xFFF0E8FF),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Icon(
-                                        Icons.lock_outline,
-                                        color: _primaryColor,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            _titleText,
-                                            style: const TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.w700,
-                                              color: Color(0xFF1F2937),
-                                            ),
-                                          ),
-                                          const SizedBox(height: 3),
-                                          Text(
-                                            _subtitleText,
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                              color: Color(0xFF6B7280),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    IconButton(
-                                      onPressed: () => Navigator.pop(context),
-                                      icon: const Icon(
-                                        Icons.close,
-                                        color: Color(0xFF9CA3AF),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 14),
-                                const Divider(color: Color(0xFFE5E7EB)),
-                                const SizedBox(height: 16),
-                                Text(
-                                  isCitizen
-                                      ? 'Enter the email address associated with your Civic Report account. We\'ll send you a link to reset your password.'
-                                      : 'Enter the email address associated with your government portal account. We\'ll send you a link to reset your password.',
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    color: Color(0xFF4B5563),
-                                    height: 1.5,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                if (!isCitizen) ...[
-                                  Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.all(14),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFF6EBFF),
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                    child: const Row(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Icon(
-                                          Icons.business_center_outlined,
-                                          color: Color(0xFF8A2BE2),
-                                          size: 20,
-                                        ),
-                                        SizedBox(width: 10),
-                                        Expanded(
-                                          child: Text(
-                                            'Password resets for government accounts may require additional verification. Contact your IT administrator if you don\'t receive the email within 15 minutes.',
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              color: Color(0xFF8A2BE2),
-                                              height: 1.35,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 16),
-                                ],
-                                const Text(
-                                  'Email Address',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF374151),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                TextField(
-                                  controller: _emailController,
-                                  keyboardType: TextInputType.emailAddress,
-                                  decoration: InputDecoration(
-                                    hintText: _emailHint,
-                                    hintStyle: const TextStyle(
-                                      color: Color(0xFF9CA3AF),
-                                    ),
-                                    filled: true,
-                                    fillColor: const Color(0xFFF9FAFB),
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 18,
-                                    ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                      borderSide: const BorderSide(
-                                        color: Color(0xFFE5E7EB),
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                      borderSide: const BorderSide(
-                                        color: Color(0xFFE5E7EB),
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                      borderSide: BorderSide(
-                                        color: _primaryColor,
-                                        width: 1.5,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 20),
-                                SizedBox(
-                                  width: double.infinity,
-                                  height: 52,
-                                  child: ElevatedButton(
-                                    onPressed: _isLoading ? null : _sendResetLink,
-                                    style: ElevatedButton.styleFrom(
-                                      elevation: 10,
-                                      shadowColor: _primaryColor.withOpacity(0.35),
-                                      backgroundColor: _primaryColor,
-                                      foregroundColor: Colors.white,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(14),
-                                      ),
-                                    ),
-                                    child: _isLoading
-                                        ? const SizedBox(
-                                            width: 22,
-                                            height: 22,
-                                            child: CircularProgressIndicator(
-                                              color: Colors.white,
-                                              strokeWidth: 2.5,
-                                            ),
-                                          )
-                                        : const Text(
-                                            'Send Reset Link',
-                                            style: TextStyle(
-                                              fontSize: 17,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                  ),
-                                ),
-                                const SizedBox(height: 18),
-                                Center(
-                                  child: TextButton.icon(
-                                    onPressed: () => Navigator.pop(context),
-                                    icon: const Icon(
-                                      Icons.arrow_back,
-                                      size: 18,
-                                      color: Color(0xFF6B7280),
-                                    ),
-                                    label: const Text(
-                                      'Back to Sign In',
-                                      style: TextStyle(
-                                        color: Color(0xFF6B7280),
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    top: 0,
-                    left: 24,
-                    child: Text(
-                      isCitizen
-                          ? 'Citizen Reset Password'
-                          : 'Admin Reset Password',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          DecoratedBox(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xFF0C1727),
+                  Color(0xFF1E293B),
+                  Color(0xFF463327),
                 ],
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildModeToggle() {
-    final bool isCitizen = _selectedMode == ForgotPasswordMode.citizen;
-
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F1F1),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                setState(() => _selectedMode = ForgotPasswordMode.citizen);
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                decoration: BoxDecoration(
-                  color: isCitizen ? Colors.white : Colors.transparent,
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: isCitizen
-                      ? [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.06),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ]
-                      : [],
-                ),
-                child: Text(
-                  '👤 Citizen',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: isCitizen
-                        ? const Color(0xFF2E6CF6)
-                        : const Color(0xFF6B7280),
-                  ),
-                ),
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0.08,
+              child: Image.asset(
+                'assets/images/logo.png',
+                fit: BoxFit.cover,
               ),
             ),
           ),
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                setState(() => _selectedMode = ForgotPasswordMode.government);
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                decoration: BoxDecoration(
-                  color: !isCitizen ? Colors.white : Colors.transparent,
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: !isCitizen
-                      ? [
+          Positioned.fill(
+            child: Container(
+              color: Colors.black.withOpacity(0.42),
+            ),
+          ),
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(22),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                    child: Container(
+                      constraints: const BoxConstraints(maxWidth: 360),
+                      padding: const EdgeInsets.fromLTRB(22, 22, 22, 24),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(22),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.18),
+                        ),
+                        color: const Color(0xFF121B31).withOpacity(0.92),
+                        boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.06),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
+                            color: Colors.black.withOpacity(0.24),
+                            blurRadius: 26,
+                            offset: const Offset(0, 12),
                           ),
-                        ]
-                      : [],
-                ),
-                child: Text(
-                  '🏛 Government',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    height: 1.25,
-                    fontWeight: FontWeight.w600,
-                    color: !isCitizen
-                        ? const Color(0xFF8A2BE2)
-                        : const Color(0xFF6B7280),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Align(
+                            alignment: Alignment.topRight,
+                            child: IconButton(
+                              onPressed: () => Navigator.pop(context),
+                              icon: Icon(
+                                Icons.close,
+                                color: Colors.white.withOpacity(0.72),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Center(
+                            child: Container(
+                              width: 52,
+                              height: 52,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: const Color(0xFF163E9C).withOpacity(0.65),
+                                border: Border.all(
+                                  color: const Color(0xFF3B82F6),
+                                  width: 1.2,
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.lock_reset,
+                                color: Colors.white,
+                                size: 24,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          const Text(
+                            'Forgot Password?',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            "No worries! Enter your email and we'll send\nyou a reset link.",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.74),
+                              fontSize: 14,
+                              height: 1.45,
+                            ),
+                          ),
+                          const SizedBox(height: 26),
+                          Text(
+                            'Email Address',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.92),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _emailController,
+                            keyboardType: TextInputType.emailAddress,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              hintText: _emailHint,
+                              hintStyle: TextStyle(
+                                color: Colors.white.withOpacity(0.45),
+                              ),
+                              prefixIcon: Icon(
+                                Icons.email_outlined,
+                                color: Colors.white.withOpacity(0.65),
+                                size: 20,
+                              ),
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.12),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 16,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide(
+                                  color: Colors.white.withOpacity(0.2),
+                                ),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide(
+                                  color: Colors.white.withOpacity(0.2),
+                                ),
+                              ),
+                              focusedBorder: const OutlineInputBorder(
+                                borderRadius: BorderRadius.all(Radius.circular(10)),
+                                borderSide: BorderSide(
+                                  color: Color(0xFF3B82F6),
+                                  width: 1.3,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            height: 48,
+                            child: ElevatedButton(
+                              onPressed: _isLoading ? null : _sendResetLink,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF2563EB),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                elevation: 0,
+                              ),
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2.4,
+                                      ),
+                                    )
+                                  : const Text(
+                                      'Send Reset Link',
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: Text(
+                              'Back to Login',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.78),
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),

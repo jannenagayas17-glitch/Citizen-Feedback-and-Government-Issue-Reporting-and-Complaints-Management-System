@@ -15,7 +15,13 @@ class Report extends Model
         'title',
         'description',
         'location',
+        'barangay',
+        'latitude',
+        'longitude',
         'status',
+        'priority',
+        'assigned_to',
+        'resolved_at',
     ];
 
     public function user()
@@ -36,6 +42,11 @@ class Report extends Model
     public function statusHistories()
     {
         return $this->hasMany(StatusHistory::class);
+    }
+
+    public function assignedAdmin()
+    {
+        return $this->belongsTo(User::class, 'assigned_to');
     }
 
     public function adminResponses()

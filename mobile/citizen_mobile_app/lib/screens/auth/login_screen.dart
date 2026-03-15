@@ -1,10 +1,16 @@
+import 'dart:ui';
+
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+
 import '../../services/auth_service.dart';
 import '../../services/google_auth_service.dart';
-import 'register_screen.dart';
+import '../../utils/auth_redirect.dart';
 import 'forgot_password_screen.dart';
+import 'register_screen.dart';
 
-enum LoginMode { citizen, government }
+enum LoginMode { citizen, admin, superAdmin }
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -14,6 +20,11 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  static const String _configuredSuperAdminEmail = String.fromEnvironment(
+    'SUPER_ADMIN_EMAIL',
+    defaultValue: 'cityengineer@taclobancity.gov.ph',
+  );
+
   final AuthService _authService = AuthService();
   final GoogleAuthService _googleAuthService = GoogleAuthService();
 
@@ -25,46 +36,24 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _isGoogleLoading = false;
 
-  Color get _primaryButtonColor {
-    return _selectedMode == LoginMode.citizen
-        ? const Color(0xFF2E6CF6)
-        : const Color(0xFF8A2BE2);
+  bool get _isSuperAdminMode => _selectedMode == LoginMode.superAdmin;
+  _LoginModeConfig get _modeConfig => _LoginModeConfig.fromMode(_selectedMode);
+  bool get _showGoogleLogin => !_isSuperAdminMode;
+  bool get _isSuperAdminEmailLocked =>
+      _isSuperAdminMode && _resolvedSuperAdminEmail.isNotEmpty;
+
+  String get _resolvedSuperAdminEmail {
+    final configured = _configuredSuperAdminEmail.trim();
+    if (configured.isNotEmpty) {
+      return configured;
+    }
+
+    final firebaseEmail = FirebaseAuth.instance.currentUser?.email?.trim() ?? '';
+    return firebaseEmail;
   }
 
-  String get _titleText {
-    return _selectedMode == LoginMode.citizen
-        ? 'Welcome Back'
-        : 'Government Portal';
-  }
-
-  String get _subtitleText {
-    return _selectedMode == LoginMode.citizen
-        ? 'Sign in to report and track city issues'
-        : 'Sign in to manage citizen reports';
-  }
-
-  String get _googleButtonText {
-    return _selectedMode == LoginMode.citizen
-        ? 'Continue with Google'
-        : 'Sign in with Google (Gov Account)';
-  }
-
-  String get _emailHintText {
-    return _selectedMode == LoginMode.citizen
-        ? 'your@email.com'
-        : 'official@taclobancity.gov';
-  }
-
-  String get _bottomTextPrefix {
-    return _selectedMode == LoginMode.citizen
-        ? 'New to CivicReport? '
-        : 'Need government access? ';
-  }
-
-  String get _bottomActionText {
-    return _selectedMode == LoginMode.citizen
-        ? 'Create an account'
-        : 'Request an account';
+  bool _isAllowedForSelection(String role) {
+    return role == _modeConfig.expectedRole;
   }
 
   Future<void> _login() async {
@@ -72,9 +61,13 @@ class _LoginScreenState extends State<LoginScreen> {
     final password = _passwordController.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Email and password are required')),
-      );
+      _showSnackBar('Email and password are required');
+      return;
+    }
+
+    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+    if (!emailRegex.hasMatch(email)) {
+      _showSnackBar('Enter a valid email address');
       return;
     }
 
@@ -86,34 +79,20 @@ class _LoginScreenState extends State<LoginScreen> {
         password: password,
       );
 
-      final user = data['user'] as Map<String, dynamic>;
-      final role = user['role']?.toString() ?? 'citizen';
+      final user = (data['user'] as Map<String, dynamic>? ?? {});
+      final role = AuthRedirect.normalizeRole(user['role']);
 
       if (!mounted) return;
 
-      if (_selectedMode == LoginMode.government &&
-          role != 'admin' &&
-          role != 'super_admin') {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('This account is not authorized for government login'),
-          ),
-        );
+      if (!_isAllowedForSelection(role)) {
+        _showSnackBar(_modeConfig.unauthorizedMessage);
         return;
       }
 
-      if (role == 'super_admin') {
-        Navigator.pushReplacementNamed(context, '/super-admin-home');
-      } else if (role == 'admin') {
-        Navigator.pushReplacementNamed(context, '/admin-home');
-      } else {
-        Navigator.pushReplacementNamed(context, '/citizen-home');
-      }
+      AuthRedirect.goToRoleHome(context, role);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
+      _showSnackBar(e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -122,6 +101,11 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _loginWithGoogle() async {
+    if (_isSuperAdminMode) {
+      _showSnackBar('Super admin must sign in with existing email and password.');
+      return;
+    }
+
     setState(() => _isGoogleLoading = true);
 
     try {
@@ -131,22 +115,35 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       if (user == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Google sign-in failed')),
-        );
+        _showSnackBar('Google sign-in failed');
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Signed in as ${user.email ?? 'Google User'}')),
-      );
+      final idToken = await user.getIdToken();
 
-      // TODO: send firebase token to Laravel here
+      if (idToken == null || idToken.isEmpty) {
+        throw Exception('Unable to get Google ID token');
+      }
+
+      final data = await _authService.loginWithGoogle(
+        idToken: idToken,
+        email: user.email,
+        name: user.displayName,
+      );
+      final backendUser = (data['user'] as Map<String, dynamic>? ?? {});
+      final role = AuthRedirect.normalizeRole(backendUser['role']);
+
+      if (!mounted) return;
+
+      if (!_isAllowedForSelection(role)) {
+        _showSnackBar(_modeConfig.unauthorizedMessage);
+        return;
+      }
+
+      AuthRedirect.goToRoleHome(context, role);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
+      _showSnackBar(e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) {
         setState(() => _isGoogleLoading = false);
@@ -155,13 +152,16 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _openRegisterScreen() {
+    if (_isSuperAdminMode) {
+      _showSnackBar('Super admin accounts are created by the system only.');
+      return;
+    }
+
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => RegisterScreen(
-          initialMode: _selectedMode == LoginMode.citizen
-              ? RegisterMode.citizen
-              : RegisterMode.government,
+          initialMode: _modeConfig.registerMode,
         ),
       ),
     );
@@ -172,12 +172,31 @@ class _LoginScreenState extends State<LoginScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => ForgotPasswordScreen(
-          initialMode: _selectedMode == LoginMode.citizen
-              ? ForgotPasswordMode.citizen
-              : ForgotPasswordMode.government,
+          initialMode: _modeConfig.forgotPasswordMode,
         ),
       ),
     );
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  void _handleModeChange(LoginMode mode) {
+    setState(() {
+      _selectedMode = mode;
+
+      if (mode == LoginMode.superAdmin) {
+        final superAdminEmail = _resolvedSuperAdminEmail;
+        if (superAdminEmail.isNotEmpty) {
+          _emailController.text = superAdminEmail;
+        }
+      } else if (_emailController.text.trim() == _resolvedSuperAdminEmail) {
+        _emailController.clear();
+      }
+    });
   }
 
   @override
@@ -190,162 +209,148 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF151515),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 370),
-              child: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Color(0xFF2E6CF6),
-                      Color(0xFF1B49C9),
-                    ],
-                  ),
-                ),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 34),
-                    Container(
-                      width: 116,
-                      height: 116,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          DecoratedBox(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xFF0C1727),
+                  Color(0xFF1E293B),
+                  Color(0xFF463327),
+                ],
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0.08,
+              child: Image.asset(
+                'assets/images/logo.png',
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                    child: Container(
+                      constraints: const BoxConstraints(maxWidth: 360),
+                      padding: const EdgeInsets.fromLTRB(22, 26, 22, 24),
                       decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: const Color(0xFF0A0E6A),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.22),
+                        ),
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.white.withOpacity(0.22),
+                            Colors.white.withOpacity(0.10),
+                          ],
+                        ),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF4C7BFF).withOpacity(0.25),
-                            blurRadius: 40,
-                            spreadRadius: 8,
+                            color: Colors.black.withOpacity(0.25),
+                            blurRadius: 24,
+                            offset: const Offset(0, 12),
                           ),
                         ],
                       ),
-                      child: ClipOval(
-                        child: Image.asset(
-                          'assets/images/logo.png',
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'CIVIC REPORT',
-                      style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        letterSpacing: 0.6,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Tacloban City Government · Your Voice Matters',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Color(0xFFD7E3FF),
-                        fontWeight: FontWeight.w400,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 28),
-                    Container(
-                      width: double.infinity,
-                      margin: const EdgeInsets.symmetric(horizontal: 14),
-                      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8F8F8),
-                        borderRadius: BorderRadius.circular(24),
-                      ),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          _buildModeToggle(),
-                          const SizedBox(height: 18),
-                          Text(
-                            _titleText,
-                            style: const TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF1F2937),
+                          Center(
+                            child: Container(
+                              width: 88,
+                              height: 88,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white.withOpacity(0.16),
+                                border: Border.all(
+                                  color: const Color(0xFFD8B15A),
+                                  width: 2,
+                                ),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(6),
+                                child: ClipOval(
+                                  child: Image.asset(
+                                    'assets/images/logo.png',
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: 18),
+                          const Text(
+                            'Tacloban City Engineering\nOffice',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 19,
+                              fontWeight: FontWeight.w700,
+                              height: 1.25,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
                           Text(
-                            _subtitleText,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: Color(0xFF6B7280),
+                            'Citizen Feedback & Reports System',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.82),
+                              fontSize: 13,
                             ),
                           ),
                           const SizedBox(height: 20),
-                          _buildGoogleButton(),
+                          _SectionDivider(
+                            label: 'SIGN IN',
+                            color: Colors.white.withOpacity(0.75),
+                          ),
                           const SizedBox(height: 18),
-                          _buildDivider(),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'Email Address',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF374151),
-                            ),
-                          ),
+                          _fieldLabel('Login As'),
                           const SizedBox(height: 8),
-                          _buildEmailField(),
-                          const SizedBox(height: 14),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'Password',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF374151),
-                                ),
-                              ),
-                              GestureDetector(
-                                onTap: _openForgotPasswordScreen,
-                                child: Text(
-                                  'Forgot password?',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: _primaryButtonColor,
-                                  ),
-                                ),
-                              ),
-                            ],
+                          _buildModeDropdown(),
+                          const SizedBox(height: 16),
+                          _fieldLabel('Email Address'),
+                          const SizedBox(height: 8),
+                          _buildTextField(
+                            controller: _emailController,
+                            hintText: _modeConfig.emailHint,
+                            icon: Icons.email_outlined,
+                            keyboardType: TextInputType.emailAddress,
+                            readOnly: _isSuperAdminEmailLocked,
                           ),
+                          const SizedBox(height: 16),
+                          _fieldLabel('Password'),
                           const SizedBox(height: 8),
                           _buildPasswordField(),
-                          const SizedBox(height: 18),
-                          _buildSignInButton(),
-                          const SizedBox(height: 18),
-                          Center(
-                            child: GestureDetector(
-                              onTap: _openRegisterScreen,
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed: _openForgotPasswordScreen,
                               child: RichText(
                                 text: TextSpan(
-                                  text: _bottomTextPrefix,
-                                  style: const TextStyle(
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.68),
                                     fontSize: 13,
-                                    color: Color(0xFF9CA3AF),
                                   ),
-                                  children: [
+                                  children: const [
                                     TextSpan(
-                                      text: _bottomActionText,
+                                      text: ' Forgot password?',
                                       style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w700,
-                                        color: _selectedMode == LoginMode.citizen
-                                            ? const Color(0xFF2E6CF6)
-                                            : const Color(0xFF8A2BE2),
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
                                       ),
                                     ),
                                   ],
@@ -353,108 +358,43 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                           ),
+                          if (_showGoogleLogin) ...[
+                            const SizedBox(height: 4),
+                            _SectionDivider(
+                              label: 'Or continue with',
+                              color: Colors.white.withOpacity(0.62),
+                            ),
+                            const SizedBox(height: 18),
+                            _buildGoogleButton(),
+                          ],
+                          const SizedBox(height: 16),
+                          _buildLoginButton(),
+                          const SizedBox(height: 16),
+                          TextButton(
+                            onPressed: _isSuperAdminMode ? null : _openRegisterScreen,
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.white.withOpacity(0.84),
+                            ),
+                            child: RichText(
+                              textAlign: TextAlign.center,
+                              text: TextSpan(
+                                style: TextStyle(
+                                  color: _isSuperAdminMode
+                                      ? Colors.white.withOpacity(0.55)
+                                      : Colors.white.withOpacity(0.72),
+                                  fontSize: 14,
+                                ),
+                                children: _modeConfig.bottomTextSpans(
+                                  highlightedColor: _isSuperAdminMode
+                                      ? Colors.white.withOpacity(0.55)
+                                      : Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 18),
-                    const Padding(
-                      padding: EdgeInsets.only(bottom: 20),
-                      child: Text(
-                        '© 2025 Tacloban City Government · CivicReport v2.1',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Color(0xFFD7E3FF),
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildModeToggle() {
-    final bool isCitizen = _selectedMode == LoginMode.citizen;
-
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F1F1),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                setState(() => _selectedMode = LoginMode.citizen);
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                decoration: BoxDecoration(
-                  color: isCitizen ? Colors.white : Colors.transparent,
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: isCitizen
-                      ? [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.06),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ]
-                      : [],
-                ),
-                child: Text(
-                  '👤 Citizen',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: isCitizen
-                        ? const Color(0xFF2E6CF6)
-                        : const Color(0xFF6B7280),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                setState(() => _selectedMode = LoginMode.government);
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                decoration: BoxDecoration(
-                  color: !isCitizen ? Colors.white : Colors.transparent,
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: !isCitizen
-                      ? [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.06),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ]
-                      : [],
-                ),
-                child: Text(
-                  '🏛 Government',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    height: 1.25,
-                    fontWeight: FontWeight.w600,
-                    color: !isCitizen
-                        ? const Color(0xFF2E6CF6)
-                        : const Color(0xFF6B7280),
                   ),
                 ),
               ),
@@ -465,95 +405,67 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildGoogleButton() {
-    return SizedBox(
-      width: double.infinity,
-      height: 46,
-      child: OutlinedButton(
-        onPressed: _isGoogleLoading ? null : _loginWithGoogle,
-        style: OutlinedButton.styleFrom(
-          side: const BorderSide(color: Color(0xFFE5E7EB)),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          backgroundColor: Colors.white,
-        ),
-        child: _isGoogleLoading
-            ? SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  color: _primaryButtonColor,
-                ),
-              )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text(
-                    'G',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.red,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    _googleButtonText,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF374151),
-                    ),
-                  ),
-                ],
-              ),
+  Widget _fieldLabel(String text) {
+    return Text(
+      text,
+      style: TextStyle(
+        color: Colors.white.withOpacity(0.92),
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
       ),
     );
   }
 
-  Widget _buildDivider() {
-    return Row(
-      children: const [
-        Expanded(child: Divider(color: Color(0xFFE5E7EB))),
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: 10),
-          child: Text(
-            'or sign in with email',
-            style: TextStyle(
-              fontSize: 12,
-              color: Color(0xFF9CA3AF),
-            ),
-          ),
+  Widget _buildModeDropdown() {
+    return DropdownButtonFormField<LoginMode>(
+      value: _selectedMode,
+      dropdownColor: const Color(0xFF5B534E),
+      iconEnabledColor: Colors.white.withOpacity(0.9),
+      decoration: _inputDecoration(
+        hintText: '',
+        icon: Icons.keyboard_arrow_down_rounded,
+        usePrefixIcon: false,
+      ),
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 16,
+      ),
+      items: const [
+        DropdownMenuItem(
+          value: LoginMode.citizen,
+          child: Text('Citizen'),
         ),
-        Expanded(child: Divider(color: Color(0xFFE5E7EB))),
+        DropdownMenuItem(
+          value: LoginMode.admin,
+          child: Text('Admin'),
+        ),
+        DropdownMenuItem(
+          value: LoginMode.superAdmin,
+          child: Text('Super Admin'),
+        ),
       ],
+      onChanged: (value) {
+        if (value == null) return;
+        _handleModeChange(value);
+      },
     );
   }
 
-  Widget _buildEmailField() {
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String hintText,
+    required IconData icon,
+    TextInputType keyboardType = TextInputType.text,
+    bool readOnly = false,
+  }) {
     return TextField(
-      controller: _emailController,
-      keyboardType: TextInputType.emailAddress,
-      decoration: InputDecoration(
-        hintText: _emailHintText,
-        hintStyle: const TextStyle(color: Color(0xFF9CA3AF)),
-        filled: true,
-        fillColor: const Color(0xFFF9FAFB),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: _primaryButtonColor, width: 1.5),
-        ),
+      controller: controller,
+      keyboardType: keyboardType,
+      readOnly: readOnly,
+      style: const TextStyle(color: Colors.white),
+      decoration: _inputDecoration(
+        hintText: hintText,
+        icon: icon,
       ),
     );
   }
@@ -562,79 +474,258 @@ class _LoginScreenState extends State<LoginScreen> {
     return TextField(
       controller: _passwordController,
       obscureText: _obscurePassword,
-      decoration: InputDecoration(
-        hintText: '••••••••',
-        hintStyle: const TextStyle(color: Color(0xFF9CA3AF)),
-        filled: true,
-        fillColor: const Color(0xFFF9FAFB),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      style: const TextStyle(color: Colors.white),
+      decoration: _inputDecoration(
+        hintText: '........',
+        icon: Icons.lock_outline,
+      ).copyWith(
         suffixIcon: IconButton(
           onPressed: () {
             setState(() => _obscurePassword = !_obscurePassword);
           },
           icon: Icon(
             _obscurePassword
-                ? Icons.visibility_outlined
-                : Icons.visibility_off_outlined,
-            color: const Color(0xFF9CA3AF),
-            size: 20,
+                ? Icons.visibility_off_outlined
+                : Icons.visibility_outlined,
+            color: Colors.white.withOpacity(0.72),
           ),
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: _primaryButtonColor, width: 1.5),
         ),
       ),
     );
   }
 
-  Widget _buildSignInButton() {
+  InputDecoration _inputDecoration({
+    required String hintText,
+    required IconData icon,
+    bool usePrefixIcon = true,
+  }) {
+    return InputDecoration(
+      hintText: hintText,
+      hintStyle: TextStyle(
+        color: Colors.white.withOpacity(0.5),
+      ),
+      prefixIcon: usePrefixIcon
+          ? Icon(icon, color: Colors.white.withOpacity(0.72), size: 20)
+          : null,
+      filled: true,
+      fillColor: Colors.white.withOpacity(0.14),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.white.withOpacity(0.18)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.white.withOpacity(0.18)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 1.4),
+      ),
+    );
+  }
+
+  Widget _buildGoogleButton() {
+    final disabled = _isGoogleLoading || _isSuperAdminMode;
+
     return SizedBox(
-      width: double.infinity,
-      height: 52,
+      height: 50,
+      child: OutlinedButton(
+        onPressed: disabled ? null : _loginWithGoogle,
+        style: OutlinedButton.styleFrom(
+          backgroundColor: Colors.white.withOpacity(0.14),
+          side: BorderSide(color: Colors.white.withOpacity(0.18)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        child: _isGoogleLoading
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2.4),
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SvgPicture.asset(
+                    'assets/images/google_logo.svg',
+                    width: 20,
+                    height: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    _modeConfig.googleButtonText,
+                    style: TextStyle(
+                      color: disabled
+                          ? Colors.white.withOpacity(0.55)
+                          : Colors.white,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _buildLoginButton() {
+    return SizedBox(
+      height: 50,
       child: ElevatedButton(
         onPressed: _isLoading ? null : _login,
         style: ElevatedButton.styleFrom(
-          elevation: 10,
-          shadowColor: _primaryButtonColor.withOpacity(0.35),
-          backgroundColor: _primaryButtonColor,
+          backgroundColor: const Color(0xFF2563EB),
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
           ),
         ),
         child: _isLoading
             ? const SizedBox(
-                width: 22,
-                height: 22,
+                width: 20,
+                height: 20,
                 child: CircularProgressIndicator(
                   color: Colors.white,
-                  strokeWidth: 2.5,
+                  strokeWidth: 2.4,
                 ),
               )
-            : const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Sign In',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  SizedBox(width: 8),
-                  Icon(Icons.arrow_forward_ios, size: 16),
-                ],
+            : const Text(
+                'Login',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
       ),
+    );
+  }
+}
+
+class _LoginModeConfig {
+  const _LoginModeConfig({
+    required this.expectedRole,
+    required this.emailHint,
+    required this.bottomText,
+    required this.googleButtonText,
+    required this.unauthorizedMessage,
+    required this.registerMode,
+    required this.forgotPasswordMode,
+  });
+
+  final String expectedRole;
+  final String emailHint;
+  final String bottomText;
+  final String googleButtonText;
+  final String unauthorizedMessage;
+  final RegisterMode registerMode;
+  final ForgotPasswordMode forgotPasswordMode;
+
+  factory _LoginModeConfig.fromMode(LoginMode mode) {
+    switch (mode) {
+      case LoginMode.admin:
+        return const _LoginModeConfig(
+          expectedRole: 'admin',
+          emailHint: 'official@taclobancity.gov',
+          bottomText: 'Need an admin account? Register here',
+          googleButtonText: 'Sign in with Google',
+          unauthorizedMessage: 'This account is not authorized for admin login.',
+          registerMode: RegisterMode.government,
+          forgotPasswordMode: ForgotPasswordMode.government,
+        );
+      case LoginMode.superAdmin:
+        return const _LoginModeConfig(
+          expectedRole: 'super_admin',
+          emailHint: 'superadmin@taclobancity.gov',
+          bottomText: 'Super admin accounts are created by the system only',
+          googleButtonText: 'Super Admin uses email login',
+          unauthorizedMessage:
+              'This email is not registered as a super admin account.',
+          registerMode: RegisterMode.government,
+          forgotPasswordMode: ForgotPasswordMode.government,
+        );
+      case LoginMode.citizen:
+        return const _LoginModeConfig(
+          expectedRole: 'citizen',
+          emailHint: 'your.email@example.com',
+          bottomText: "Don't have an account? Register here",
+          googleButtonText: 'Sign in with Google',
+          unauthorizedMessage: 'This account is not a citizen account.',
+          registerMode: RegisterMode.citizen,
+          forgotPasswordMode: ForgotPasswordMode.citizen,
+        );
+    }
+  }
+
+  List<InlineSpan> bottomTextSpans({
+    required Color highlightedColor,
+  }) {
+    switch (registerMode) {
+      case RegisterMode.government:
+        if (expectedRole == 'super_admin') {
+          return [
+            TextSpan(
+              text: bottomText,
+              style: TextStyle(
+                color: highlightedColor,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ];
+        }
+
+        return [
+          const TextSpan(text: 'Need an admin account? '),
+          TextSpan(
+            text: 'Register here',
+            style: TextStyle(
+              color: highlightedColor,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ];
+      case RegisterMode.citizen:
+        return [
+          const TextSpan(text: "Don't have an account? "),
+          TextSpan(
+            text: 'Register here',
+            style: TextStyle(
+              color: highlightedColor,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ];
+    }
+  }
+}
+
+class _SectionDivider extends StatelessWidget {
+  const _SectionDivider({
+    required this.label,
+    required this.color,
+  });
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(child: Divider(color: color.withOpacity(0.35))),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 13,
+              letterSpacing: 0.6,
+            ),
+          ),
+        ),
+        Expanded(child: Divider(color: color.withOpacity(0.35))),
+      ],
     );
   }
 }

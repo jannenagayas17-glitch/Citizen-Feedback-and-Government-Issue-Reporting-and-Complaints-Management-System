@@ -16,9 +16,9 @@ class StatusHistoryController extends Controller
             'remarks' => 'nullable|string',
         ]);
 
-        if (!in_array($request->user()->role, ['admin', 'staff'])) {
+        if (!in_array($request->user()->role, ['admin', 'super_admin'])) {
             return response()->json([
-                'message' => 'Unauthorized. Only admin or staff can update report status.'
+                'message' => 'Unauthorized. Only admin or super admin can update report status.'
             ], 403);
         }
 

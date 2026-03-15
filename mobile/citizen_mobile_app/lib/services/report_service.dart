@@ -38,6 +38,42 @@ class ReportService {
     return jsonDecode(response.body);
   }
 
+  Future<List<dynamic>> getAdminReports({String? status}) async {
+    final endpoint = status == null || status.isEmpty
+        ? '/admin/reports'
+        : '/admin/reports?status=${Uri.encodeComponent(status)}';
+    final response = await _apiClient.get(endpoint, authRequired: true);
+    return jsonDecode(response.body);
+  }
+
+  Future<Map<String, dynamic>> updateReportStatus({
+    required int reportId,
+    required String status,
+    String? remarks,
+  }) async {
+    final response = await _apiClient.post(
+      '/admin/reports/$reportId/status',
+      authRequired: true,
+      body: {
+        'status': status,
+        if (remarks != null && remarks.trim().isNotEmpty) 'remarks': remarks.trim(),
+      },
+    );
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+    if (response.statusCode == 200) {
+      return data;
+    }
+
+    throw Exception(
+      data['message']?.toString() ??
+          (data['errors'] != null
+              ? data['errors'].toString()
+              : 'Failed to update report status'),
+    );
+  }
+
   Future<Map<String, dynamic>> getReportDetail(int id) async {
     final response = await _apiClient.get('/reports/$id', authRequired: true);
     return jsonDecode(response.body);

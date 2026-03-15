@@ -2,48 +2,33 @@ import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
 import '../../services/dashboard_service.dart';
-import '../../services/report_service.dart';
 import '../../utils/app_routes.dart';
 import '../../utils/token_storage.dart';
-import 'complaint_detail_screen.dart';
-import 'my_complaints_screen.dart';
-import 'submit_complaint_screen.dart';
+import '../admin/complaint_management_screen.dart';
+import 'manage_admins_screen.dart';
 
-class CitizenHomeScreen extends StatefulWidget {
-  const CitizenHomeScreen({super.key});
+class SuperAdminDashboard extends StatefulWidget {
+  const SuperAdminDashboard({super.key});
 
   @override
-  State<CitizenHomeScreen> createState() => _CitizenHomeScreenState();
+  State<SuperAdminDashboard> createState() => _SuperAdminDashboardState();
 }
 
-class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
+class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
   final DashboardService _dashboardService = DashboardService();
-  final ReportService _reportService = ReportService();
   final AuthService _authService = AuthService();
 
-  late Future<_CitizenHomeData> _homeFuture;
+  late Future<Map<String, dynamic>> _statsFuture;
 
   @override
   void initState() {
     super.initState();
-    _homeFuture = _loadHome();
-  }
-
-  Future<_CitizenHomeData> _loadHome() async {
-    final results = await Future.wait([
-      _dashboardService.getDashboardStats(),
-      _reportService.getReports(),
-    ]);
-
-    return _CitizenHomeData(
-      stats: results[0] as Map<String, dynamic>,
-      reports: results[1] as List<dynamic>,
-    );
+    _statsFuture = _dashboardService.getDashboardStats();
   }
 
   Future<void> _refresh() async {
-    final future = _loadHome();
-    setState(() => _homeFuture = future);
+    final future = _dashboardService.getDashboardStats();
+    setState(() => _statsFuture = future);
     await future;
   }
 
@@ -62,16 +47,22 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Citizen Dashboard'),
+        title: const Text('Super Admin Dashboard'),
         actions: [
-          IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh)),
-          IconButton(onPressed: _logout, icon: const Icon(Icons.logout)),
+          IconButton(
+            onPressed: _refresh,
+            icon: const Icon(Icons.refresh),
+          ),
+          IconButton(
+            onPressed: _logout,
+            icon: const Icon(Icons.logout),
+          ),
         ],
       ),
       body: RefreshIndicator(
         onRefresh: _refresh,
-        child: FutureBuilder<_CitizenHomeData>(
-          future: _homeFuture,
+        child: FutureBuilder<Map<String, dynamic>>(
+          future: _statsFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
               return const Center(child: CircularProgressIndicator());
@@ -89,8 +80,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
               );
             }
 
-            final data = snapshot.data!;
-            final reports = data.reports.cast<dynamic>();
+            final stats = snapshot.data ?? const <String, dynamic>{};
 
             return ListView(
               padding: const EdgeInsets.all(16),
@@ -112,7 +102,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Tacloban City Engineering Office',
+                        'System Command Center',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 24,
@@ -121,7 +111,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
                       ),
                       SizedBox(height: 8),
                       Text(
-                        'Report infrastructure concerns, follow updates, and stay informed about city response progress.',
+                        'Monitor reports, manage administrators, and oversee city-wide feedback activity.',
                         style: TextStyle(
                           color: Color(0xFFD7E3FF),
                           height: 1.4,
@@ -136,18 +126,28 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
                   runSpacing: 12,
                   children: [
                     _StatCard(
-                      label: 'My Reports',
-                      value: '${reports.length}',
+                      label: 'Total Reports',
+                      value: '${stats['total_reports'] ?? 0}',
                       color: const Color(0xFF2E6CF6),
                     ),
                     _StatCard(
+                      label: 'New',
+                      value: '${stats['new'] ?? 0}',
+                      color: const Color(0xFF64748B),
+                    ),
+                    _StatCard(
                       label: 'Pending',
-                      value: '${data.stats['pending'] ?? 0}',
+                      value: '${stats['pending'] ?? 0}',
                       color: const Color(0xFFF59E0B),
                     ),
                     _StatCard(
+                      label: 'In Progress',
+                      value: '${stats['in_progress'] ?? 0}',
+                      color: const Color(0xFF8B5CF6),
+                    ),
+                    _StatCard(
                       label: 'Resolved',
-                      value: '${data.stats['resolved'] ?? 0}',
+                      value: '${stats['resolved'] ?? 0}',
                       color: const Color(0xFF16A34A),
                     ),
                   ],
@@ -159,68 +159,34 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
                 ),
                 const SizedBox(height: 12),
                 _ActionCard(
-                  title: 'Report Road Issue',
+                  title: 'Monitor All Reports',
                   subtitle:
-                      'Submit a new complaint with the issue type, location, and description.',
-                  icon: Icons.add_location_alt_outlined,
-                  onTap: () async {
-                    await Navigator.push(
+                      'Review infrastructure complaints and status activity across the system.',
+                  icon: Icons.analytics_outlined,
+                  onTap: () {
+                    Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => const SubmitComplaintScreen(),
+                        builder: (_) => const ComplaintManagementScreen(),
                       ),
                     );
-                    _refresh();
                   },
                 ),
                 const SizedBox(height: 12),
                 _ActionCard(
-                  title: 'Check Report Status',
+                  title: 'Manage Users',
                   subtitle:
-                      'Review all submitted complaints and track their current progress.',
-                  icon: Icons.list_alt_outlined,
-                  onTap: () async {
-                    await Navigator.push(
+                      'Verify pending accounts and maintain admin access for city staff.',
+                  icon: Icons.manage_accounts_outlined,
+                  onTap: () {
+                    Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => const MyComplaintsScreen(),
+                        builder: (_) => const ManageAdminsScreen(),
                       ),
                     );
-                    _refresh();
                   },
                 ),
-                const SizedBox(height: 24),
-                const Text(
-                  'Recent Reports',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 12),
-                if (reports.isEmpty)
-                  const Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Text('No reports yet. Submit your first issue report.'),
-                    ),
-                  )
-                else
-                  ...reports.take(5).map((item) {
-                    final report = item as Map<String, dynamic>;
-                    return _ReportPreviewCard(
-                      title: (report['title'] ?? 'Untitled report').toString(),
-                      subtitle:
-                          '${(report['location'] ?? 'No location').toString()} - ${(report['status'] ?? 'Pending').toString()}',
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ComplaintDetailScreen(
-                              reportId: report['id'] as int,
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  }),
               ],
             );
           },
@@ -228,16 +194,6 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
       ),
     );
   }
-}
-
-class _CitizenHomeData {
-  const _CitizenHomeData({
-    required this.stats,
-    required this.reports,
-  });
-
-  final Map<String, dynamic> stats;
-  final List<dynamic> reports;
 }
 
 class _StatCard extends StatelessWidget {
@@ -274,7 +230,10 @@ class _StatCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             value,
-            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+            style: const TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ],
       ),
@@ -351,50 +310,6 @@ class _ActionCard extends StatelessWidget {
             const Icon(Icons.arrow_forward_ios, size: 16),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _ReportPreviewCard extends StatelessWidget {
-  const _ReportPreviewCard({
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-        title: Text(
-          title,
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(subtitle),
-        ),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: onTap,
       ),
     );
   }
