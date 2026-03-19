@@ -1,8 +1,9 @@
 import 'package:flutter/foundation.dart';
+import 'dart:io';
 
 class ApiConfig {
-  static const String _defaultMobileHost = '192.168.254.108';
-  static const String _defaultWebHost = '127.0.0.1';
+  static const String _defaultAndroidEmulatorHost = '10.0.2.2';
+  static const String _defaultLocalHost = '127.0.0.1';
   static const String _defaultPort = '8000';
 
   static const String _fullBaseUrlOverride = String.fromEnvironment(
@@ -28,7 +29,15 @@ class ApiConfig {
       return hostOverride;
     }
 
-    return kIsWeb ? _defaultWebHost : _defaultMobileHost;
+    if (kIsWeb) {
+      return _defaultLocalHost;
+    }
+
+    if (Platform.isAndroid) {
+      return _defaultAndroidEmulatorHost;
+    }
+
+    return _defaultLocalHost;
   }
 
   static String get _resolvedPort {

@@ -19,6 +19,7 @@ dependencies:
   google_sign_in: ^6.3.0
   cupertino_icons: ^1.0.8
   flutter_svg: ^2.0.10+1
+  image_picker: ^1.1.2
 
   firebase_core: ^3.15.2
   firebase_auth: ^5.6.3
@@ -30,6 +31,7 @@ dev_dependencies:
     sdk: flutter
 
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.3
 
 
 
@@ -40,5 +42,12 @@ flutter:
 
   
   uses-material-design: true
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/logo.png"
+  adaptive_icon_background: "#2563EB"
+  adaptive_icon_foreground: "assets/images/logo_foreground.png"
 
 

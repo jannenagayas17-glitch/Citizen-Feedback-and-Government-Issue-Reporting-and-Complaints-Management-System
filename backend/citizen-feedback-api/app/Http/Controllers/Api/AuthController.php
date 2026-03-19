@@ -59,14 +59,17 @@ class AuthController extends Controller
             'email' => $request->email,
             'mobile_number' => $request->mobile_number,
             'password' => Hash::make($request->password),
-            'role' => 'pending_admin',
+            'role' => 'admin',
             'department' => $request->department,
             'job_title' => $request->job_title,
         ]);
 
+        $token = $user->createToken('mobile-token')->plainTextToken;
+
         return response()->json([
-            'message' => 'Government account request submitted successfully',
+            'message' => 'Admin account registered successfully',
             'user' => $user,
+            'token' => $token,
         ], 201);
     }
 

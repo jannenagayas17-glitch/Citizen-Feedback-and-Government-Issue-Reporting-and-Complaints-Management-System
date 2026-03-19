@@ -1,6 +1,6 @@
 {
-    "name": "citizen_mobile_app",
-    "short_name": "citizen_mobile_app",
+    "name": "Tacloban City Engineering Office",
+    "short_name": "Tacloban City Engineering Office",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../utils/token_storage.dart';
@@ -14,23 +14,47 @@ class ReportService {
   }
 
   Future<Map<String, dynamic>> createReport({
-    required int categoryId,
+    int? categoryId,
+    String? categoryName,
     required String title,
     required String description,
     required String location,
+    String? barangay,
+    String? priority,
+    double? latitude,
+    double? longitude,
   }) async {
     final response = await _apiClient.post(
       '/reports',
       authRequired: true,
       body: {
-        'category_id': categoryId,
+        if (categoryId != null) 'category_id': categoryId,
+        if (categoryName != null && categoryName.trim().isNotEmpty)
+          'category_name': categoryName.trim(),
         'title': title,
         'description': description,
         'location': location,
+        if (barangay != null && barangay.trim().isNotEmpty)
+          'barangay': barangay.trim(),
+        if (priority != null && priority.trim().isNotEmpty)
+          'priority': priority.trim(),
+        if (latitude != null) 'latitude': latitude,
+        if (longitude != null) 'longitude': longitude,
       },
     );
 
-    return jsonDecode(response.body);
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return data;
+    }
+
+    throw Exception(
+      data['message']?.toString() ??
+          (data['errors'] != null
+              ? data['errors'].toString()
+              : 'Failed to create report'),
+    );
   }
 
   Future<List<dynamic>> getReports() async {
@@ -81,7 +105,7 @@ class ReportService {
 
   Future<Map<String, dynamic>> uploadImage({
     required int reportId,
-    required File imageFile,
+    required XFile imageFile,
   }) async {
     final token = await TokenStorage.getToken();
 
@@ -93,13 +117,29 @@ class ReportService {
     request.headers['Accept'] = 'application/json';
     request.headers['Authorization'] = 'Bearer $token';
 
+    final bytes = await imageFile.readAsBytes();
     request.files.add(
-      await http.MultipartFile.fromPath('image', imageFile.path),
+      http.MultipartFile.fromBytes(
+        'image',
+        bytes,
+        filename: imageFile.name,
+      ),
     );
 
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
 
-    return jsonDecode(response.body);
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return data;
+    }
+
+    throw Exception(
+      data['message']?.toString() ??
+          (data['errors'] != null
+              ? data['errors'].toString()
+              : 'Failed to upload image'),
+    );
   }
 }

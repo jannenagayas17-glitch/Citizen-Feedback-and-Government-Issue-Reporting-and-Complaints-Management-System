@@ -7,6 +7,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../services/auth_service.dart';
 import '../../services/google_auth_service.dart';
 import '../../utils/auth_redirect.dart';
+import '../../utils/token_storage.dart';
 import 'forgot_password_screen.dart';
 import 'register_screen.dart';
 
@@ -22,7 +23,7 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   static const String _configuredSuperAdminEmail = String.fromEnvironment(
     'SUPER_ADMIN_EMAIL',
-    defaultValue: 'cityengineer@taclobancity.gov.ph',
+    defaultValue: 'cityengineer@gov.ph',
   );
 
   final AuthService _authService = AuthService();
@@ -42,6 +43,12 @@ class _LoginScreenState extends State<LoginScreen> {
   bool get _isSuperAdminEmailLocked =>
       _isSuperAdminMode && _resolvedSuperAdminEmail.isNotEmpty;
 
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedEmailForMode();
+  }
+
   String get _resolvedSuperAdminEmail {
     final configured = _configuredSuperAdminEmail.trim();
     if (configured.isNotEmpty) {
@@ -54,6 +61,23 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isAllowedForSelection(String role) {
     return role == _modeConfig.expectedRole;
+  }
+
+  Future<void> _loadSavedEmailForMode() async {
+    if (_isSuperAdminEmailLocked) {
+      _emailController.text = _resolvedSuperAdminEmail;
+      return;
+    }
+
+    final rememberedEmail = await TokenStorage.getLastEmailForRole(
+      _modeConfig.expectedRole,
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      _emailController.text = rememberedEmail?.trim() ?? '';
+    });
   }
 
   Future<void> _login() async {
@@ -88,6 +112,11 @@ class _LoginScreenState extends State<LoginScreen> {
         _showSnackBar(_modeConfig.unauthorizedMessage);
         return;
       }
+
+      await TokenStorage.saveLastEmailForRole(
+        role: role,
+        email: email,
+      );
 
       AuthRedirect.goToRoleHome(context, role);
     } catch (e) {
@@ -140,6 +169,11 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
+      await TokenStorage.saveLastEmailForRole(
+        role: role,
+        email: user.email ?? '',
+      );
+
       AuthRedirect.goToRoleHome(context, role);
     } catch (e) {
       if (!mounted) return;
@@ -184,19 +218,13 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  void _handleModeChange(LoginMode mode) {
+  Future<void> _handleModeChange(LoginMode mode) async {
     setState(() {
       _selectedMode = mode;
-
-      if (mode == LoginMode.superAdmin) {
-        final superAdminEmail = _resolvedSuperAdminEmail;
-        if (superAdminEmail.isNotEmpty) {
-          _emailController.text = superAdminEmail;
-        }
-      } else if (_emailController.text.trim() == _resolvedSuperAdminEmail) {
-        _emailController.clear();
-      }
+      _passwordController.clear();
     });
+
+    await _loadSavedEmailForMode();
   }
 
   @override

@@ -1,0 +1,41 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: DockerFile
+    container_name: citizen-feedback-api
+    working_dir: /var/www
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./citizen-feedback-api:/var/www
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "composer install &&
+      php artisan config:clear &&
+      php artisan migrate --force &&
+      php artisan serve --host=0.0.0.0 --port=8000"
+
+  db:
+    image: mysql:8.0
+    container_name: citizen-feedback-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: "citizen_feedback"
+      MYSQL_USER: "laravel"
+      MYSQL_PASSWORD: "cfs_0147"
+      MYSQL_ROOT_PASSWORD: "cfs_0147"
+    ports:
+      - "3307:3306"
+    volumes:
+      - dbdata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-pcfs_0147"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  dbdata:

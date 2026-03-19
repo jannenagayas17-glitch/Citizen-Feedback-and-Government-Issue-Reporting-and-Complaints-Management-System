@@ -369,7 +369,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           const SizedBox(height: 8),
                           _buildTextField(
                             controller: _nameController,
-                            hintText: 'Your full name',
+                            hintText: 'your full name',
                             prefixIcon: Icons.person_outline,
                           ),
                           const SizedBox(height: 14),

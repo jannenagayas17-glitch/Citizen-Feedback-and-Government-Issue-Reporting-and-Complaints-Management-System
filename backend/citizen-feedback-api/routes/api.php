@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\PasswordResetController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ReportController;
+use App\Http\Controllers\Api\ReportImageController;
 use App\Http\Controllers\Api\DashboardController;
 
 /*
@@ -53,6 +54,8 @@ Route::post('/reset-password', [PasswordResetController::class, 'resetPassword']
 */
 
 Route::get('/categories', [CategoryController::class, 'index']);
+Route::get('/report-images/{path}', [ReportImageController::class, 'show'])
+    ->where('path', '.*');
 
 
 
@@ -90,6 +93,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/', [ReportController::class, 'store']);        // submit complaint
         Route::get('/', [ReportController::class, 'index']);         // user complaints
         Route::get('/{id}', [ReportController::class, 'show']);      // complaint details
+        Route::post('/{id}/images', [ReportImageController::class, 'store']);
 
     });
 

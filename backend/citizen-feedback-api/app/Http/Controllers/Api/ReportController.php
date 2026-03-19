@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AdminResponse;
+use App\Models\Category;
 use App\Models\Report;
 use App\Models\StatusHistory;
 use Illuminate\Http\Request;
@@ -31,8 +32,9 @@ class ReportController extends Controller
 
     public function store(Request $request)
     {
-        $request->validate([
-            'category_id' => 'required|exists:categories,id',
+        $validated = $request->validate([
+            'category_id' => 'nullable|exists:categories,id',
+            'category_name' => 'nullable|string|max:255',
             'title' => 'required|string|max:255',
             'description' => 'required|string',
             'location' => 'nullable|string|max:255',
@@ -42,17 +44,39 @@ class ReportController extends Controller
             'priority' => 'nullable|string|in:Low,Normal,High,Urgent',
         ]);
 
+        $categoryId = $validated['category_id'] ?? null;
+
+        if ($categoryId === null) {
+            $categoryName = trim((string) ($validated['category_name'] ?? ''));
+
+            if ($categoryName === '') {
+                return response()->json([
+                    'message' => 'A category is required.',
+                    'errors' => [
+                        'category' => ['The category field is required.'],
+                    ],
+                ], 422);
+            }
+
+            $category = Category::firstOrCreate(
+                ['name' => $categoryName],
+                ['description' => $categoryName . ' reports']
+            );
+
+            $categoryId = $category->id;
+        }
+
         $report = Report::create([
             'user_id' => $request->user()->id,
-            'category_id' => $request->category_id,
-            'title' => $request->title,
-            'description' => $request->description,
-            'location' => $request->location,
-            'barangay' => $request->barangay,
-            'latitude' => $request->latitude,
-            'longitude' => $request->longitude,
+            'category_id' => $categoryId,
+            'title' => $validated['title'],
+            'description' => $validated['description'],
+            'location' => $validated['location'] ?? null,
+            'barangay' => $validated['barangay'] ?? null,
+            'latitude' => $validated['latitude'] ?? null,
+            'longitude' => $validated['longitude'] ?? null,
             'status' => 'New',
-            'priority' => $request->priority ?? 'Normal',
+            'priority' => $validated['priority'] ?? 'Normal',
         ]);
 
         return response()->json([
