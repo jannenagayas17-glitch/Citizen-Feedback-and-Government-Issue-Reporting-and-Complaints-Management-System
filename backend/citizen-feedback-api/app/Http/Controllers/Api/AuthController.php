@@ -13,7 +13,7 @@ use Illuminate\Validation\ValidationException;
 class AuthController extends Controller
 {
     private const EMOJI_REGEX = '/[\x{1F1E6}-\x{1F1FF}\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}]/u';
-    private const FULL_NAME_REGEX = "/^\p{L}+(?:[ '\.-]\p{L}+)*\s+\p{L}+(?:[ '\.-]\p{L}+)*$/u";
+    private const FULL_NAME_REGEX = "/^(?=.{3,255}$)(?=.*\s)\p{L}[\p{L}'\.-]*(?:\s+\p{L}[\p{L}'\.-]*)+$/u";
 
     public function registerCitizen(Request $request)
     {
@@ -229,13 +229,15 @@ class AuthController extends Controller
         $user = $request->user();
 
         $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|max:255|unique:users,email,' . $user->id,
-        ]);
+            'name' => ['required', 'string', 'max:255', 'regex:' . self::FULL_NAME_REGEX, 'not_regex:' . self::EMOJI_REGEX],
+            'email' => ['required', 'email', 'max:255', 'unique:users,email,' . $user->id, 'not_regex:' . self::EMOJI_REGEX],
+            'mobile_number' => ['nullable', 'regex:/^\d{11}$/'],
+        ], $this->validationMessages());
 
         $user->update([
             'name' => $request->name,
             'email' => $request->email,
+            'mobile_number' => $request->mobile_number,
         ]);
 
         return response()->json([

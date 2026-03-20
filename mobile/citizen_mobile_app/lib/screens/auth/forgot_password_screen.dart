@@ -1,6 +1,8 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/auth_service.dart';
 
@@ -19,10 +21,16 @@ class ForgotPasswordScreen extends StatefulWidget {
 }
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
+  static final RegExp _emojiRegex = RegExp(
+    r'[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]',
+    unicode: true,
+  );
+
   late ForgotPasswordMode _selectedMode;
   final TextEditingController _emailController = TextEditingController();
   final AuthService _authService = AuthService();
   bool _isLoading = false;
+  String? _emailError;
 
   @override
   void initState() {
@@ -35,6 +43,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     return emailRegex.hasMatch(email);
   }
 
+  bool _containsEmoji(String value) {
+    return _emojiRegex.hasMatch(value);
+  }
+
   String get _emailHint {
     return _selectedMode == ForgotPasswordMode.citizen
         ? 'your.email@example.com'
@@ -44,13 +56,19 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   Future<void> _sendResetLink() async {
     final email = _emailController.text.trim();
 
-    if (email.isEmpty) {
-      _showSnack('Email is required');
-      return;
-    }
+    setState(() {
+      _emailError = null;
 
-    if (!_isValidEmail(email)) {
-      _showSnack('Enter a valid email address');
+      if (email.isEmpty) {
+        _emailError = 'Email address is required.';
+      } else if (_containsEmoji(email)) {
+        _emailError = 'Emoji characters are not allowed.';
+      } else if (!_isValidEmail(email)) {
+        _emailError = 'Enter a valid email address.';
+      }
+    });
+
+    if (_emailError != null) {
       return;
     }
 
@@ -66,9 +84,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
       _showSnack(message);
       _emailController.clear();
+      await _openMailApp(email);
     } catch (e) {
       if (!mounted) return;
-      _showSnack(e.toString().replaceFirst('Exception: ', ''));
+      final message = e.toString().replaceFirst('Exception: ', '');
+      setState(() {
+        _emailError = message;
+      });
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -80,6 +102,29 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
+  }
+
+  Future<void> _openMailApp(String email) async {
+    final gmailInboxUri = Uri.parse('https://mail.google.com/mail/u/0/#inbox');
+    final gmailSchemeUri = Uri.parse('googlegmail:///');
+    final genericMailUri = Uri(
+      scheme: 'mailto',
+      path: email,
+    );
+
+    if (await canLaunchUrl(gmailSchemeUri)) {
+      await launchUrl(gmailSchemeUri, mode: LaunchMode.externalApplication);
+      return;
+    }
+
+    if (await canLaunchUrl(gmailInboxUri)) {
+      await launchUrl(gmailInboxUri, mode: LaunchMode.externalApplication);
+      return;
+    }
+
+    if (await canLaunchUrl(genericMailUri)) {
+      await launchUrl(genericMailUri, mode: LaunchMode.externalApplication);
+    }
   }
 
   @override
@@ -212,6 +257,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                           TextField(
                             controller: _emailController,
                             keyboardType: TextInputType.emailAddress,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.deny(_emojiRegex),
+                            ],
+                            onChanged: (_) {
+                              if (_emailError != null) {
+                                setState(() => _emailError = null);
+                              }
+                            },
                             style: const TextStyle(color: Colors.white),
                             decoration: InputDecoration(
                               hintText: _emailHint,
@@ -245,6 +298,26 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                 borderRadius: BorderRadius.all(Radius.circular(10)),
                                 borderSide: BorderSide(
                                   color: Color(0xFF3B82F6),
+                                  width: 1.3,
+                                ),
+                              ),
+                              errorText: _emailError,
+                              errorMaxLines: 2,
+                              errorStyle: const TextStyle(
+                                color: Color(0xFFFFB4B4),
+                                fontSize: 12,
+                              ),
+                              errorBorder: const OutlineInputBorder(
+                                borderRadius: BorderRadius.all(Radius.circular(10)),
+                                borderSide: BorderSide(
+                                  color: Color(0xFFEF4444),
+                                  width: 1.2,
+                                ),
+                              ),
+                              focusedErrorBorder: const OutlineInputBorder(
+                                borderRadius: BorderRadius.all(Radius.circular(10)),
+                                borderSide: BorderSide(
+                                  color: Color(0xFFEF4444),
                                   width: 1.3,
                                 ),
                               ),

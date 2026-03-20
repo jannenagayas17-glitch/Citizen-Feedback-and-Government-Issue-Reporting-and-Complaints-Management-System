@@ -11,6 +11,8 @@ use Illuminate\Http\Request;
 
 class ReportController extends Controller
 {
+    private const EMOJI_REGEX = '/[\x{1F1E6}-\x{1F1FF}\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}]/u';
+
     public function index(Request $request)
     {
         $query = Report::with(['user', 'category', 'images']);
@@ -34,14 +36,21 @@ class ReportController extends Controller
     {
         $validated = $request->validate([
             'category_id' => 'nullable|exists:categories,id',
-            'category_name' => 'nullable|string|max:255',
-            'title' => 'required|string|max:255',
-            'description' => 'required|string',
-            'location' => 'nullable|string|max:255',
-            'barangay' => 'nullable|string|max:255',
+            'category_name' => ['nullable', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
+            'title' => ['required', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
+            'description' => ['required', 'string', 'not_regex:' . self::EMOJI_REGEX],
+            'location' => ['required', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
+            'barangay' => ['nullable', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
             'latitude' => 'nullable|numeric',
             'longitude' => 'nullable|numeric',
             'priority' => 'nullable|string|in:Low,Normal,High,Urgent',
+        ], [
+            'category_name.not_regex' => 'Emoji characters are not allowed.',
+            'title.not_regex' => 'Emoji characters are not allowed.',
+            'description.not_regex' => 'Emoji characters are not allowed.',
+            'location.not_regex' => 'Emoji characters are not allowed.',
+            'barangay.not_regex' => 'Emoji characters are not allowed.',
+            'location.required' => 'Location is required.',
         ]);
 
         $categoryId = $validated['category_id'] ?? null;

@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../services/report_service.dart';
@@ -13,6 +14,11 @@ class SubmitComplaintScreen extends StatefulWidget {
 }
 
 class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
+  static final RegExp _emojiRegex = RegExp(
+    r'[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]',
+    unicode: true,
+  );
+
   final ReportService _reportService = ReportService();
   final ImagePicker _imagePicker = ImagePicker();
 
@@ -26,6 +32,11 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   String _selectedPriority = 'Normal';
   bool _isSubmitting = false;
   final List<XFile> _selectedImages = [];
+  String? _categoryError;
+  String? _titleError;
+  String? _locationError;
+  String? _barangayError;
+  String? _descriptionError;
 
   static const List<String> _priorities = [
     'Low',
@@ -61,8 +72,21 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   void _reloadCategories() {
     setState(() {
       _selectedCategoryId = null;
+      _categoryError = null;
       _categoriesFuture = _reportService.getCategories();
     });
+  }
+
+  bool _containsEmoji(String value) {
+    return _emojiRegex.hasMatch(value);
+  }
+
+  void _clearErrors() {
+    _categoryError = null;
+    _titleError = null;
+    _locationError = null;
+    _barangayError = null;
+    _descriptionError = null;
   }
 
   Future<void> _submit() async {
@@ -71,11 +95,41 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     final location = _locationController.text.trim();
     final barangay = _barangayController.text.trim();
 
-    if (_selectedCategoryId == null ||
-        title.isEmpty ||
-        description.isEmpty ||
-        location.isEmpty) {
-      _showSnack('Please complete the category, title, location, and description.');
+    setState(() {
+      _clearErrors();
+
+      if (_selectedCategoryId == null) {
+        _categoryError = 'Please select a category.';
+      }
+
+      if (title.isEmpty) {
+        _titleError = 'Issue title is required.';
+      } else if (_containsEmoji(title)) {
+        _titleError = 'Emoji characters are not allowed.';
+      }
+
+      if (location.isEmpty) {
+        _locationError = 'Location is required.';
+      } else if (_containsEmoji(location)) {
+        _locationError = 'Emoji characters are not allowed.';
+      }
+
+      if (barangay.isNotEmpty && _containsEmoji(barangay)) {
+        _barangayError = 'Emoji characters are not allowed.';
+      }
+
+      if (description.isEmpty) {
+        _descriptionError = 'Description is required.';
+      } else if (_containsEmoji(description)) {
+        _descriptionError = 'Emoji characters are not allowed.';
+      }
+    });
+
+    if (_categoryError != null ||
+        _titleError != null ||
+        _locationError != null ||
+        _barangayError != null ||
+        _descriptionError != null) {
       return;
     }
 
@@ -228,14 +282,30 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                     const SizedBox(height: 18),
                     _buildLabel('Category'),
                     const SizedBox(height: 8),
-                    _buildCategoryDropdown(categories),
+                    _buildCategoryDropdown(
+                      categories,
+                      errorText: _categoryError,
+                    ),
                     const SizedBox(height: 16),
                     _buildLabel('Issue title'),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _titleController,
                       textInputAction: TextInputAction.next,
-                      decoration: _inputDecoration('Example: Broken street light'),
+                      style: const TextStyle(color: Colors.white),
+                      cursorColor: Colors.white,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.deny(_emojiRegex),
+                      ],
+                      onChanged: (_) {
+                        if (_titleError != null) {
+                          setState(() => _titleError = null);
+                        }
+                      },
+                      decoration: _inputDecoration(
+                        'Example: Broken street light',
+                        errorText: _titleError,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     _buildLabel('Location'),
@@ -243,7 +313,20 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                     TextField(
                       controller: _locationController,
                       textInputAction: TextInputAction.next,
-                      decoration: _inputDecoration('Street, landmark, or area'),
+                      style: const TextStyle(color: Colors.white),
+                      cursorColor: Colors.white,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.deny(_emojiRegex),
+                      ],
+                      onChanged: (_) {
+                        if (_locationError != null) {
+                          setState(() => _locationError = null);
+                        }
+                      },
+                      decoration: _inputDecoration(
+                        'Street, landmark, or area',
+                        errorText: _locationError,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     _buildLabel('Barangay'),
@@ -251,7 +334,20 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                     TextField(
                       controller: _barangayController,
                       textInputAction: TextInputAction.next,
-                      decoration: _inputDecoration('Optional barangay name'),
+                      style: const TextStyle(color: Colors.white),
+                      cursorColor: Colors.white,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.deny(_emojiRegex),
+                      ],
+                      onChanged: (_) {
+                        if (_barangayError != null) {
+                          setState(() => _barangayError = null);
+                        }
+                      },
+                      decoration: _inputDecoration(
+                        'Optional barangay name',
+                        errorText: _barangayError,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     _buildLabel('Priority'),
@@ -323,8 +419,19 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                       minLines: 5,
                       maxLines: 7,
                       textInputAction: TextInputAction.done,
+                      style: const TextStyle(color: Colors.white),
+                      cursorColor: Colors.white,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.deny(_emojiRegex),
+                      ],
+                      onChanged: (_) {
+                        if (_descriptionError != null) {
+                          setState(() => _descriptionError = null);
+                        }
+                      },
                       decoration: _inputDecoration(
                         'Describe the issue, what happened, and any important details.',
+                        errorText: _descriptionError,
                       ),
                     ),
                     const SizedBox(height: 22),
@@ -380,7 +487,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     );
   }
 
-  InputDecoration _inputDecoration(String hint) {
+  InputDecoration _inputDecoration(String hint, {String? errorText}) {
     return InputDecoration(
       hintText: hint,
       filled: true,
@@ -398,6 +505,20 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
         borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.4),
       ),
       hintStyle: TextStyle(color: Colors.white.withOpacity(0.45)),
+      errorText: errorText,
+      errorMaxLines: 2,
+      errorStyle: const TextStyle(
+        color: Color(0xFFFFB4B4),
+        fontSize: 12,
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.2),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.3),
+      ),
     );
   }
 
@@ -501,7 +622,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     return const Color(0xFFD8B15A);
   }
 
-  Widget _buildCategoryDropdown(List<dynamic> categories) {
+  Widget _buildCategoryDropdown(List<dynamic> categories, {String? errorText}) {
     if (categories.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(16),
@@ -546,7 +667,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
       dropdownColor: const Color(0xFF253248),
       style: const TextStyle(color: Colors.white),
       iconEnabledColor: Colors.white,
-      decoration: _inputDecoration('Select a category'),
+      decoration: _inputDecoration('Select a category', errorText: errorText),
       items: categories.map((item) {
         final category = item as Map<String, dynamic>;
         final rawId = category['id'];
@@ -587,7 +708,10 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
       }).whereType<DropdownMenuItem<int>>().toList(),
       onChanged: (value) {
         if (value == null) return;
-        setState(() => _selectedCategoryId = value);
+        setState(() {
+          _selectedCategoryId = value;
+          _categoryError = null;
+        });
       },
     );
   }

@@ -242,10 +242,15 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
         ],
       ),
       bottomNavigationBar: _buildBottomNav(primaryBlue),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: primaryBlue,
-        onPressed: _openSubmitReport,
-        child: const Icon(Icons.add, color: Colors.white),
+      floatingActionButton: SizedBox(
+        width: 62,
+        height: 62,
+        child: FloatingActionButton(
+          shape: const CircleBorder(),
+          backgroundColor: primaryBlue,
+          onPressed: _openSubmitReport,
+          child: const Icon(Icons.add, color: Colors.white, size: 28),
+        ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
     );
@@ -336,7 +341,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Good morning',
+                  'Good day',
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.72),
                     fontSize: 12,
@@ -751,7 +756,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
                 _openMyReports();
               },
             ),
-            const SizedBox(width: 32),
+            const SizedBox(width: 56),
             _NavItem(
               icon: Icons.notifications_none,
               label: 'Alerts',

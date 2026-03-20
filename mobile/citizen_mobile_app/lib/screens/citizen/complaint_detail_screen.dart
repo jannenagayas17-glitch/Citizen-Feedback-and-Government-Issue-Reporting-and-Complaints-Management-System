@@ -37,6 +37,8 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bottomSafeArea = MediaQuery.of(context).padding.bottom;
+
     return Scaffold(
       backgroundColor: const Color(0xFF0C1727),
       appBar: AppBar(
@@ -98,7 +100,7 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
 
             return ListView(
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.fromLTRB(16, 16, 16, bottomSafeArea + 24),
               children: [
                 _buildGlassSection(
                   child: Column(

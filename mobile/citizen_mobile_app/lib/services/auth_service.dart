@@ -206,11 +206,16 @@ class AuthService {
       return data;
     }
 
+    final errors = data['errors'];
+    if (errors is Map<String, dynamic>) {
+      final emailErrors = errors['email'];
+      if (emailErrors is List && emailErrors.isNotEmpty) {
+        throw Exception(emailErrors.first.toString());
+      }
+    }
+
     throw Exception(
-      data['message'] ??
-          (data['errors'] != null
-              ? data['errors'].toString()
-              : 'Failed to send reset link'),
+      data['message']?.toString() ?? 'Failed to send reset link',
     );
   }
 
@@ -227,6 +232,41 @@ class AuthService {
     }
 
     throw Exception('Failed to fetch user');
+  }
+
+  Future<Map<String, dynamic>> updateProfile({
+    required String name,
+    required String email,
+    String? mobileNumber,
+  }) async {
+    final response = await http.put(
+      _buildUri('/user/profile'),
+      headers: await _headers(authRequired: true),
+      body: jsonEncode({
+        'name': name,
+        'email': email,
+        'mobile_number': mobileNumber?.trim() ?? '',
+      }),
+    );
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+    if (response.statusCode == 200) {
+      return data;
+    }
+
+    final errors = data['errors'];
+    if (errors is Map<String, dynamic>) {
+      final firstEntry = errors.entries.cast<MapEntry<String, dynamic>?>().firstWhere(
+            (entry) => entry != null,
+            orElse: () => null,
+          );
+      if (firstEntry != null && firstEntry.value is List && (firstEntry.value as List).isNotEmpty) {
+        throw Exception((firstEntry.value as List).first.toString());
+      }
+    }
+
+    throw Exception(data['message']?.toString() ?? 'Failed to update profile');
   }
 
   Future<List<dynamic>> getAdminUsers() async {
