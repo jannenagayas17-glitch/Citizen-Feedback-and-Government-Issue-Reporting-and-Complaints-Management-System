@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
 import '../../services/dashboard_service.dart';
-import '../../utils/app_routes.dart';
-import '../../utils/token_storage.dart';
 import '../admin/complaint_management_screen.dart';
+import '../admin/admin_profile_screen.dart';
 import 'manage_admins_screen.dart';
 
 class SuperAdminDashboard extends StatefulWidget {
@@ -28,181 +27,292 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
 
   Future<void> _refresh() async {
     final future = _dashboardService.getDashboardStats();
-    setState(() => _statsFuture = future);
+    setState(() {
+      _statsFuture = future;
+    });
     await future;
   }
 
-  Future<void> _logout() async {
-    try {
-      await _authService.logout();
-    } catch (_) {
-      await TokenStorage.clearAll();
-    }
+  Future<void> _openReports() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ComplaintManagementScreen()),
+    );
+    await _refresh();
+  }
 
-    if (!mounted) return;
-    Navigator.pushNamedAndRemoveUntil(context, AppRoutes.login, (_) => false);
+  Future<void> _openUsers() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ManageAdminsScreen()),
+    );
+    await _refresh();
+  }
+
+  Future<void> _openProfile() async {
+    try {
+      final user = await _authService.getCurrentUser();
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => AdminProfileScreen(
+            user: user,
+            onOpenReports: () {
+              Navigator.pop(context);
+              _openReports();
+            },
+            onOpenUsers: () {
+              Navigator.pop(context);
+              _openUsers();
+            },
+            manageUsersLabel: 'Manage admin users',
+            manageUsersSubtitle:
+                'Review pending admins and protect elevated access',
+          ),
+        ),
+      );
+      await _refresh();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final bottomSafeArea = MediaQuery.of(context).padding.bottom;
     return Scaffold(
+      backgroundColor: const Color(0xFF0C1727),
       appBar: AppBar(
+        backgroundColor: const Color(0xFF0C1727),
+        foregroundColor: Colors.white,
+        elevation: 0,
         title: const Text('Super Admin Dashboard'),
         actions: [
-          IconButton(
-            onPressed: _refresh,
-            icon: const Icon(Icons.refresh),
-          ),
-          IconButton(
-            onPressed: _logout,
-            icon: const Icon(Icons.logout),
-          ),
+          IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh)),
+          IconButton(onPressed: _openProfile, icon: const Icon(Icons.person_outline)),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _refresh,
-        child: FutureBuilder<Map<String, dynamic>>(
-          future: _statsFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator());
-            }
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF0C1727),
+              Color(0xFF1A2940),
+              Color(0xFF463327),
+            ],
+          ),
+        ),
+        child: RefreshIndicator(
+          onRefresh: _refresh,
+          color: const Color(0xFF2563EB),
+          child: FutureBuilder<Map<String, dynamic>>(
+            future: _statsFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-            if (snapshot.hasError) {
+              if (snapshot.hasError) {
+                return ListView(
+                  padding: const EdgeInsets.all(20),
+                  children: [
+                    _GlassMessageCard(
+                      title: 'Unable to load command center',
+                      message: snapshot.error
+                          .toString()
+                          .replaceFirst('Exception: ', ''),
+                    ),
+                  ],
+                );
+              }
+
+              final stats = snapshot.data ?? const <String, dynamic>{};
+
               return ListView(
-                padding: const EdgeInsets.all(24),
+                padding: EdgeInsets.fromLTRB(16, 12, 16, 24 + bottomSafeArea),
                 children: [
-                  Text(
-                    snapshot.error.toString().replaceFirst('Exception: ', ''),
-                    style: const TextStyle(color: Colors.red),
+                  const _SuperHeroCard(),
+                  const SizedBox(height: 18),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final cardWidth = constraints.maxWidth > 520
+                          ? (constraints.maxWidth - 12) / 2
+                          : constraints.maxWidth;
+                      return Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          _MetricCard(
+                            width: cardWidth,
+                            icon: Icons.assignment_outlined,
+                            label: 'Total Reports',
+                            value: '${stats['total_reports'] ?? 0}',
+                            color: const Color(0xFF60A5FA),
+                          ),
+                          _MetricCard(
+                            width: cardWidth,
+                            icon: Icons.fiber_new_rounded,
+                            label: 'New',
+                            value: '${stats['new'] ?? 0}',
+                            color: const Color(0xFF94A3B8),
+                          ),
+                          _MetricCard(
+                            width: cardWidth,
+                            icon: Icons.hourglass_top_rounded,
+                            label: 'Pending',
+                            value: '${stats['pending'] ?? 0}',
+                            color: const Color(0xFFF59E0B),
+                          ),
+                          _MetricCard(
+                            width: cardWidth,
+                            icon: Icons.construction_rounded,
+                            label: 'In Progress',
+                            value: '${stats['in_progress'] ?? 0}',
+                            color: const Color(0xFF8B5CF6),
+                          ),
+                          _MetricCard(
+                            width: cardWidth,
+                            icon: Icons.verified_rounded,
+                            label: 'Resolved',
+                            value: '${stats['resolved'] ?? 0}',
+                            color: const Color(0xFF22C55E),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 22),
+                  const _SectionTitle(
+                    title: 'Command Actions',
+                    subtitle:
+                        'Oversee system-wide report handling and administrator access from one place.',
+                  ),
+                  const SizedBox(height: 12),
+                  _ActionCard(
+                    icon: Icons.analytics_outlined,
+                    title: 'Monitor All Reports',
+                    subtitle:
+                        'Review infrastructure complaints and keep status movement visible across the office.',
+                    buttonLabel: 'Open Reports',
+                    onTap: _openReports,
+                  ),
+                  const SizedBox(height: 12),
+                  _ActionCard(
+                    icon: Icons.manage_accounts_outlined,
+                    title: 'Manage Admin Users',
+                    subtitle:
+                        'Verify pending accounts, maintain elevated access, and protect admin controls.',
+                    buttonLabel: 'Open User Management',
+                    onTap: _openUsers,
+                  ),
+                  const SizedBox(height: 12),
+                  _ActionCard(
+                    icon: Icons.person_outline,
+                    title: 'Profile',
+                    subtitle:
+                        'View your super admin account details and sign out from one place.',
+                    buttonLabel: 'Open Profile',
+                    onTap: _openProfile,
                   ),
                 ],
               );
-            }
-
-            final stats = snapshot.data ?? const <String, dynamic>{};
-
-            return ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [
-                        Color(0xFF153B9E),
-                        Color(0xFF0C2B7A),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'System Command Center',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        'Monitor reports, manage administrators, and oversee city-wide feedback activity.',
-                        style: TextStyle(
-                          color: Color(0xFFD7E3FF),
-                          height: 1.4,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    _StatCard(
-                      label: 'Total Reports',
-                      value: '${stats['total_reports'] ?? 0}',
-                      color: const Color(0xFF2E6CF6),
-                    ),
-                    _StatCard(
-                      label: 'New',
-                      value: '${stats['new'] ?? 0}',
-                      color: const Color(0xFF64748B),
-                    ),
-                    _StatCard(
-                      label: 'Pending',
-                      value: '${stats['pending'] ?? 0}',
-                      color: const Color(0xFFF59E0B),
-                    ),
-                    _StatCard(
-                      label: 'In Progress',
-                      value: '${stats['in_progress'] ?? 0}',
-                      color: const Color(0xFF8B5CF6),
-                    ),
-                    _StatCard(
-                      label: 'Resolved',
-                      value: '${stats['resolved'] ?? 0}',
-                      color: const Color(0xFF16A34A),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                const Text(
-                  'Quick Actions',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 12),
-                _ActionCard(
-                  title: 'Monitor All Reports',
-                  subtitle:
-                      'Review infrastructure complaints and status activity across the system.',
-                  icon: Icons.analytics_outlined,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ComplaintManagementScreen(),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 12),
-                _ActionCard(
-                  title: 'Manage Users',
-                  subtitle:
-                      'Verify pending accounts and maintain admin access for city staff.',
-                  icon: Icons.manage_accounts_outlined,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ManageAdminsScreen(),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            );
-          },
+            },
+          ),
         ),
       ),
     );
   }
 }
 
-class _StatCard extends StatelessWidget {
-  const _StatCard({
+class _SuperHeroCard extends StatelessWidget {
+  const _SuperHeroCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF0F172A),
+            Color(0xFF1D4ED8),
+            Color(0xFF7C3AED),
+          ],
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withOpacity(0.14),
+                  border: Border.all(
+                    color: const Color(0xFFD8B15A),
+                    width: 2,
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Text(
+                  'System Command Center',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Monitor engineering operations, maintain administrative access, and keep the feedback platform accountable end to end.',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.84),
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetricCard extends StatelessWidget {
+  const _MetricCard({
+    required this.width,
+    required this.icon,
     required this.label,
     required this.value,
     required this.color,
   });
 
+  final double width;
+  final IconData icon;
   final String label;
   final String value;
   final Color color;
@@ -210,29 +320,47 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 160,
+      width: width,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: color.withOpacity(0.2)),
+        color: Colors.white.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.white.withOpacity(0.14)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w700,
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.16),
+              borderRadius: BorderRadius.circular(16),
             ),
+            child: Icon(icon, color: color),
           ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.w800,
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.72),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -241,75 +369,160 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-class _ActionCard extends StatelessWidget {
-  const _ActionCard({
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({
     required this.title,
     required this.subtitle,
-    required this.icon,
-    required this.onTap,
   });
 
   final String title;
   final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          subtitle,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.70),
+            height: 1.4,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ActionCard extends StatelessWidget {
+  const _ActionCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.buttonLabel,
+    required this.onTap,
+  });
+
   final IconData icon;
+  final String title;
+  final String subtitle;
+  final String buttonLabel;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(24),
       child: Ink(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFFE5E7EB)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 12,
-              offset: const Offset(0, 6),
-            ),
-          ],
+          color: Colors.white.withOpacity(0.10),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white.withOpacity(0.14)),
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: const Color(0xFFE8F0FF),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(icon, color: const Color(0xFF153B9E)),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
+            Row(
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2563EB).withOpacity(0.16),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(
+                    Icons.arrow_outward_rounded,
+                    color: Color(0xFFB8D3FF),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
                     title,
                     style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      color: Color(0xFF6B7280),
-                      height: 1.4,
-                    ),
-                  ),
-                ],
+                ),
+                Icon(icon, color: Colors.white.withOpacity(0.82)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              subtitle,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.72),
+                height: 1.4,
               ),
             ),
-            const Icon(Icons.arrow_forward_ios, size: 16),
+            const SizedBox(height: 14),
+            Text(
+              buttonLabel,
+              style: const TextStyle(
+                color: Color(0xFFB8D3FF),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _GlassMessageCard extends StatelessWidget {
+  const _GlassMessageCard({
+    required this.title,
+    required this.message,
+  });
+
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.white.withOpacity(0.14)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            message,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.72),
+              height: 1.4,
+            ),
+          ),
+        ],
       ),
     );
   }

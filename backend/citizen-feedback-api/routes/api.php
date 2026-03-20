@@ -75,9 +75,7 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     */
 
-    Route::get('/user', function (Request $request) {
-        return $request->user();
-    });
+    Route::get('/user', [AuthController::class, 'currentUser']);
 
     Route::post('/logout', [AuthController::class, 'logout']);
 
@@ -122,6 +120,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/verify-account/{id}', [AuthController::class, 'verifyAccount']);
 
         Route::post('/deactivate-account/{id}', [AuthController::class, 'deactivateAccount']);
+        Route::post('/reactivate-account/{id}', [AuthController::class, 'reactivateAccount']);
 
     });
 

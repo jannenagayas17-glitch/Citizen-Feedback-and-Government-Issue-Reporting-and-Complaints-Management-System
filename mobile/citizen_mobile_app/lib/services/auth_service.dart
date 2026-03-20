@@ -237,8 +237,17 @@ class AuthService {
 
     final data = jsonDecode(response.body);
 
-    if (response.statusCode == 200) {
-      return data as List<dynamic>;
+    if (response.statusCode == 200 && data is List<dynamic>) {
+      return data;
+    }
+
+    if (data is Map<String, dynamic>) {
+      throw Exception(
+        data['message']?.toString() ??
+            (data['errors'] != null
+                ? data['errors'].toString()
+                : 'Failed to fetch users'),
+      );
     }
 
     throw Exception('Failed to fetch users');
@@ -276,18 +285,31 @@ class AuthService {
     );
   }
 
-  Future<void> logout() async {
+  Future<Map<String, dynamic>> reactivateAccount(int id) async {
     final response = await http.post(
-      _buildUri('/logout'),
+      _buildUri('/admin/reactivate-account/$id'),
       headers: await _headers(authRequired: true),
     );
 
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+
     if (response.statusCode == 200) {
-      await TokenStorage.clearAll();
-      return;
+      return data;
     }
 
-    await TokenStorage.clearAll();
-    throw Exception('Logout failed');
+    throw Exception(
+      data['message']?.toString() ?? 'Failed to reactivate account',
+    );
+  }
+
+  Future<void> logout() async {
+    try {
+      await http.post(
+        _buildUri('/logout'),
+        headers: await _headers(authRequired: true),
+      );
+    } finally {
+      await TokenStorage.clearAll();
+    }
   }
 }

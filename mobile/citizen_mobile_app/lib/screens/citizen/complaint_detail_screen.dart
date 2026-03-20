@@ -29,7 +29,9 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
 
   Future<void> _refresh() async {
     final future = _reportService.getReportDetail(widget.reportId);
-    setState(() => _detailFuture = future);
+    setState(() {
+      _detailFuture = future;
+    });
     await future;
   }
 

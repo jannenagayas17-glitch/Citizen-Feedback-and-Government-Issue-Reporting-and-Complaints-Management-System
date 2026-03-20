@@ -10,7 +10,7 @@ class ReportService {
 
   Future<List<dynamic>> getCategories() async {
     final response = await _apiClient.get('/categories', authRequired: true);
-    return jsonDecode(response.body);
+    return _decodeListResponse(response, fallbackMessage: 'Failed to fetch categories');
   }
 
   Future<Map<String, dynamic>> createReport({
@@ -59,7 +59,7 @@ class ReportService {
 
   Future<List<dynamic>> getReports() async {
     final response = await _apiClient.get('/reports', authRequired: true);
-    return jsonDecode(response.body);
+    return _decodeListResponse(response, fallbackMessage: 'Failed to fetch reports');
   }
 
   Future<List<dynamic>> getAdminReports({String? status}) async {
@@ -67,7 +67,10 @@ class ReportService {
         ? '/admin/reports'
         : '/admin/reports?status=${Uri.encodeComponent(status)}';
     final response = await _apiClient.get(endpoint, authRequired: true);
-    return jsonDecode(response.body);
+    return _decodeListResponse(
+      response,
+      fallbackMessage: 'Failed to fetch admin reports',
+    );
   }
 
   Future<Map<String, dynamic>> updateReportStatus({
@@ -101,6 +104,28 @@ class ReportService {
   Future<Map<String, dynamic>> getReportDetail(int id) async {
     final response = await _apiClient.get('/reports/$id', authRequired: true);
     return jsonDecode(response.body);
+  }
+
+  List<dynamic> _decodeListResponse(
+    http.Response response, {
+    required String fallbackMessage,
+  }) {
+    final decoded = jsonDecode(response.body);
+
+    if (response.statusCode == 200 && decoded is List<dynamic>) {
+      return decoded;
+    }
+
+    if (decoded is Map<String, dynamic>) {
+      throw Exception(
+        decoded['message']?.toString() ??
+            (decoded['errors'] != null
+                ? decoded['errors'].toString()
+                : fallbackMessage),
+      );
+    }
+
+    throw Exception(fallbackMessage);
   }
 
   Future<Map<String, dynamic>> uploadImage({

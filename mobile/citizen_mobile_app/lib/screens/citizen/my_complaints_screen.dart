@@ -22,7 +22,9 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
 
   Future<void> _refresh() async {
     final future = _reportService.getReports();
-    setState(() => _reportsFuture = future);
+    setState(() {
+      _reportsFuture = future;
+    });
     await future;
   }
 

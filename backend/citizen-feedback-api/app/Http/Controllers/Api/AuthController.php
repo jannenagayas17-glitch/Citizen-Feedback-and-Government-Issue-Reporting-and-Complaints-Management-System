@@ -88,6 +88,12 @@ class AuthController extends Controller
             ]);
         }
 
+        if (! $user->is_active) {
+            throw ValidationException::withMessages([
+                'email' => ['This account has been deactivated. Please contact the administrator.'],
+            ]);
+        }
+
         $token = $user->createToken('mobile-token')->plainTextToken;
 
         return response()->json([
@@ -174,6 +180,12 @@ class AuthController extends Controller
             ]
         );
 
+        if (! $user->is_active) {
+            throw ValidationException::withMessages([
+                'email' => ['This account has been deactivated. Please contact the administrator.'],
+            ]);
+        }
+
         if (empty($user->name) && ! empty($firebaseUser['displayName'])) {
             $user->name = $firebaseUser['displayName'];
         }
@@ -202,6 +214,11 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'Logged out successfully',
         ]);
+    }
+
+    public function currentUser(Request $request)
+    {
+        return response()->json($request->user());
     }
 
     public function updateProfile(Request $request)
@@ -266,6 +283,7 @@ class AuthController extends Controller
 
         $user = User::findOrFail($id);
         $user->role = 'admin';
+        $user->is_active = true;
         $user->save();
 
         return response()->json([
@@ -278,20 +296,61 @@ class AuthController extends Controller
     {
         $this->ensureElevatedRole($request);
 
+        $actor = $request->user();
         $user = User::findOrFail($id);
 
-        if ($user->id === $request->user()->id) {
+        if ($user->role === 'super_admin') {
+            throw ValidationException::withMessages([
+                'user' => ['Super admin accounts cannot be deactivated.'],
+            ]);
+        }
+
+        if ($user->id === $actor->id) {
             throw ValidationException::withMessages([
                 'user' => ['You cannot deactivate your own account.'],
             ]);
         }
 
+        if ($actor->role === 'admin' && $user->role !== 'citizen') {
+            throw ValidationException::withMessages([
+                'user' => ['Admins can only deactivate citizen accounts.'],
+            ]);
+        }
+
         $user->tokens()->delete();
-        $user->role = 'citizen';
+        $user->is_active = false;
         $user->save();
 
         return response()->json([
             'message' => 'Account deactivated successfully',
+            'user' => $user,
+        ]);
+    }
+
+    public function reactivateAccount(Request $request, $id)
+    {
+        $this->ensureElevatedRole($request);
+
+        $actor = $request->user();
+        $user = User::findOrFail($id);
+
+        if ($user->role === 'super_admin') {
+            throw ValidationException::withMessages([
+                'user' => ['Super admin accounts are always active.'],
+            ]);
+        }
+
+        if ($actor->role !== 'super_admin') {
+            throw ValidationException::withMessages([
+                'user' => ['Only super admins can reactivate accounts.'],
+            ]);
+        }
+
+        $user->is_active = true;
+        $user->save();
+
+        return response()->json([
+            'message' => 'Account reactivated successfully',
             'user' => $user,
         ]);
     }
