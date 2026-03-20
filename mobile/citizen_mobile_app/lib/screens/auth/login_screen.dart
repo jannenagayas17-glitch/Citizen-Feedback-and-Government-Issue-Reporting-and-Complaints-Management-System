@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../services/auth_service.dart';
@@ -21,6 +22,11 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  static final RegExp _emojiRegex = RegExp(
+    r'[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]',
+    unicode: true,
+  );
+
   static const String _configuredSuperAdminEmail = String.fromEnvironment(
     'SUPER_ADMIN_EMAIL',
     defaultValue: 'cityengineer@gov.ph',
@@ -36,6 +42,8 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
   bool _isLoading = false;
   bool _isGoogleLoading = false;
+  String? _emailError;
+  String? _passwordError;
 
   bool get _isSuperAdminMode => _selectedMode == LoginMode.superAdmin;
   _LoginModeConfig get _modeConfig => _LoginModeConfig.fromMode(_selectedMode);
@@ -63,6 +71,15 @@ class _LoginScreenState extends State<LoginScreen> {
     return role == _modeConfig.expectedRole;
   }
 
+  bool _containsEmoji(String value) {
+    return _emojiRegex.hasMatch(value);
+  }
+
+  void _clearErrors() {
+    _emailError = null;
+    _passwordError = null;
+  }
+
   Future<void> _loadSavedEmailForMode() async {
     if (_isSuperAdminEmailLocked) {
       _emailController.text = _resolvedSuperAdminEmail;
@@ -84,14 +101,28 @@ class _LoginScreenState extends State<LoginScreen> {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    if (email.isEmpty || password.isEmpty) {
-      _showSnackBar('Email and password are required');
-      return;
-    }
+    setState(() {
+      _clearErrors();
 
-    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-    if (!emailRegex.hasMatch(email)) {
-      _showSnackBar('Enter a valid email address');
+      if (email.isEmpty) {
+        _emailError = 'Email address is required.';
+      } else if (_containsEmoji(email)) {
+        _emailError = 'Emoji characters are not allowed.';
+      } else {
+        final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+        if (!emailRegex.hasMatch(email)) {
+          _emailError = 'Enter a valid email address.';
+        }
+      }
+
+      if (password.isEmpty) {
+        _passwordError = 'Password is required.';
+      } else if (_containsEmoji(password)) {
+        _passwordError = 'Emoji characters are not allowed.';
+      }
+    });
+
+    if (_emailError != null || _passwordError != null) {
       return;
     }
 
@@ -361,6 +392,15 @@ class _LoginScreenState extends State<LoginScreen> {
                             icon: Icons.email_outlined,
                             keyboardType: TextInputType.emailAddress,
                             readOnly: _isSuperAdminEmailLocked,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.deny(_emojiRegex),
+                            ],
+                            errorText: _emailError,
+                            onChanged: (_) {
+                              if (_emailError != null) {
+                                setState(() => _emailError = null);
+                              }
+                            },
                           ),
                           const SizedBox(height: 16),
                           _fieldLabel('Password'),
@@ -488,11 +528,16 @@ class _LoginScreenState extends State<LoginScreen> {
     required IconData icon,
     TextInputType keyboardType = TextInputType.text,
     bool readOnly = false,
+    List<TextInputFormatter>? inputFormatters,
+    String? errorText,
+    ValueChanged<String>? onChanged,
   }) {
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
       readOnly: readOnly,
+      inputFormatters: inputFormatters,
+      onChanged: onChanged,
       autofillHints: keyboardType == TextInputType.emailAddress
           ? const [AutofillHints.username, AutofillHints.email]
           : null,
@@ -501,6 +546,13 @@ class _LoginScreenState extends State<LoginScreen> {
       decoration: _inputDecoration(
         hintText: hintText,
         icon: icon,
+      ).copyWith(
+        errorText: errorText,
+        errorMaxLines: 2,
+        errorStyle: const TextStyle(
+          color: Color(0xFFFFB4B4),
+          fontSize: 12,
+        ),
       ),
     );
   }
@@ -508,6 +560,14 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _buildPasswordField() {
     return TextField(
       controller: _passwordController,
+      inputFormatters: [
+        FilteringTextInputFormatter.deny(_emojiRegex),
+      ],
+      onChanged: (_) {
+        if (_passwordError != null) {
+          setState(() => _passwordError = null);
+        }
+      },
       obscureText: _obscurePassword,
       autofillHints: const [AutofillHints.password],
       textInputAction: TextInputAction.done,
@@ -517,6 +577,12 @@ class _LoginScreenState extends State<LoginScreen> {
         hintText: '........',
         icon: Icons.lock_outline,
       ).copyWith(
+        errorText: _passwordError,
+        errorMaxLines: 2,
+        errorStyle: const TextStyle(
+          color: Color(0xFFFFB4B4),
+          fontSize: 12,
+        ),
         suffixIcon: IconButton(
           onPressed: () {
             setState(() => _obscurePassword = !_obscurePassword);

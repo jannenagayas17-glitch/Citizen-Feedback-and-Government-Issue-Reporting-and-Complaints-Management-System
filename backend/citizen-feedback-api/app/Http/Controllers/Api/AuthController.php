@@ -12,6 +12,9 @@ use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
+    private const EMOJI_REGEX = '/[\x{1F1E6}-\x{1F1FF}\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}]/u';
+    private const FULL_NAME_REGEX = "/^\p{L}+(?:[ '\.-]\p{L}+)*\s+\p{L}+(?:[ '\.-]\p{L}+)*$/u";
+
     public function registerCitizen(Request $request)
     {
         return $this->register($request);
@@ -20,11 +23,11 @@ class AuthController extends Controller
     public function register(Request $request)
     {
         $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users,email',
-            'mobile_number' => 'nullable|string|max:30',
-            'password' => 'required|string|min:8|confirmed',
-        ]);
+            'name' => ['required', 'string', 'max:255', 'regex:' . self::FULL_NAME_REGEX, 'not_regex:' . self::EMOJI_REGEX],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email', 'not_regex:' . self::EMOJI_REGEX],
+            'mobile_number' => ['nullable', 'regex:/^\d{11}$/'],
+            'password' => ['required', 'string', 'min:8', 'confirmed', 'not_regex:' . self::EMOJI_REGEX],
+        ], $this->validationMessages());
 
         $user = User::create([
             'name' => $request->name,
@@ -45,14 +48,14 @@ class AuthController extends Controller
     public function requestGovernmentAccount(Request $request)
     {
         $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users,email',
-            'mobile_number' => 'required|string|max:30',
-            'password' => 'required|string|min:8',
-            'department' => 'required|string|max:255',
-            'job_title' => 'required|string|max:255',
-            'access_code' => 'required|string|max:255',
-        ]);
+            'name' => ['required', 'string', 'max:255', 'regex:' . self::FULL_NAME_REGEX, 'not_regex:' . self::EMOJI_REGEX],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email', 'not_regex:' . self::EMOJI_REGEX],
+            'mobile_number' => ['required', 'regex:/^\d{11}$/'],
+            'password' => ['required', 'string', 'min:8', 'not_regex:' . self::EMOJI_REGEX],
+            'department' => ['required', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
+            'job_title' => ['required', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
+            'access_code' => ['required', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
+        ], $this->validationMessages());
 
         $user = User::create([
             'name' => $request->name,
@@ -76,9 +79,9 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         $request->validate([
-            'email' => 'required|email',
-            'password' => 'required',
-        ]);
+            'email' => ['required', 'email', 'not_regex:' . self::EMOJI_REGEX],
+            'password' => ['required', 'not_regex:' . self::EMOJI_REGEX],
+        ], $this->validationMessages());
 
         $user = User::where('email', $request->email)->first();
 
@@ -360,5 +363,19 @@ class AuthController extends Controller
         if (! in_array($request->user()->role, ['admin', 'super_admin'], true)) {
             abort(403, 'Unauthorized action.');
         }
+    }
+
+    private function validationMessages(): array
+    {
+        return [
+            'mobile_number.regex' => 'Mobile number must be exactly 11 digits.',
+            'name.regex' => 'Enter your full name with first and last name.',
+            'name.not_regex' => 'Emoji characters are not allowed.',
+            'email.not_regex' => 'Emoji characters are not allowed.',
+            'password.not_regex' => 'Emoji characters are not allowed.',
+            'department.not_regex' => 'Emoji characters are not allowed.',
+            'job_title.not_regex' => 'Emoji characters are not allowed.',
+            'access_code.not_regex' => 'Emoji characters are not allowed.',
+        ];
     }
 }
