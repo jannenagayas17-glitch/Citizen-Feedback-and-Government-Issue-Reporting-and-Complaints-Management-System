@@ -38,41 +38,137 @@ class CitizenNotificationsScreen extends StatelessWidget {
           ),
         ),
         child: notifications.isEmpty
-          ? const Center(
-              child: Text('No notifications yet.', style: TextStyle(color: Colors.white)),
+          ? ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                _SummaryCard(
+                  title: 'Notifications',
+                  subtitle: 'Stay updated on your submitted reports.',
+                  countLabel: '0 updates',
+                ),
+                const SizedBox(height: 16),
+                _EmptyState(
+                  icon: Icons.notifications_off_outlined,
+                  title: 'No notifications yet',
+                  message:
+                      'When your reports are reviewed, updated, or resolved, you will see them here.',
+                ),
+              ],
             )
           : ListView.separated(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               padding: const EdgeInsets.all(16),
-              itemCount: notifications.length,
+              itemCount: notifications.length + 1,
               separatorBuilder: (_, __) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
-                final item = notifications[index];
+                if (index == 0) {
+                  final resolvedCount = notifications
+                      .where((item) => item.title == 'Issue resolved')
+                      .length;
+                  return _SummaryCard(
+                    title: 'Notifications',
+                    subtitle: 'Latest updates on your submitted reports.',
+                    countLabel:
+                        '${notifications.length} updates • $resolvedCount resolved',
+                  );
+                }
 
-                return Card(
-                  color: Colors.white.withOpacity(0.10),
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: item.color.withOpacity(0.12),
-                      child: Icon(item.icon, color: item.color),
-                    ),
-                    title: Text(
-                      item.title,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
+                final item = notifications[index - 1];
+
+                return Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.10),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: Colors.white.withOpacity(0.14)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      CircleAvatar(
+                        radius: 22,
+                        backgroundColor: item.color.withOpacity(0.12),
+                        child: Icon(item.icon, color: item.color),
                       ),
-                    ),
-                    subtitle: Text(
-                      '${item.message}\n${item.caption}',
-                      style: TextStyle(color: Colors.white.withOpacity(0.72)),
-                    ),
-                    isThreeLine: true,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    item.title,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _timeAgo(item.timestamp),
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.52),
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              item.message,
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.82),
+                                height: 1.3,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: item.color.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Text(
+                                item.caption,
+                                style: TextStyle(
+                                  color: item.color,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 );
               },
             ),
       ),
     );
+  }
+
+  String _timeAgo(DateTime timestamp) {
+    final now = DateTime.now();
+    final difference = now.difference(timestamp);
+
+    if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    }
+    if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    }
+    if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    }
+    return 'Just now';
   }
 
   _CitizenNotification _buildNotification(Map<String, dynamic> report) {
@@ -141,4 +237,105 @@ class _CitizenNotification {
   final Color color;
   final IconData icon;
   final DateTime timestamp;
+}
+
+class _SummaryCard extends StatelessWidget {
+  const _SummaryCard({
+    required this.title,
+    required this.subtitle,
+    required this.countLabel,
+  });
+
+  final String title;
+  final String subtitle;
+  final String countLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.14)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            subtitle,
+            style: TextStyle(color: Colors.white.withOpacity(0.72)),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2563EB).withOpacity(0.18),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Text(
+              countLabel,
+              style: const TextStyle(
+                color: Color(0xFFB8D3FF),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.14)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 36, color: Colors.white.withOpacity(0.72)),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white.withOpacity(0.72)),
+          ),
+        ],
+      ),
+    );
+  }
 }

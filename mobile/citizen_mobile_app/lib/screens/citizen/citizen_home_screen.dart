@@ -69,6 +69,9 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
       ),
     );
 
+    if (!mounted) return;
+    setState(() => _currentIndex = 0);
+
     if (created != null) {
       await _refresh();
     }
@@ -81,6 +84,8 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
         builder: (_) => const MyComplaintsScreen(),
       ),
     );
+    if (!mounted) return;
+    setState(() => _currentIndex = 0);
     await _refresh();
   }
 
@@ -91,6 +96,8 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
         builder: (_) => CitizenNotificationsScreen(reports: reports),
       ),
     );
+    if (!mounted) return;
+    setState(() => _currentIndex = 0);
     await _refresh();
   }
 
@@ -101,6 +108,8 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
         builder: (_) => CitizenProfileScreen(user: user),
       ),
     );
+    if (!mounted) return;
+    setState(() => _currentIndex = 0);
     await _refresh();
   }
 
@@ -171,6 +180,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
               final filteredReports = _applySearch(_applyFilter(reports));
 
               return ListView(
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                 padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
                 children: [
                   _buildHeader(user, reports),
@@ -211,7 +221,11 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
                                         reportId: reportId,
                                       ),
                                     ),
-                                  ).then((_) => _refresh());
+                                  ).then((_) async {
+                                    if (!mounted) return;
+                                    setState(() => _currentIndex = 0);
+                                    await _refresh();
+                                  });
                                 },
                               ),
                             ),
@@ -311,7 +325,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
               child: ClipOval(
                 child: Image.asset(
                   'assets/images/logo.png',
-                  fit: BoxFit.cover,
+                  fit: BoxFit.contain,
                 ),
               ),
             ),
@@ -557,11 +571,11 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
                     ),
                   ),
                   SizedBox(height: 2),
-                  Text(
-                    'Open the real report form and save a case to the database',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 11,
+                    Text(
+                    'Submit a new issue directly to the live system',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11,
                     ),
                   ),
                 ],

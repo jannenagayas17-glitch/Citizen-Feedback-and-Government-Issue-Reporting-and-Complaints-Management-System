@@ -19,7 +19,7 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> navigate() async {
-    await Future.delayed(const Duration(seconds: 3));
+    await Future.delayed(const Duration(seconds: 1));
 
     final token = await TokenStorage.getToken();
     final role = (await TokenStorage.getRole())?.trim().toLowerCase();
@@ -119,11 +119,11 @@ class _SplashScreenState extends State<SplashScreen> {
                               ],
                             ),
                             child: Padding(
-                              padding: const EdgeInsets.all(6),
+                              padding: const EdgeInsets.all(12),
                               child: ClipOval(
                                 child: Image.asset(
                                   'assets/images/logo.png',
-                                  fit: BoxFit.cover,
+                                  fit: BoxFit.contain,
                                 ),
                               ),
                             ),

@@ -146,6 +146,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   @override
   Widget build(BuildContext context) {
     const accent = Color(0xFF2563EB);
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0C1727),
@@ -191,7 +192,8 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
           final selectedCategory = _selectedCategory(categories);
 
           return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: EdgeInsets.fromLTRB(16, 8, 16, bottomInset + 24),
             children: [
               Container(
                 padding: const EdgeInsets.all(18),
@@ -226,12 +228,13 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                     const SizedBox(height: 18),
                     _buildLabel('Category'),
                     const SizedBox(height: 8),
-                    _buildCategoryGrid(categories),
+                    _buildCategoryDropdown(categories),
                     const SizedBox(height: 16),
                     _buildLabel('Issue title'),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _titleController,
+                      textInputAction: TextInputAction.next,
                       decoration: _inputDecoration('Example: Broken street light'),
                     ),
                     const SizedBox(height: 16),
@@ -239,6 +242,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                     const SizedBox(height: 8),
                     TextField(
                       controller: _locationController,
+                      textInputAction: TextInputAction.next,
                       decoration: _inputDecoration('Street, landmark, or area'),
                     ),
                     const SizedBox(height: 16),
@@ -246,6 +250,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                     const SizedBox(height: 8),
                     TextField(
                       controller: _barangayController,
+                      textInputAction: TextInputAction.next,
                       decoration: _inputDecoration('Optional barangay name'),
                     ),
                     const SizedBox(height: 16),
@@ -278,6 +283,17 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                     const SizedBox(height: 8),
                     OutlinedButton.icon(
                       onPressed: _selectedImages.length >= 3 ? null : _pickImages,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: BorderSide(color: Colors.white.withOpacity(0.22)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 14,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
                       icon: const Icon(Icons.photo_library_outlined),
                       label: Text(
                         _selectedImages.isEmpty
@@ -306,6 +322,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                       controller: _descriptionController,
                       minLines: 5,
                       maxLines: 7,
+                      textInputAction: TextInputAction.done,
                       decoration: _inputDecoration(
                         'Describe the issue, what happened, and any important details.',
                       ),
@@ -484,7 +501,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     return const Color(0xFFD8B15A);
   }
 
-  Widget _buildCategoryGrid(List<dynamic> categories) {
+  Widget _buildCategoryDropdown(List<dynamic> categories) {
     if (categories.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(16),
@@ -523,83 +540,55 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
       );
     }
 
-    return Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      children: categories.map((item) {
+    return DropdownButtonFormField<int>(
+      value: _selectedCategoryId,
+      isExpanded: true,
+      dropdownColor: const Color(0xFF253248),
+      style: const TextStyle(color: Colors.white),
+      iconEnabledColor: Colors.white,
+      decoration: _inputDecoration('Select a category'),
+      items: categories.map((item) {
         final category = item as Map<String, dynamic>;
         final rawId = category['id'];
         final categoryId = rawId is int ? rawId : int.tryParse('$rawId');
         final categoryName = (category['name'] ?? 'Unnamed').toString();
         final icon = _categoryIcon(categoryName);
         final color = _categoryColor(categoryName);
-        final isSelected = categoryId != null && categoryId == _selectedCategoryId;
 
-        return SizedBox(
-          width: 140,
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(18),
-              onTap: categoryId == null
-                  ? null
-                  : () {
-                      setState(() => _selectedCategoryId = categoryId);
-                    },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                padding: const EdgeInsets.all(14),
+        if (categoryId == null) {
+          return null;
+        }
+
+        return DropdownMenuItem<int>(
+          value: categoryId,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 28,
+                height: 28,
                 decoration: BoxDecoration(
-                  color: isSelected
-                      ? color.withOpacity(0.22)
-                      : Colors.white.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(
-                    color: isSelected ? color : Colors.white.withOpacity(0.14),
-                    width: isSelected ? 1.4 : 1,
-                  ),
+                  color: color.withOpacity(0.18),
+                  shape: BoxShape.circle,
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: color.withOpacity(0.18),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(icon, color: color, size: 20),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      categoryName,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      isSelected ? 'Selected' : 'Tap to choose',
-                      style: TextStyle(
-                        color: isSelected
-                            ? color
-                            : Colors.white.withOpacity(0.62),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
+                child: Icon(icon, color: color, size: 16),
+              ),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  categoryName,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white),
                 ),
               ),
-            ),
+            ],
           ),
         );
-      }).toList(),
+      }).whereType<DropdownMenuItem<int>>().toList(),
+      onChanged: (value) {
+        if (value == null) return;
+        setState(() => _selectedCategoryId = value);
+      },
     );
   }
 }

@@ -32,12 +32,14 @@ dev_dependencies:
 
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.3
+  flutter_native_splash: ^2.4.6
 
 
 
 flutter:
   assets:
     - assets/images/logo.png
+    - assets/images/logo_splash.png
     - assets/images/google_logo.svg
 
   
@@ -46,8 +48,17 @@ flutter:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/images/logo.png"
-  adaptive_icon_background: "#2563EB"
-  adaptive_icon_foreground: "assets/images/logo_foreground.png"
+  image_path: "assets/images/logo_splash.png"
+  adaptive_icon_background: "#5D6673"
+  adaptive_icon_foreground: "assets/images/logo_splash.png"
+
+flutter_native_splash:
+  color: "#0C1727"
+  android: true
+  ios: true
+  web: false
+  fullscreen: true
+  android_12:
+    color: "#0C1727"
 
 

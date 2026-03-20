@@ -83,14 +83,42 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                 report['adminResponses'] as List<dynamic>? ??
                 const []);
             final images = (report['images'] as List<dynamic>? ?? const []);
+            final categoryName =
+                ((report['category'] as Map<String, dynamic>?)?['name'] ??
+                        'Uncategorized')
+                    .toString();
+            final status = (report['status'] ?? 'Pending').toString();
+            final submittedBy =
+                ((report['user'] as Map<String, dynamic>?)?['name'] ?? 'Unknown')
+                    .toString();
+            final location = (report['location'] ?? 'No location').toString();
+            final createdAt = (report['created_at'] ?? '').toString();
 
             return ListView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               padding: const EdgeInsets.all(16),
               children: [
                 _buildGlassSection(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _InfoBadge(
+                            label: status,
+                            color: _statusColor(status),
+                            icon: Icons.flag_outlined,
+                          ),
+                          _InfoBadge(
+                            label: categoryName,
+                            color: _categoryColor(categoryName),
+                            icon: _categoryIcon(categoryName),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
                       Text(
                         (report['title'] ?? 'Untitled report').toString(),
                         style: const TextStyle(
@@ -101,24 +129,16 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                       ),
                       const SizedBox(height: 12),
                       _DetailRow(
-                        label: 'Status',
-                        value: (report['status'] ?? 'Pending').toString(),
-                      ),
-                      _DetailRow(
-                        label: 'Category',
-                        value: ((report['category'] as Map<String, dynamic>?)?['name'] ??
-                                'Uncategorized')
-                            .toString(),
-                      ),
-                      _DetailRow(
                         label: 'Location',
-                        value: (report['location'] ?? 'No location').toString(),
+                        value: location,
                       ),
                       _DetailRow(
-                        label: 'Submitted By',
-                        value: ((report['user'] as Map<String, dynamic>?)?['name'] ??
-                                'Unknown')
-                            .toString(),
+                        label: 'Submitted by',
+                        value: submittedBy,
+                      ),
+                      _DetailRow(
+                        label: 'Date created',
+                        value: createdAt.isEmpty ? 'Not available' : createdAt.substring(0, 10),
                       ),
                     ],
                   ),
@@ -165,7 +185,7 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                         )
                       else
                         SizedBox(
-                          height: 120,
+                          height: 148,
                           child: ListView.separated(
                             scrollDirection: Axis.horizontal,
                             itemCount: images.length,
@@ -179,7 +199,7 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                               return ClipRRect(
                                 borderRadius: BorderRadius.circular(14),
                                 child: Container(
-                                  width: 150,
+                                  width: 180,
                                   color: Colors.white.withOpacity(0.10),
                                   child: imageUrl == null
                                       ? Center(
@@ -193,6 +213,16 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                                       : Image.network(
                                           imageUrl,
                                           fit: BoxFit.cover,
+                                          loadingBuilder: (context, child, progress) {
+                                            if (progress == null) return child;
+                                            return const Center(
+                                              child: SizedBox(
+                                                width: 22,
+                                                height: 22,
+                                                child: CircularProgressIndicator(strokeWidth: 2),
+                                              ),
+                                            );
+                                          },
                                           errorBuilder: (_, __, ___) {
                                             return Center(
                                               child: Padding(
@@ -217,20 +247,10 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                const Text(
-                  'Status History',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
+                _buildSectionTitle('Status History'),
                 const SizedBox(height: 8),
                 if (statusHistories.isEmpty)
-                  Text(
-                    'No status updates yet.',
-                    style: TextStyle(color: Colors.white.withOpacity(0.72)),
-                  )
+                  _buildEmptyMessage('No status updates yet.')
                 else
                   ...statusHistories.map(
                     (item) => _TimelineCard(
@@ -243,20 +263,10 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                     ),
                   ),
                 const SizedBox(height: 24),
-                const Text(
-                  'Admin Responses',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
+                _buildSectionTitle('Admin Responses'),
                 const SizedBox(height: 8),
                 if (adminResponses.isEmpty)
-                  Text(
-                    'No admin responses yet.',
-                    style: TextStyle(color: Colors.white.withOpacity(0.72)),
-                  )
+                  _buildEmptyMessage('No admin responses yet.')
                 else
                   ...adminResponses.map(
                     (item) => _TimelineCard(
@@ -328,6 +338,66 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
       ),
     );
   }
+
+  Widget _buildSectionTitle(String title) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontSize: 17,
+        fontWeight: FontWeight.w700,
+        color: Colors.white,
+      ),
+    );
+  }
+
+  Widget _buildEmptyMessage(String message) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.14)),
+      ),
+      child: Text(
+        message,
+        style: TextStyle(color: Colors.white.withOpacity(0.72)),
+      ),
+    );
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'Resolved':
+        return const Color(0xFF69DB7C);
+      case 'In Progress':
+        return const Color(0xFFFFC078);
+      case 'Pending':
+        return const Color(0xFF74C0FC);
+      case 'New':
+        return const Color(0xFFE599F7);
+      default:
+        return Colors.white70;
+    }
+  }
+
+  IconData _categoryIcon(String categoryName) {
+    final normalized = categoryName.toLowerCase();
+    if (normalized.contains('road')) return Icons.construction;
+    if (normalized.contains('water')) return Icons.water_drop;
+    if (normalized.contains('electric')) return Icons.bolt;
+    if (normalized.contains('waste')) return Icons.delete_outline;
+    return Icons.report_problem_outlined;
+  }
+
+  Color _categoryColor(String categoryName) {
+    final normalized = categoryName.toLowerCase();
+    if (normalized.contains('road')) return const Color(0xFFFF8A65);
+    if (normalized.contains('water')) return const Color(0xFF4FC3F7);
+    if (normalized.contains('electric')) return const Color(0xFFFFD54F);
+    if (normalized.contains('waste')) return const Color(0xFFA5D6A7);
+    return const Color(0xFFD8B15A);
+  }
 }
 
 class _DetailRow extends StatelessWidget {
@@ -381,33 +451,74 @@ class _TimelineCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      color: Colors.white.withOpacity(0.10),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-              ),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.14)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
             ),
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              style: TextStyle(color: Colors.white.withOpacity(0.62)),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: TextStyle(color: Colors.white.withOpacity(0.62)),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            details,
+            style: TextStyle(color: Colors.white.withOpacity(0.78)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InfoBadge extends StatelessWidget {
+  const _InfoBadge({
+    required this.label,
+    required this.color,
+    required this.icon,
+  });
+
+  final String label;
+  final Color color;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.34)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
             ),
-            const SizedBox(height: 8),
-            Text(
-              details,
-              style: TextStyle(color: Colors.white.withOpacity(0.78)),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

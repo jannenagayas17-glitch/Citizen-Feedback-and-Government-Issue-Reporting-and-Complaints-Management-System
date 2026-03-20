@@ -6,3 +6,11 @@ storage/framework/sessions
 storage/framework/views
 .env
 .git
+citizen-feedback-api/public/storage
+citizen-feedback-api/vendor
+citizen-feedback-api/node_modules
+citizen-feedback-api/storage/logs
+citizen-feedback-api/storage/framework/cache
+citizen-feedback-api/storage/framework/sessions
+citizen-feedback-api/storage/framework/views
+citizen-feedback-api/.env

@@ -236,6 +236,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
     return Scaffold(
       body: Stack(
         fit: StackFit.expand,
@@ -265,7 +267,8 @@ class _LoginScreenState extends State<LoginScreen> {
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: EdgeInsets.fromLTRB(20, 16, 20, bottomInset + 16),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(24),
                   child: BackdropFilter(
@@ -310,11 +313,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ),
                               child: Padding(
-                                padding: const EdgeInsets.all(6),
+                                padding: const EdgeInsets.all(10),
                                 child: ClipOval(
                                   child: Image.asset(
                                     'assets/images/logo.png',
-                                    fit: BoxFit.cover,
+                                    fit: BoxFit.contain,
                                   ),
                                 ),
                               ),
@@ -490,6 +493,10 @@ class _LoginScreenState extends State<LoginScreen> {
       controller: controller,
       keyboardType: keyboardType,
       readOnly: readOnly,
+      autofillHints: keyboardType == TextInputType.emailAddress
+          ? const [AutofillHints.username, AutofillHints.email]
+          : null,
+      textInputAction: TextInputAction.next,
       style: const TextStyle(color: Colors.white),
       decoration: _inputDecoration(
         hintText: hintText,
@@ -502,6 +509,9 @@ class _LoginScreenState extends State<LoginScreen> {
     return TextField(
       controller: _passwordController,
       obscureText: _obscurePassword,
+      autofillHints: const [AutofillHints.password],
+      textInputAction: TextInputAction.done,
+      onSubmitted: (_) => _isLoading ? null : _login(),
       style: const TextStyle(color: Colors.white),
       decoration: _inputDecoration(
         hintText: '........',
@@ -557,7 +567,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final disabled = _isGoogleLoading || _isSuperAdminMode;
 
     return SizedBox(
-      height: 50,
+      height: 54,
       child: OutlinedButton(
         onPressed: disabled ? null : _loginWithGoogle,
         style: OutlinedButton.styleFrom(
@@ -599,7 +609,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Widget _buildLoginButton() {
     return SizedBox(
-      height: 50,
+      height: 54,
       child: ElevatedButton(
         onPressed: _isLoading ? null : _login,
         style: ElevatedButton.styleFrom(
