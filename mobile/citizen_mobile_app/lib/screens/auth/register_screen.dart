@@ -4,17 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/auth_service.dart';
-import '../../utils/auth_redirect.dart';
 import '../../utils/app_routes.dart';
 
-enum RegisterMode { citizen, government }
-
 class RegisterScreen extends StatefulWidget {
-  final RegisterMode initialMode;
-
   const RegisterScreen({
     super.key,
-    this.initialMode = RegisterMode.citizen,
   });
 
   @override
@@ -26,7 +20,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     r'[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]',
     unicode: true,
   );
-
   final AuthService _authService = AuthService();
 
   final TextEditingController _nameController = TextEditingController();
@@ -44,35 +37,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
   String? _phoneError;
   String? _passwordError;
   String? _confirmPasswordError;
-  String? _adminTypeError;
-
-  RegisterMode _selectedMode = RegisterMode.citizen;
-  String? _selectedAdminType;
-
-  static const List<String> _adminTypes = [
-    'Assistant City Engineer',
-    'Engineering Office Supervisor',
-    'Engineering Staff/ Office Coordinator',
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedMode = widget.initialMode;
-  }
-
-  bool get _isCitizenMode => _selectedMode == RegisterMode.citizen;
 
   String get _subtitle {
-    return _isCitizenMode
-        ? 'Create your citizen account'
-        : 'Register for an official account';
+    return 'Create your citizen account';
   }
 
   String get _emailHint {
-    return _isCitizenMode
-        ? 'your.email@example.com'
-        : 'official@taclobancity.gov';
+    return 'your.email@example.com';
   }
 
   bool _isValidEmail(String email) {
@@ -94,7 +65,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
         .split(RegExp(r'\s+'))
         .where((part) => part.isNotEmpty)
         .toList();
-    return parts.length >= 2;
+
+    if (parts.length < 2) {
+      return false;
+    }
+
+    final partRegex = RegExp(r"^[A-Za-z]+(?:[.'-][A-Za-z]+)*\.?$");
+    return parts.every(partRegex.hasMatch);
   }
 
   void _clearErrors() {
@@ -103,7 +80,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _phoneError = null;
     _passwordError = null;
     _confirmPasswordError = null;
-    _adminTypeError = null;
   }
 
   Future<void> _submit() async {
@@ -154,67 +130,34 @@ class _RegisterScreenState extends State<RegisterScreen> {
         _confirmPasswordError = 'Passwords do not match.';
       }
 
-      if (!_isCitizenMode && _selectedAdminType == null) {
-        _adminTypeError = 'Please select an admin type.';
-      }
     });
 
     if (_nameError != null ||
         _emailError != null ||
         _phoneError != null ||
         _passwordError != null ||
-        _confirmPasswordError != null ||
-        _adminTypeError != null) {
+        _confirmPasswordError != null) {
       return;
     }
 
     setState(() => _isLoading = true);
 
     try {
-      if (_isCitizenMode) {
-        final data = await _authService.register(
-          name: name,
-          email: email,
-          mobileNumber: phone,
-          password: password,
-          passwordConfirmation: confirmPassword,
-        );
+      await _authService.register(
+        name: name,
+        email: email,
+        mobileNumber: phone,
+        password: password,
+        passwordConfirmation: confirmPassword,
+      );
 
-        if (!mounted) return;
+      if (!mounted) return;
 
-        final user = data['user'] as Map<String, dynamic>? ?? {};
-        final role = AuthRedirect.normalizeRole(user['role']);
-        AuthRedirect.goToRoleHome(context, role);
-      } else {
-        final response = await _authService.requestGovernmentAccount(
-          name: name,
-          email: email,
-          mobileNumber: phone,
-          password: password,
-          department: 'Tacloban City Engineering Office',
-          jobTitle: _selectedAdminType!,
-          accessCode: 'GOV-REQUEST',
-        );
-
-        if (!mounted) return;
-
-        final user = response['user'] as Map<String, dynamic>?;
-        final token = response['token'];
-        if (user != null && token != null) {
-          AuthRedirect.goToRoleHome(context, user['role']);
-          return;
-        }
-
-        _showSnack(
-          response['message']?.toString() ??
-              'Admin account request submitted successfully',
-        );
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          AppRoutes.login,
-          (route) => false,
-        );
-      }
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppRoutes.citizenHome,
+        (route) => false,
+      );
     } catch (e) {
       if (!mounted) return;
       _showSnack(e.toString().replaceFirst('Exception: ', ''));
@@ -379,55 +322,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             ],
                           ),
                           const SizedBox(height: 16),
-                          _buildLabel('Account Role'),
-                          const SizedBox(height: 8),
-                          _buildDropdownField<RegisterMode>(
-                            value: _selectedMode,
-                            items: const [
-                              DropdownMenuItem(
-                                value: RegisterMode.citizen,
-                                child: Text('Citizen'),
-                              ),
-                              DropdownMenuItem(
-                                value: RegisterMode.government,
-                                child: Text('Admin'),
-                              ),
-                            ],
-                            onChanged: (value) {
-                              if (value == null) return;
-                              setState(() {
-                                _selectedMode = value;
-                                if (_isCitizenMode) {
-                                  _selectedAdminType = null;
-                                }
-                              });
-                            },
-                          ),
-                          if (!_isCitizenMode) ...[
-                            const SizedBox(height: 14),
-                            _buildLabel('Admin Type'),
-                            const SizedBox(height: 8),
-                            _buildDropdownField<String>(
-                              value: _selectedAdminType,
-                              hint: 'Select admin type',
-                              items: _adminTypes
-                                  .map(
-                                    (type) => DropdownMenuItem(
-                                      value: type,
-                                      child: Text(type),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (value) {
-                                setState(() {
-                                  _selectedAdminType = value;
-                                  _adminTypeError = null;
-                                });
-                              },
-                              errorText: _adminTypeError,
-                            ),
-                          ],
-                          const SizedBox(height: 14),
                           _buildLabel('Full Name'),
                           const SizedBox(height: 8),
                           _buildTextField(
@@ -719,65 +613,4 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  Widget _buildDropdownField<T>({
-    required T? value,
-    required List<DropdownMenuItem<T>> items,
-    required ValueChanged<T?> onChanged,
-    String? hint,
-    String? errorText,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: errorText != null
-                  ? const Color(0xFFEF4444)
-                  : Colors.white.withOpacity(0.2),
-            ),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<T>(
-              value: value,
-              isExpanded: true,
-              dropdownColor: const Color(0xFF394355),
-              icon: Icon(
-                Icons.keyboard_arrow_down_rounded,
-                color: Colors.white.withOpacity(0.8),
-              ),
-              hint: hint == null
-                  ? null
-                  : Text(
-                      hint,
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.45),
-                        fontSize: 15,
-                      ),
-                    ),
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-              ),
-              onChanged: onChanged,
-              items: items,
-            ),
-          ),
-        ),
-        if (errorText != null) ...[
-          const SizedBox(height: 6),
-          Text(
-            errorText,
-            style: const TextStyle(
-              color: Color(0xFFFFB4B4),
-              fontSize: 12,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
 }

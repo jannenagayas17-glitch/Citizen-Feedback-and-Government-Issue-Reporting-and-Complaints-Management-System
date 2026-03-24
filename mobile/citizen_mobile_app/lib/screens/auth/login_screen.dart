@@ -1,18 +1,15 @@
 import 'dart:ui';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../services/auth_service.dart';
 import '../../services/google_auth_service.dart';
-import '../../utils/auth_redirect.dart';
+import '../../utils/app_routes.dart';
 import '../../utils/token_storage.dart';
 import 'forgot_password_screen.dart';
 import 'register_screen.dart';
-
-enum LoginMode { citizen, admin, superAdmin }
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -27,48 +24,22 @@ class _LoginScreenState extends State<LoginScreen> {
     unicode: true,
   );
 
-  static const String _configuredSuperAdminEmail = String.fromEnvironment(
-    'SUPER_ADMIN_EMAIL',
-    defaultValue: 'cityengineer@gov.ph',
-  );
-
   final AuthService _authService = AuthService();
   final GoogleAuthService _googleAuthService = GoogleAuthService();
 
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
-  LoginMode _selectedMode = LoginMode.citizen;
   bool _obscurePassword = true;
   bool _isLoading = false;
   bool _isGoogleLoading = false;
   String? _emailError;
   String? _passwordError;
 
-  bool get _isSuperAdminMode => _selectedMode == LoginMode.superAdmin;
-  _LoginModeConfig get _modeConfig => _LoginModeConfig.fromMode(_selectedMode);
-  bool get _showGoogleLogin => !_isSuperAdminMode;
-  bool get _isSuperAdminEmailLocked =>
-      _isSuperAdminMode && _resolvedSuperAdminEmail.isNotEmpty;
-
   @override
   void initState() {
     super.initState();
-    _loadSavedEmailForMode();
-  }
-
-  String get _resolvedSuperAdminEmail {
-    final configured = _configuredSuperAdminEmail.trim();
-    if (configured.isNotEmpty) {
-      return configured;
-    }
-
-    final firebaseEmail = FirebaseAuth.instance.currentUser?.email?.trim() ?? '';
-    return firebaseEmail;
-  }
-
-  bool _isAllowedForSelection(String role) {
-    return role == _modeConfig.expectedRole;
+    _loadSavedCitizenEmail();
   }
 
   bool _containsEmoji(String value) {
@@ -80,15 +51,8 @@ class _LoginScreenState extends State<LoginScreen> {
     _passwordError = null;
   }
 
-  Future<void> _loadSavedEmailForMode() async {
-    if (_isSuperAdminEmailLocked) {
-      _emailController.text = _resolvedSuperAdminEmail;
-      return;
-    }
-
-    final rememberedEmail = await TokenStorage.getLastEmailForRole(
-      _modeConfig.expectedRole,
-    );
+  Future<void> _loadSavedCitizenEmail() async {
+    final rememberedEmail = await TokenStorage.getLastEmailForRole('citizen');
 
     if (!mounted) return;
 
@@ -134,22 +98,31 @@ class _LoginScreenState extends State<LoginScreen> {
         password: password,
       );
 
-      final user = (data['user'] as Map<String, dynamic>? ?? {});
-      final role = AuthRedirect.normalizeRole(user['role']);
+      final user = data['user'] as Map<String, dynamic>? ?? {};
+      final role = (user['role']?.toString() ?? '').trim().toLowerCase();
 
       if (!mounted) return;
 
-      if (!_isAllowedForSelection(role)) {
-        _showSnackBar(_modeConfig.unauthorizedMessage);
+      if (role != 'citizen') {
+        await TokenStorage.clearAll();
+        _showSnackBar(
+          'This mobile app is for citizen accounts only. Please use the web admin portal for staff access.',
+        );
         return;
       }
 
       await TokenStorage.saveLastEmailForRole(
-        role: role,
+        role: 'citizen',
         email: email,
       );
 
-      AuthRedirect.goToRoleHome(context, role);
+      if (!mounted) return;
+
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppRoutes.citizenHome,
+        (route) => false,
+      );
     } catch (e) {
       if (!mounted) return;
       _showSnackBar(e.toString().replaceFirst('Exception: ', ''));
@@ -161,11 +134,6 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _loginWithGoogle() async {
-    if (_isSuperAdminMode) {
-      _showSnackBar('Super admin must sign in with existing email and password.');
-      return;
-    }
-
     setState(() => _isGoogleLoading = true);
 
     try {
@@ -190,22 +158,32 @@ class _LoginScreenState extends State<LoginScreen> {
         email: user.email,
         name: user.displayName,
       );
-      final backendUser = (data['user'] as Map<String, dynamic>? ?? {});
-      final role = AuthRedirect.normalizeRole(backendUser['role']);
+
+      final backendUser = data['user'] as Map<String, dynamic>? ?? {};
+      final role = (backendUser['role']?.toString() ?? '').trim().toLowerCase();
 
       if (!mounted) return;
 
-      if (!_isAllowedForSelection(role)) {
-        _showSnackBar(_modeConfig.unauthorizedMessage);
+      if (role != 'citizen') {
+        await TokenStorage.clearAll();
+        _showSnackBar(
+          'This mobile app is for citizen accounts only. Please use the web admin portal for staff access.',
+        );
         return;
       }
 
       await TokenStorage.saveLastEmailForRole(
-        role: role,
+        role: 'citizen',
         email: user.email ?? '',
       );
 
-      AuthRedirect.goToRoleHome(context, role);
+      if (!mounted) return;
+
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppRoutes.citizenHome,
+        (route) => false,
+      );
     } catch (e) {
       if (!mounted) return;
       _showSnackBar(e.toString().replaceFirst('Exception: ', ''));
@@ -217,17 +195,10 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _openRegisterScreen() {
-    if (_isSuperAdminMode) {
-      _showSnackBar('Super admin accounts are created by the system only.');
-      return;
-    }
-
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => RegisterScreen(
-          initialMode: _modeConfig.registerMode,
-        ),
+        builder: (_) => const RegisterScreen(),
       ),
     );
   }
@@ -236,9 +207,7 @@ class _LoginScreenState extends State<LoginScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ForgotPasswordScreen(
-          initialMode: _modeConfig.forgotPasswordMode,
-        ),
+        builder: (_) => const ForgotPasswordScreen(),
       ),
     );
   }
@@ -247,15 +216,6 @@ class _LoginScreenState extends State<LoginScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
-  }
-
-  Future<void> _handleModeChange(LoginMode mode) async {
-    setState(() {
-      _selectedMode = mode;
-      _passwordController.clear();
-    });
-
-    await _loadSavedEmailForMode();
   }
 
   @override
@@ -380,18 +340,13 @@ class _LoginScreenState extends State<LoginScreen> {
                             color: Colors.white.withOpacity(0.75),
                           ),
                           const SizedBox(height: 18),
-                          _fieldLabel('Login As'),
-                          const SizedBox(height: 8),
-                          _buildModeDropdown(),
-                          const SizedBox(height: 16),
                           _fieldLabel('Email Address'),
                           const SizedBox(height: 8),
                           _buildTextField(
                             controller: _emailController,
-                            hintText: _modeConfig.emailHint,
+                            hintText: 'your.email@example.com',
                             icon: Icons.email_outlined,
                             keyboardType: TextInputType.emailAddress,
-                            readOnly: _isSuperAdminEmailLocked,
                             inputFormatters: [
                               FilteringTextInputFormatter.deny(_emojiRegex),
                             ],
@@ -429,20 +384,18 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                           ),
-                          if (_showGoogleLogin) ...[
-                            const SizedBox(height: 4),
-                            _SectionDivider(
-                              label: 'Or continue with',
-                              color: Colors.white.withOpacity(0.62),
-                            ),
-                            const SizedBox(height: 18),
-                            _buildGoogleButton(),
-                          ],
+                          const SizedBox(height: 4),
+                          _SectionDivider(
+                            label: 'Or continue with',
+                            color: Colors.white.withOpacity(0.62),
+                          ),
+                          const SizedBox(height: 18),
+                          _buildGoogleButton(),
                           const SizedBox(height: 16),
                           _buildLoginButton(),
                           const SizedBox(height: 16),
                           TextButton(
-                            onPressed: _isSuperAdminMode ? null : _openRegisterScreen,
+                            onPressed: _openRegisterScreen,
                             style: TextButton.styleFrom(
                               foregroundColor: Colors.white.withOpacity(0.84),
                             ),
@@ -450,16 +403,19 @@ class _LoginScreenState extends State<LoginScreen> {
                               textAlign: TextAlign.center,
                               text: TextSpan(
                                 style: TextStyle(
-                                  color: _isSuperAdminMode
-                                      ? Colors.white.withOpacity(0.55)
-                                      : Colors.white.withOpacity(0.72),
+                                  color: Colors.white.withOpacity(0.72),
                                   fontSize: 14,
                                 ),
-                                children: _modeConfig.bottomTextSpans(
-                                  highlightedColor: _isSuperAdminMode
-                                      ? Colors.white.withOpacity(0.55)
-                                      : Colors.white,
-                                ),
+                                children: const [
+                                  TextSpan(text: "Don't have an account? "),
+                                  TextSpan(
+                                    text: 'Register here',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -487,47 +443,11 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildModeDropdown() {
-    return DropdownButtonFormField<LoginMode>(
-      value: _selectedMode,
-      dropdownColor: const Color(0xFF5B534E),
-      iconEnabledColor: Colors.white.withOpacity(0.9),
-      decoration: _inputDecoration(
-        hintText: '',
-        icon: Icons.keyboard_arrow_down_rounded,
-        usePrefixIcon: false,
-      ),
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 16,
-      ),
-      items: const [
-        DropdownMenuItem(
-          value: LoginMode.citizen,
-          child: Text('Citizen'),
-        ),
-        DropdownMenuItem(
-          value: LoginMode.admin,
-          child: Text('Admin'),
-        ),
-        DropdownMenuItem(
-          value: LoginMode.superAdmin,
-          child: Text('Super Admin'),
-        ),
-      ],
-      onChanged: (value) {
-        if (value == null) return;
-        _handleModeChange(value);
-      },
-    );
-  }
-
   Widget _buildTextField({
     required TextEditingController controller,
     required String hintText,
     required IconData icon,
     TextInputType keyboardType = TextInputType.text,
-    bool readOnly = false,
     List<TextInputFormatter>? inputFormatters,
     String? errorText,
     ValueChanged<String>? onChanged,
@@ -535,7 +455,6 @@ class _LoginScreenState extends State<LoginScreen> {
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
-      readOnly: readOnly,
       inputFormatters: inputFormatters,
       onChanged: onChanged,
       autofillHints: keyboardType == TextInputType.emailAddress
@@ -601,16 +520,13 @@ class _LoginScreenState extends State<LoginScreen> {
   InputDecoration _inputDecoration({
     required String hintText,
     required IconData icon,
-    bool usePrefixIcon = true,
   }) {
     return InputDecoration(
       hintText: hintText,
       hintStyle: TextStyle(
         color: Colors.white.withOpacity(0.5),
       ),
-      prefixIcon: usePrefixIcon
-          ? Icon(icon, color: Colors.white.withOpacity(0.72), size: 20)
-          : null,
+      prefixIcon: Icon(icon, color: Colors.white.withOpacity(0.72), size: 20),
       filled: true,
       fillColor: Colors.white.withOpacity(0.14),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -630,12 +546,10 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _buildGoogleButton() {
-    final disabled = _isGoogleLoading || _isSuperAdminMode;
-
     return SizedBox(
       height: 54,
       child: OutlinedButton(
-        onPressed: disabled ? null : _loginWithGoogle,
+        onPressed: _isGoogleLoading ? null : _loginWithGoogle,
         style: OutlinedButton.styleFrom(
           backgroundColor: Colors.white.withOpacity(0.14),
           side: BorderSide(color: Colors.white.withOpacity(0.18)),
@@ -658,12 +572,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     height: 20,
                   ),
                   const SizedBox(width: 10),
-                  Text(
-                    _modeConfig.googleButtonText,
+                  const Text(
+                    'Sign in with Google',
                     style: TextStyle(
-                      color: disabled
-                          ? Colors.white.withOpacity(0.55)
-                          : Colors.white,
+                      color: Colors.white,
                       fontSize: 16,
                     ),
                   ),
@@ -703,103 +615,6 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
       ),
     );
-  }
-}
-
-class _LoginModeConfig {
-  const _LoginModeConfig({
-    required this.expectedRole,
-    required this.emailHint,
-    required this.bottomText,
-    required this.googleButtonText,
-    required this.unauthorizedMessage,
-    required this.registerMode,
-    required this.forgotPasswordMode,
-  });
-
-  final String expectedRole;
-  final String emailHint;
-  final String bottomText;
-  final String googleButtonText;
-  final String unauthorizedMessage;
-  final RegisterMode registerMode;
-  final ForgotPasswordMode forgotPasswordMode;
-
-  factory _LoginModeConfig.fromMode(LoginMode mode) {
-    switch (mode) {
-      case LoginMode.admin:
-        return const _LoginModeConfig(
-          expectedRole: 'admin',
-          emailHint: 'official@taclobancity.gov',
-          bottomText: 'Need an admin account? Register here',
-          googleButtonText: 'Sign in with Google',
-          unauthorizedMessage: 'This account is not authorized for admin login.',
-          registerMode: RegisterMode.government,
-          forgotPasswordMode: ForgotPasswordMode.government,
-        );
-      case LoginMode.superAdmin:
-        return const _LoginModeConfig(
-          expectedRole: 'super_admin',
-          emailHint: 'superadmin@taclobancity.gov',
-          bottomText: 'Super admin accounts are created by the system only',
-          googleButtonText: 'Super Admin uses email login',
-          unauthorizedMessage:
-              'This email is not registered as a super admin account.',
-          registerMode: RegisterMode.government,
-          forgotPasswordMode: ForgotPasswordMode.government,
-        );
-      case LoginMode.citizen:
-        return const _LoginModeConfig(
-          expectedRole: 'citizen',
-          emailHint: 'your.email@example.com',
-          bottomText: "Don't have an account? Register here",
-          googleButtonText: 'Sign in with Google',
-          unauthorizedMessage: 'This account is not a citizen account.',
-          registerMode: RegisterMode.citizen,
-          forgotPasswordMode: ForgotPasswordMode.citizen,
-        );
-    }
-  }
-
-  List<InlineSpan> bottomTextSpans({
-    required Color highlightedColor,
-  }) {
-    switch (registerMode) {
-      case RegisterMode.government:
-        if (expectedRole == 'super_admin') {
-          return [
-            TextSpan(
-              text: bottomText,
-              style: TextStyle(
-                color: highlightedColor,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ];
-        }
-
-        return [
-          const TextSpan(text: 'Need an admin account? '),
-          TextSpan(
-            text: 'Register here',
-            style: TextStyle(
-              color: highlightedColor,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ];
-      case RegisterMode.citizen:
-        return [
-          const TextSpan(text: "Don't have an account? "),
-          TextSpan(
-            text: 'Register here',
-            style: TextStyle(
-              color: highlightedColor,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ];
-    }
   }
 }
 

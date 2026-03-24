@@ -6,14 +6,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/auth_service.dart';
 
-enum ForgotPasswordMode { citizen, government }
-
 class ForgotPasswordScreen extends StatefulWidget {
-  final ForgotPasswordMode initialMode;
-
   const ForgotPasswordScreen({
     super.key,
-    this.initialMode = ForgotPasswordMode.citizen,
   });
 
   @override
@@ -26,17 +21,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     unicode: true,
   );
 
-  late ForgotPasswordMode _selectedMode;
   final TextEditingController _emailController = TextEditingController();
   final AuthService _authService = AuthService();
   bool _isLoading = false;
   String? _emailError;
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedMode = widget.initialMode;
-  }
 
   bool _isValidEmail(String email) {
     final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
@@ -45,12 +33,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   bool _containsEmoji(String value) {
     return _emojiRegex.hasMatch(value);
-  }
-
-  String get _emailHint {
-    return _selectedMode == ForgotPasswordMode.citizen
-        ? 'your.email@example.com'
-        : 'official@taclobancity.gov';
   }
 
   Future<void> _sendResetLink() async {
@@ -267,7 +249,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                             },
                             style: const TextStyle(color: Colors.white),
                             decoration: InputDecoration(
-                              hintText: _emailHint,
+                              hintText: 'your.email@example.com',
                               hintStyle: TextStyle(
                                 color: Colors.white.withOpacity(0.45),
                               ),

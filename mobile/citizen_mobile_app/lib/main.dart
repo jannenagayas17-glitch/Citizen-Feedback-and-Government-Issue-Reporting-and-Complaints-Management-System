@@ -2,10 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 
 import 'firebase_options.dart';
-import 'screens/admin/admin_home_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/citizen/citizen_home_screen.dart';
-import 'screens/super_admin/super_admin_dashboard.dart';
 import 'utils/app_routes.dart';
 import 'utils/token_storage.dart';
 
@@ -51,12 +49,9 @@ class _StartupGate extends StatelessWidget {
       return const LoginScreen();
     }
 
-    if (role == 'super_admin') {
-      return const SuperAdminDashboard();
-    }
-
-    if (role == 'admin' || role == 'staff') {
-      return const AdminHomeScreen();
+    if (role != 'citizen') {
+      await TokenStorage.clearAll();
+      return const LoginScreen();
     }
 
     return const CitizenHomeScreen();

@@ -12,14 +12,9 @@ class AuthRedirect {
   }
 
   static String routeForRole(Object? role) {
-    switch (normalizeRole(role)) {
-      case 'super_admin':
-        return AppRoutes.superAdminHome;
-      case 'admin':
-        return AppRoutes.adminHome;
-      default:
-        return AppRoutes.citizenHome;
-    }
+    return normalizeRole(role) == 'citizen'
+        ? AppRoutes.citizenHome
+        : AppRoutes.login;
   }
 
   static void goToRoleHome(
