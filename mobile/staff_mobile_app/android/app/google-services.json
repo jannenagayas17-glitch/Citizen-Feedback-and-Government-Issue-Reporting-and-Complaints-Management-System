@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "130270115060",
+    "project_id": "citizen-mobile-app-284a2",
+    "storage_bucket": "citizen-mobile-app-284a2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:130270115060:android:4450fccc81656e03601aa1",
+        "android_client_info": {
+          "package_name": "com.example.staff_mobile_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "130270115060-c326ng56qbjfvt9lt4c3jfl8afasphje.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.staff_mobile_app",
+            "certificate_hash": "a8f575d1b35f1659386e024a51ebb82126066515"
+          }
+        },
+        {
+          "client_id": "130270115060-c326ng56qbjfvt9lt4c3jfl8afasphje.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyARHyCccqo0rlA3hHOijcUJ8gixdBlXXu4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "130270115060-c326ng56qbjfvt9lt4c3jfl8afasphje.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "130270115060-o76l2s6sv1am5po04k2shi76bavgddpb.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.citizenMobileApp"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -247,12 +247,19 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
           Positioned.fill(
-            child: Opacity(
-              opacity: 0.08,
-              child: Image.asset(
-                'assets/images/logo.png',
-                fit: BoxFit.cover,
-              ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.asset(
+                  'assets/images/engineering_office_bg.png',
+                  fit: BoxFit.cover,
+                ),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0C1727).withValues(alpha: 0.62),
+                  ),
+                ),
+              ],
             ),
           ),
           SafeArea(

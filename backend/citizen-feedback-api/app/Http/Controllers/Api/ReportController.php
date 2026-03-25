@@ -8,6 +8,7 @@ use App\Models\Category;
 use App\Models\Report;
 use App\Models\StatusHistory;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReportController extends Controller
 {
@@ -163,6 +164,131 @@ class ReportController extends Controller
         return response()->json([
             'message' => 'Report status updated successfully',
             'report' => $report->load(['user', 'category', 'images']),
+        ]);
+    }
+
+    public function exportAdminReports(Request $request): StreamedResponse
+    {
+        if (! in_array($request->user()->role, ['admin', 'super_admin'], true)) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $query = Report::with(['user', 'category'])->latest();
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->string('status')->toString());
+        }
+
+        $reports = $query->get();
+        $fileName = 'engineering-reports-' . now()->format('Ymd-His') . '.xls';
+
+        return response()->streamDownload(function () use ($reports) {
+            echo <<<HTML
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+      color: #1f2937;
+    }
+    .sheet-title {
+      font-size: 18px;
+      font-weight: bold;
+      color: #0f172a;
+      margin-bottom: 6px;
+    }
+    .sheet-subtitle {
+      color: #475569;
+      margin-bottom: 14px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    th, td {
+      border: 1px solid #cbd5e1;
+      padding: 8px 10px;
+      vertical-align: top;
+      text-align: left;
+    }
+    th {
+      background: #1d4ed8;
+      color: #ffffff;
+      font-weight: bold;
+      white-space: nowrap;
+    }
+    tr:nth-child(even) td {
+      background: #f8fafc;
+    }
+    .status-pending { color: #b45309; font-weight: bold; }
+    .status-in-progress { color: #7c3aed; font-weight: bold; }
+    .status-resolved { color: #15803d; font-weight: bold; }
+    .status-new { color: #2563eb; font-weight: bold; }
+    .muted { color: #64748b; }
+  </style>
+</head>
+<body>
+  <div class="sheet-title">Tacloban City Engineering Office Reports</div>
+  <div class="sheet-subtitle">Generated at: 
+HTML;
+            echo e(now()->format('F j, Y g:i A'));
+            echo <<<HTML
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Report ID</th>
+        <th>Title</th>
+        <th>Category</th>
+        <th>Status</th>
+        <th>Priority</th>
+        <th>Location</th>
+        <th>Barangay</th>
+        <th>Reported By</th>
+        <th>Reporter Email</th>
+        <th>Created Date</th>
+        <th>Resolved Date</th>
+      </tr>
+    </thead>
+    <tbody>
+HTML;
+
+            foreach ($reports as $report) {
+                $status = (string) $report->status;
+                $statusClass = match (strtolower($status)) {
+                    'pending' => 'status-pending',
+                    'in progress' => 'status-in-progress',
+                    'resolved' => 'status-resolved',
+                    'new' => 'status-new',
+                    default => '',
+                };
+
+                echo '<tr>';
+                echo '<td>' . e((string) $report->id) . '</td>';
+                echo '<td>' . e((string) ($report->title ?? 'Untitled report')) . '</td>';
+                echo '<td>' . e((string) (optional($report->category)->name ?? 'General')) . '</td>';
+                echo '<td class="' . e($statusClass) . '">' . e(ucwords($status)) . '</td>';
+                echo '<td>' . e((string) ($report->priority ?? 'Normal')) . '</td>';
+                echo '<td>' . e((string) ($report->location ?? '-')) . '</td>';
+                echo '<td>' . e((string) ($report->barangay ?? '-')) . '</td>';
+                echo '<td>' . e((string) (optional($report->user)->name ?? '-')) . '</td>';
+                echo '<td>' . e((string) (optional($report->user)->email ?? '-')) . '</td>';
+                echo '<td>' . e((string) (optional($report->created_at)?->format('M d, Y h:i A') ?? '-')) . '</td>';
+                echo '<td>' . e((string) (optional($report->resolved_at)?->format('M d, Y h:i A') ?? '-')) . '</td>';
+                echo '</tr>';
+            }
+
+            echo <<<HTML
+    </tbody>
+  </table>
+</body>
+</html>
+HTML;
+        }, $fileName, [
+            'Content-Type' => 'application/vnd.ms-excel; charset=UTF-8',
+            'Cache-Control' => 'no-store, no-cache',
         ]);
     }
 }

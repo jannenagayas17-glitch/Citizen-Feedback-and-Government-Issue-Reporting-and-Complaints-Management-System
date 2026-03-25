@@ -104,6 +104,7 @@ Route::middleware('auth:sanctum')->group(function () {
     */
 
     Route::get('/dashboard', [DashboardController::class, 'index']);
+    Route::get('/admin/analytics', [DashboardController::class, 'analytics']);
 
 
     /*
@@ -115,6 +116,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('admin')->group(function () {
 
         Route::get('/reports', [ReportController::class, 'adminReports']);
+        Route::get('/reports/export', [ReportController::class, 'exportAdminReports']);
         Route::post('/reports/{id}/status', [ReportController::class, 'updateStatus']);
         Route::get('/users', [AuthController::class, 'adminUsers']);
 
