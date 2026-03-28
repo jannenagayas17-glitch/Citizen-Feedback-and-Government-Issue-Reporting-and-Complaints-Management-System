@@ -373,6 +373,9 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                                       report['category']?['name'] ??
                                       'General')
                                   .toString(),
+                          office:
+                              (report['office']?['name'] ?? 'Unassigned office')
+                                  .toString(),
                           status: (report['status'] ?? 'Pending').toString(),
                           onOpen: () {
                             Navigator.push(
@@ -719,6 +722,7 @@ class _ReportCard extends StatelessWidget {
     required this.citizen,
     required this.location,
     required this.category,
+    required this.office,
     required this.status,
     required this.onOpen,
     required this.onUpdate,
@@ -728,6 +732,7 @@ class _ReportCard extends StatelessWidget {
   final String citizen;
   final String location;
   final String category;
+  final String office;
   final String status;
   final VoidCallback onOpen;
   final VoidCallback onUpdate;
@@ -803,6 +808,7 @@ class _ReportCard extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
+              _MetaChip(icon: Icons.account_balance_outlined, label: office),
               _MetaChip(icon: Icons.category_outlined, label: category),
               _MetaChip(icon: Icons.place_outlined, label: location),
             ],

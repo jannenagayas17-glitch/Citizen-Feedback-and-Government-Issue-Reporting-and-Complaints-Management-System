@@ -358,7 +358,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  'Tacloban City Engineering Office',
+                  'Tacloban City Government Offices',
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.82),
                     fontSize: 12,

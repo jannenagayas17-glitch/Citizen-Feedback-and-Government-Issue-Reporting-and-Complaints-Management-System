@@ -20,14 +20,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
   );
 
   static const List<String> _adminTypes = [
-    'Assistant City Engineer',
-    'Engineering Office Supervisor',
-    'Engineering Staff/ Office Coordinator',
+    'Office Head',
+    'Office Supervisor',
+    'Office Coordinator',
+    'Administrative Staff',
   ];
 
   final AuthService _authService = AuthService();
 
-  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _firstNameController = TextEditingController();
+  final TextEditingController _lastNameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
@@ -37,13 +39,41 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isLoading = false;
-  String? _nameError;
+  bool _isLoadingOffices = true;
+  String? _firstNameError;
+  String? _lastNameError;
   String? _emailError;
   String? _phoneError;
   String? _passwordError;
   String? _confirmPasswordError;
   String? _adminTypeError;
+  String? _officeError;
   String? _selectedAdminType;
+  String? _selectedOffice;
+  List<dynamic> _offices = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOffices();
+  }
+
+  Future<void> _loadOffices() async {
+    setState(() => _isLoadingOffices = true);
+
+    try {
+      final offices = await _authService.getOffices();
+      if (!mounted) return;
+      setState(() {
+        _offices = offices;
+        _isLoadingOffices = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoadingOffices = false);
+      _showSnack(e.toString().replaceFirst('Exception: ', ''));
+    }
+  }
 
   bool _isValidEmail(String email) {
     final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
@@ -58,32 +88,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return _emojiRegex.hasMatch(value);
   }
 
-  bool _isValidFullName(String name) {
-    final parts = name
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((part) => part.isNotEmpty)
-        .toList();
-
-    if (parts.length < 2) {
+  bool _isValidNamePart(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
       return false;
     }
-
     final partRegex = RegExp(r"^[A-Za-z]+(?:[.'-][A-Za-z]+)*\.?$");
-    return parts.every(partRegex.hasMatch);
+    return partRegex.hasMatch(trimmed);
   }
 
   void _clearErrors() {
-    _nameError = null;
+    _firstNameError = null;
+    _lastNameError = null;
     _emailError = null;
     _phoneError = null;
     _passwordError = null;
     _confirmPasswordError = null;
     _adminTypeError = null;
+    _officeError = null;
   }
 
   Future<void> _submit() async {
-    final name = _nameController.text.trim();
+    final firstName = _firstNameController.text.trim();
+    final lastName = _lastNameController.text.trim();
+    final name = '$firstName $lastName'.trim();
     final email = _emailController.text.trim();
     final phone = _phoneController.text.trim();
     final password = _passwordController.text.trim();
@@ -92,12 +120,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() {
       _clearErrors();
 
-      if (name.isEmpty) {
-        _nameError = 'Full name is required.';
-      } else if (_containsEmoji(name)) {
-        _nameError = 'Emoji characters are not allowed.';
-      } else if (!_isValidFullName(name)) {
-        _nameError = 'Enter your full name with first and last name.';
+      if (firstName.isEmpty) {
+        _firstNameError = 'First name is required.';
+      } else if (_containsEmoji(firstName)) {
+        _firstNameError = 'Emoji characters are not allowed.';
+      } else if (!_isValidNamePart(firstName)) {
+        _firstNameError = 'Enter a valid first name.';
+      }
+
+      if (lastName.isEmpty) {
+        _lastNameError = 'Last name is required.';
+      } else if (_containsEmoji(lastName)) {
+        _lastNameError = 'Emoji characters are not allowed.';
+      } else if (!_isValidNamePart(lastName)) {
+        _lastNameError = 'Enter a valid last name.';
       }
 
       if (email.isEmpty) {
@@ -133,14 +169,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (_selectedAdminType == null) {
         _adminTypeError = 'Please select an admin type.';
       }
+
+      if (_selectedOffice == null || _selectedOffice!.isEmpty) {
+        _officeError = 'Please select an office.';
+      }
     });
 
-    if (_nameError != null ||
+    if (_firstNameError != null ||
+        _lastNameError != null ||
         _emailError != null ||
         _phoneError != null ||
         _passwordError != null ||
         _confirmPasswordError != null ||
-        _adminTypeError != null) {
+        _adminTypeError != null ||
+        _officeError != null) {
       return;
     }
 
@@ -152,7 +194,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         email: email,
         mobileNumber: phone,
         password: password,
-        department: 'Tacloban City Engineering Office',
+        department: _selectedOffice!,
         jobTitle: _selectedAdminType!,
         accessCode: 'GOV-REQUEST',
       );
@@ -186,7 +228,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   void dispose() {
-    _nameController.dispose();
+    _firstNameController.dispose();
+    _lastNameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
     _passwordController.dispose();
@@ -218,7 +261,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               fit: StackFit.expand,
               children: [
                 Image.asset(
-                  'assets/images/engineering_office_bg.png',
+                  'assets/images/Tacloban_City_bg.png',
                   fit: BoxFit.cover,
                 ),
                 DecoratedBox(
@@ -277,9 +320,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   width: 2,
                                 ),
                               ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(6),
-                                child: ClipOval(
+                              child: ClipOval(
+                                child: SizedBox.expand(
                                   child: Image.asset(
                                     'assets/images/logo.png',
                                     fit: BoxFit.cover,
@@ -301,7 +343,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Register for an official engineering office account',
+                            'Register for an official Tacloban City government office account',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.78),
@@ -339,6 +381,38 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             ],
                           ),
                           const SizedBox(height: 16),
+                          if (_isLoadingOffices)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 10),
+                              child: Center(child: CircularProgressIndicator()),
+                            )
+                          else ...[
+                            _buildLabel('Office / Department'),
+                            const SizedBox(height: 8),
+                            _buildDropdownField<String>(
+                              value: _selectedOffice,
+                              hint: 'Select office',
+                              items: _offices
+                                  .map((office) {
+                                    final record = office as Map<String, dynamic>;
+                                    final name =
+                                        (record['name'] ?? 'Unnamed office').toString();
+                                    return DropdownMenuItem(
+                                      value: name,
+                                      child: Text(name),
+                                    );
+                                  })
+                                  .toList(),
+                              onChanged: (value) {
+                                setState(() {
+                                  _selectedOffice = value;
+                                  _officeError = null;
+                                });
+                              },
+                              errorText: _officeError,
+                            ),
+                            const SizedBox(height: 14),
+                          ],
                           _buildLabel('Admin Type'),
                           const SizedBox(height: 8),
                           _buildDropdownField<String>(
@@ -361,19 +435,36 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             errorText: _adminTypeError,
                           ),
                           const SizedBox(height: 14),
-                          _buildLabel('Full Name'),
+                          _buildLabel('First Name'),
                           const SizedBox(height: 8),
                           _buildTextField(
-                            controller: _nameController,
-                            hintText: 'your full name',
+                            controller: _firstNameController,
+                            hintText: 'your first name',
                             prefixIcon: Icons.person_outline,
                             inputFormatters: [
                               FilteringTextInputFormatter.deny(_emojiRegex),
                             ],
-                            errorText: _nameError,
+                            errorText: _firstNameError,
                             onChanged: (_) {
-                              if (_nameError != null) {
-                                setState(() => _nameError = null);
+                              if (_firstNameError != null) {
+                                setState(() => _firstNameError = null);
+                              }
+                            },
+                          ),
+                          const SizedBox(height: 14),
+                          _buildLabel('Last Name'),
+                          const SizedBox(height: 8),
+                          _buildTextField(
+                            controller: _lastNameController,
+                            hintText: 'your last name',
+                            prefixIcon: Icons.badge_outlined,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.deny(_emojiRegex),
+                            ],
+                            errorText: _lastNameError,
+                            onChanged: (_) {
+                              if (_lastNameError != null) {
+                                setState(() => _lastNameError = null);
                               }
                             },
                           ),

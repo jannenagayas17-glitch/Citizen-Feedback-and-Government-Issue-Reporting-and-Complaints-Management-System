@@ -28,11 +28,14 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   final TextEditingController _barangayController = TextEditingController();
 
   late Future<List<dynamic>> _categoriesFuture;
+  late Future<List<dynamic>> _officesFuture;
   int? _selectedCategoryId;
+  int? _selectedOfficeId;
   String _selectedPriority = 'Normal';
   bool _isSubmitting = false;
-  final List<XFile> _selectedImages = [];
+  final List<_SelectedMediaItem> _selectedMedia = [];
   String? _categoryError;
+  String? _officeError;
   String? _titleError;
   String? _locationError;
   String? _barangayError;
@@ -49,6 +52,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   void initState() {
     super.initState();
     _categoriesFuture = _reportService.getCategories();
+    _officesFuture = _reportService.getOffices();
   }
 
   Future<void> _pickImages() async {
@@ -57,23 +61,48 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
       if (files.isEmpty) return;
 
       setState(() {
-        final remainingSlots = 3 - _selectedImages.length;
-        _selectedImages.addAll(files.take(remainingSlots));
+        final remainingSlots = 3 - _selectedMedia.length;
+        _selectedMedia.addAll(
+          files.take(remainingSlots).map(
+                (file) => _SelectedMediaItem(file: file, mediaType: 'image'),
+              ),
+        );
       });
     } catch (e) {
       _showSnack('Unable to select images: ${e.toString().replaceFirst('Exception: ', '')}');
     }
   }
 
-  void _removeImageAt(int index) {
-    setState(() => _selectedImages.removeAt(index));
+  Future<void> _pickVideo() async {
+    try {
+      if (_selectedMedia.length >= 3) {
+        _showSnack('You can upload up to 3 attachments only.');
+        return;
+      }
+
+      final file = await _imagePicker.pickVideo(source: ImageSource.gallery);
+      if (file == null) return;
+
+      setState(() {
+        _selectedMedia.add(_SelectedMediaItem(file: file, mediaType: 'video'));
+      });
+    } catch (e) {
+      _showSnack('Unable to select video: ${e.toString().replaceFirst('Exception: ', '')}');
+    }
   }
 
-  void _reloadCategories() {
+  void _removeMediaAt(int index) {
+    setState(() => _selectedMedia.removeAt(index));
+  }
+
+  void _reloadFormSources() {
     setState(() {
       _selectedCategoryId = null;
+      _selectedOfficeId = null;
       _categoryError = null;
+      _officeError = null;
       _categoriesFuture = _reportService.getCategories();
+      _officesFuture = _reportService.getOffices();
     });
   }
 
@@ -83,6 +112,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
 
   void _clearErrors() {
     _categoryError = null;
+    _officeError = null;
     _titleError = null;
     _locationError = null;
     _barangayError = null;
@@ -97,6 +127,10 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
 
     setState(() {
       _clearErrors();
+
+      if (_selectedOfficeId == null) {
+        _officeError = 'Please select a government office.';
+      }
 
       if (_selectedCategoryId == null) {
         _categoryError = 'Please select a category.';
@@ -126,6 +160,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     });
 
     if (_categoryError != null ||
+        _officeError != null ||
         _titleError != null ||
         _locationError != null ||
         _barangayError != null ||
@@ -148,6 +183,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
         categoryName: selectedCategory == null
             ? null
             : (selectedCategory['name'] ?? '').toString(),
+        officeId: _selectedOfficeId,
         title: title,
         description: description,
         location: location,
@@ -163,11 +199,11 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
           ? rawReportId
           : int.tryParse('${report?['id']}');
 
-      if (reportId != null && _selectedImages.isNotEmpty) {
-        for (final image in _selectedImages) {
-          await _reportService.uploadImage(
+      if (reportId != null && _selectedMedia.isNotEmpty) {
+        for (final media in _selectedMedia) {
+          await _reportService.uploadMedia(
             reportId: reportId,
-            imageFile: image,
+            mediaFile: media.file,
           );
         }
       }
@@ -223,7 +259,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
           ),
         ),
         child: FutureBuilder<List<dynamic>>(
-        future: _categoriesFuture,
+        future: Future.wait<dynamic>([_categoriesFuture, _officesFuture]),
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
             return const Center(child: CircularProgressIndicator());
@@ -242,7 +278,10 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
             );
           }
 
-          final categories = snapshot.data ?? const [];
+          final data = snapshot.data ?? const <dynamic>[];
+          final categories = data.isNotEmpty ? data[0] as List<dynamic> : const [];
+          final offices = data.length > 1 ? data[1] as List<dynamic> : const [];
+          final selectedOffice = _selectedOffice(offices);
           final selectedCategory = _selectedCategory(categories);
 
           return ListView(
@@ -269,17 +308,28 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Fill in the real incident details below. This will be saved directly to the system database.',
+                      'Choose the office that should receive your complaint, then attach photo or video evidence if available.',
                       style: TextStyle(
                         color: Colors.white.withOpacity(0.72),
                         fontSize: 13,
                       ),
                     ),
-                    if (selectedCategory != null) ...[
+                    if (selectedOffice != null) ...[
                       const SizedBox(height: 16),
+                      _buildSelectedOfficeCard(selectedOffice),
+                    ],
+                    if (selectedCategory != null) ...[
+                      const SizedBox(height: 12),
                       _buildSelectedCategoryCard(selectedCategory),
                     ],
                     const SizedBox(height: 18),
+                    _buildLabel('Government office'),
+                    const SizedBox(height: 8),
+                    _buildOfficeDropdown(
+                      offices,
+                      errorText: _officeError,
+                    ),
+                    const SizedBox(height: 16),
                     _buildLabel('Category'),
                     const SizedBox(height: 8),
                     _buildCategoryDropdown(
@@ -375,38 +425,44 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                       },
                     ),
                     const SizedBox(height: 16),
-                    _buildLabel('Photos'),
+                    _buildLabel('Attachments'),
                     const SizedBox(height: 8),
-                    OutlinedButton.icon(
-                      onPressed: _selectedImages.length >= 3 ? null : _pickImages,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: BorderSide(color: Colors.white.withOpacity(0.22)),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 14,
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: _selectedMedia.length >= 3 ? null : _pickImages,
+                          style: _attachmentButtonStyle(),
+                          icon: const Icon(Icons.photo_library_outlined),
+                          label: const Text('Add photos'),
                         ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                        OutlinedButton.icon(
+                          onPressed: _selectedMedia.length >= 3 ? null : _pickVideo,
+                          style: _attachmentButtonStyle(),
+                          icon: const Icon(Icons.videocam_outlined),
+                          label: const Text('Add video'),
                         ),
-                      ),
-                      icon: const Icon(Icons.photo_library_outlined),
-                      label: Text(
-                        _selectedImages.isEmpty
-                            ? 'Add up to 3 photos'
-                            : 'Add more photos',
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'You can upload up to 3 files total.',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.64),
+                        fontSize: 12,
                       ),
                     ),
-                    if (_selectedImages.isNotEmpty) ...[
+                    if (_selectedMedia.isNotEmpty) ...[
                       const SizedBox(height: 12),
                       Wrap(
                         spacing: 10,
                         runSpacing: 10,
                         children: List.generate(
-                          _selectedImages.length,
-                          (index) => _SelectedImageChip(
-                            image: _selectedImages[index],
-                            onRemove: () => _removeImageAt(index),
+                          _selectedMedia.length,
+                          (index) => _SelectedMediaChip(
+                            item: _selectedMedia[index],
+                            onRemove: () => _removeMediaAt(index),
                           ),
                         ),
                       ),
@@ -522,6 +578,17 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     );
   }
 
+  ButtonStyle _attachmentButtonStyle() {
+    return OutlinedButton.styleFrom(
+      foregroundColor: Colors.white,
+      side: BorderSide(color: Colors.white.withOpacity(0.22)),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+      ),
+    );
+  }
+
   Map<String, dynamic>? _selectedCategory(List<dynamic> categories) {
     if (_selectedCategoryId == null) {
       return null;
@@ -533,6 +600,23 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
       final id = rawId is int ? rawId : int.tryParse('$rawId');
       if (id == _selectedCategoryId) {
         return category;
+      }
+    }
+
+    return null;
+  }
+
+  Map<String, dynamic>? _selectedOffice(List<dynamic> offices) {
+    if (_selectedOfficeId == null) {
+      return null;
+    }
+
+    for (final item in offices) {
+      final office = item as Map<String, dynamic>;
+      final rawId = office['id'];
+      final id = rawId is int ? rawId : int.tryParse('$rawId');
+      if (id == _selectedOfficeId) {
+        return office;
       }
     }
 
@@ -624,40 +708,9 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
 
   Widget _buildCategoryDropdown(List<dynamic> categories, {String? errorText}) {
     if (categories.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.white.withOpacity(0.14)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'No categories available',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Please seed the categories table in the backend, then refresh this page.',
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.68),
-                fontSize: 12,
-              ),
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: _reloadCategories,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Refresh categories'),
-            ),
-          ],
-        ),
+      return _buildEmptyDropdownState(
+        title: 'No categories available',
+        message: 'Please seed the categories table in the backend, then refresh this page.',
       );
     }
 
@@ -715,24 +768,223 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
       },
     );
   }
+
+  Widget _buildSelectedOfficeCard(Map<String, dynamic> office) {
+    final officeName = (office['name'] ?? 'Unnamed office').toString();
+    final officeCode = (office['code'] ?? '').toString();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2563EB).withOpacity(0.14),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF60A5FA).withOpacity(0.42)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: const Color(0xFF60A5FA).withOpacity(0.18),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.account_balance_outlined,
+              color: Color(0xFF93C5FD),
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Assigned office',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.68),
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  officeName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (officeCode.isNotEmpty)
+                  Text(
+                    officeCode,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.66),
+                      fontSize: 11,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  Widget _buildOfficeDropdown(List<dynamic> offices, {String? errorText}) {
+    if (offices.isEmpty) {
+      return _buildEmptyDropdownState(
+        title: 'No government offices available',
+        message: 'Ask an administrator to add offices, then refresh this page.',
+      );
+    }
+
+    return DropdownButtonFormField<int>(
+      value: _selectedOfficeId,
+      isExpanded: true,
+      dropdownColor: const Color(0xFF253248),
+      style: const TextStyle(color: Colors.white),
+      iconEnabledColor: Colors.white,
+      decoration: _inputDecoration(
+        'Select the office that should receive this report',
+        errorText: errorText,
+      ),
+      items: offices.map((item) {
+        final office = item as Map<String, dynamic>;
+        final rawId = office['id'];
+        final officeId = rawId is int ? rawId : int.tryParse('$rawId');
+        final officeName = (office['name'] ?? 'Unnamed office').toString();
+
+        if (officeId == null) {
+          return null;
+        }
+
+        return DropdownMenuItem<int>(
+          value: officeId,
+          child: Text(
+            officeName,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white),
+          ),
+        );
+      }).whereType<DropdownMenuItem<int>>().toList(),
+      onChanged: (value) {
+        if (value == null) return;
+        setState(() {
+          _selectedOfficeId = value;
+          _officeError = null;
+        });
+      },
+    );
+  }
+
+  Widget _buildEmptyDropdownState({
+    required String title,
+    required String message,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withOpacity(0.14)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            message,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.68),
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _reloadFormSources,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Refresh'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-class _SelectedImageChip extends StatelessWidget {
-  const _SelectedImageChip({
-    required this.image,
+class _SelectedMediaItem {
+  const _SelectedMediaItem({
+    required this.file,
+    required this.mediaType,
+  });
+
+  final XFile file;
+  final String mediaType;
+
+  bool get isVideo => mediaType == 'video';
+}
+
+class _SelectedMediaChip extends StatelessWidget {
+  const _SelectedMediaChip({
+    required this.item,
     required this.onRemove,
   });
 
-  final XFile image;
+  final _SelectedMediaItem item;
   final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
+    if (item.isVideo) {
+      return Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 140,
+            height: 92,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              color: Colors.white.withOpacity(0.10),
+              border: Border.all(color: Colors.white.withOpacity(0.16)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.videocam_outlined, color: Colors.white),
+                const SizedBox(height: 8),
+                Text(
+                  item.file.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            top: -6,
+            right: -6,
+            child: _RemoveMediaButton(onTap: onRemove),
+          ),
+        ],
+      );
+    }
+
     return Stack(
       clipBehavior: Clip.none,
       children: [
         FutureBuilder<Uint8List>(
-          future: image.readAsBytes(),
+          future: item.file.readAsBytes(),
           builder: (context, snapshot) {
             return Container(
               width: 92,
@@ -763,24 +1015,37 @@ class _SelectedImageChip extends StatelessWidget {
         Positioned(
           top: -6,
           right: -6,
-          child: InkWell(
-            onTap: onRemove,
-            child: Container(
-              width: 24,
-              height: 24,
-              decoration: const BoxDecoration(
-                color: Color(0xFF111827),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.close,
-                size: 14,
-                color: Colors.white,
-              ),
-            ),
-          ),
+          child: _RemoveMediaButton(onTap: onRemove),
         ),
       ],
+    );
+  }
+}
+
+class _RemoveMediaButton extends StatelessWidget {
+  const _RemoveMediaButton({
+    required this.onTap,
+  });
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        width: 24,
+        height: 24,
+        decoration: const BoxDecoration(
+          color: Color(0xFF111827),
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(
+          Icons.close,
+          size: 14,
+          color: Colors.white,
+        ),
+      ),
     );
   }
 }

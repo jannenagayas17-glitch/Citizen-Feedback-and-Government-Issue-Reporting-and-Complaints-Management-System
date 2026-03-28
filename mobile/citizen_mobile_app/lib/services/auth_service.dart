@@ -65,38 +65,44 @@ class AuthService {
     String? email,
     String? name,
   }) async {
-    final response = await http.post(
-      _buildUri('/auth/google-login'),
-      headers: await _headers(),
-      body: jsonEncode({
-        'id_token': idToken,
-        if (email != null) 'email': email,
-        if (name != null) 'name': name,
-      }),
-    );
+    try {
+      final response = await http.post(
+        _buildUri('/auth/google-login'),
+        headers: await _headers(),
+        body: jsonEncode({
+          'id_token': idToken,
+          if (email != null) 'email': email,
+          if (name != null) 'name': name,
+        }),
+      );
 
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
 
-    if (response.statusCode == 200) {
-      final token = data['token']?.toString();
-      final user = data['user'] as Map<String, dynamic>?;
+      if (response.statusCode == 200) {
+        final token = data['token']?.toString();
+        final user = data['user'] as Map<String, dynamic>?;
 
-      if (token == null || user == null) {
-        throw Exception('Invalid Google login response from server');
+        if (token == null || user == null) {
+          throw Exception('Invalid Google login response from server');
+        }
+
+        await TokenStorage.saveToken(token);
+        await TokenStorage.saveRole(user['role']?.toString() ?? 'citizen');
+
+        return data;
       }
 
-      await TokenStorage.saveToken(token);
-      await TokenStorage.saveRole(user['role']?.toString() ?? 'citizen');
-
-      return data;
+      throw Exception(
+        data['message'] ??
+            (data['errors'] != null
+                ? data['errors'].toString()
+                : 'Google login failed'),
+      );
+    } on http.ClientException {
+      throw Exception(
+        'Unable to reach the Google login server. Restart the backend and verify that browser API access is allowed.',
+      );
     }
-
-    throw Exception(
-      data['message'] ??
-          (data['errors'] != null
-              ? data['errors'].toString()
-              : 'Google login failed'),
-    );
   }
 
   Future<Map<String, dynamic>> register({
@@ -291,6 +297,31 @@ class AuthService {
     }
 
     throw Exception('Failed to fetch users');
+  }
+
+  Future<List<dynamic>> getOffices({bool includeInactive = false}) async {
+    final suffix = includeInactive ? '?include_inactive=1' : '';
+    final response = await http.get(
+      _buildUri('/offices$suffix'),
+      headers: await _headers(authRequired: true),
+    );
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200 && data is List<dynamic>) {
+      return data;
+    }
+
+    if (data is Map<String, dynamic>) {
+      throw Exception(
+        data['message']?.toString() ??
+            (data['errors'] != null
+                ? data['errors'].toString()
+                : 'Failed to fetch offices'),
+      );
+    }
+
+    throw Exception('Failed to fetch offices');
   }
 
   Future<Map<String, dynamic>> verifyAccount(int id) async {

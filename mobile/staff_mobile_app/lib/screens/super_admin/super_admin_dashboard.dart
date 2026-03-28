@@ -7,6 +7,7 @@ import '../auth/login_screen.dart';
 import '../admin/complaint_management_screen.dart';
 import '../admin/admin_profile_screen.dart';
 import 'manage_admins_screen.dart';
+import 'manage_offices_screen.dart';
 
 class SuperAdminDashboard extends StatefulWidget {
   const SuperAdminDashboard({super.key});
@@ -20,6 +21,7 @@ enum _SuperAdminDesktopSection {
   reports,
   analytics,
   users,
+  offices,
   profile,
 }
 
@@ -97,6 +99,20 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const ManageAdminsScreen()),
+    );
+    await _refresh();
+  }
+
+  Future<void> _openOffices() async {
+    if (_isDesktopLayout(context)) {
+      setState(() {
+        _desktopSection = _SuperAdminDesktopSection.offices;
+      });
+      return;
+    }
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ManageOfficesScreen()),
     );
     await _refresh();
   }
@@ -306,6 +322,15 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
                     ),
                     const SizedBox(height: 12),
                     _ActionCard(
+                      icon: Icons.apartment_outlined,
+                      title: 'Manage Offices',
+                      subtitle:
+                          'Add Tacloban City departments or offices so citizens can route complaints correctly.',
+                      buttonLabel: 'Open Office Directory',
+                      onTap: _openOffices,
+                    ),
+                    const SizedBox(height: 12),
+                    _ActionCard(
                       icon: Icons.manage_accounts_outlined,
                       title: 'Manage Admin Users',
                       subtitle:
@@ -338,6 +363,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
                             onReports: _openReports,
                             onAnalytics: _openAnalytics,
                             onUsers: _openUsers,
+                            onOffices: _openOffices,
                             onProfile: _openProfile,
                             onLogout: _logout,
                           ),
@@ -444,6 +470,8 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
         return const AnalyticsReportsScreen();
       case _SuperAdminDesktopSection.users:
         return const ManageAdminsScreen();
+      case _SuperAdminDesktopSection.offices:
+        return const ManageOfficesScreen();
       case _SuperAdminDesktopSection.profile:
         return AdminProfileScreen(
           user: currentUser,
@@ -603,6 +631,7 @@ class _SuperDashboardSidebar extends StatelessWidget {
     required this.onReports,
     required this.onAnalytics,
     required this.onUsers,
+    required this.onOffices,
     required this.onProfile,
     required this.onLogout,
   });
@@ -613,6 +642,7 @@ class _SuperDashboardSidebar extends StatelessWidget {
   final VoidCallback onReports;
   final VoidCallback onAnalytics;
   final VoidCallback onUsers;
+  final VoidCallback onOffices;
   final VoidCallback onProfile;
   final VoidCallback onLogout;
 
@@ -697,6 +727,12 @@ class _SuperDashboardSidebar extends StatelessWidget {
                 label: 'Analytics',
                 isActive: selectedSection == _SuperAdminDesktopSection.analytics,
                 onTap: onAnalytics,
+              ),
+              _SuperSidebarNavItem(
+                icon: Icons.apartment_outlined,
+                label: 'Offices',
+                isActive: selectedSection == _SuperAdminDesktopSection.offices,
+                onTap: onOffices,
               ),
               _SuperSidebarNavItem(
                 icon: Icons.groups_outlined,

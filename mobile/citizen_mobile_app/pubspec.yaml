@@ -39,7 +39,7 @@ dev_dependencies:
 
 flutter:
   assets:
-    - assets/images/engineering_office_bg.png
+    - assets/images/Tacloban_City_bg.png
     - assets/images/logo.png
     - assets/images/logo_splash.png
     - assets/images/google_logo.svg

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../services/auth_service.dart';
 import '../../utils/app_routes.dart';
 import 'my_complaints_screen.dart';
+import 'send_feedback_screen.dart';
 
 class _CitizenProfileValidators {
   static final RegExp emojiRegex = RegExp(
@@ -238,6 +239,20 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
                       context,
                       MaterialPageRoute(
                         builder: (_) => const MyComplaintsScreen(),
+                      ),
+                    );
+                  },
+                ),
+                Divider(height: 1, color: Colors.white.withOpacity(0.10)),
+                _ActionTile(
+                  icon: Icons.rate_review_outlined,
+                  title: 'Send feedback',
+                  subtitle: 'Share suggestions, complaints, or praise',
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const SendFeedbackScreen(),
                       ),
                     );
                   },

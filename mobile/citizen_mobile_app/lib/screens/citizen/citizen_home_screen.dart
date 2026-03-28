@@ -1,14 +1,11 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
 import '../../services/dashboard_service.dart';
 import '../../services/report_service.dart';
-import 'complaint_detail_screen.dart';
-import 'my_complaints_screen.dart';
 import 'citizen_notifications_screen.dart';
 import 'citizen_profile_screen.dart';
+import 'my_complaints_screen.dart';
 import 'submit_complaint_screen.dart';
 
 class CitizenHomeScreen extends StatefulWidget {
@@ -24,12 +21,10 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
   final AuthService _authService = AuthService();
   final TextEditingController _searchController = TextEditingController();
 
+  late Future<Map<String, dynamic>> _payloadFuture;
   int _selectedFilter = 0;
   int _currentIndex = 0;
   String _searchQuery = '';
-  late Future<Map<String, dynamic>> _dashboardFuture;
-  late Future<List<dynamic>> _reportsFuture;
-  late Future<Map<String, dynamic>> _userFuture;
 
   @override
   void initState() {
@@ -38,27 +33,37 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
   }
 
   void _loadData() {
-    _dashboardFuture = _dashboardService.getDashboardStats();
-    _reportsFuture = _reportService.getReports();
-    _userFuture = _authService.getCurrentUser();
+    _payloadFuture = Future.wait<dynamic>([
+      _dashboardService.getDashboardStats(),
+      _reportService.getReports(),
+      _authService.getCurrentUser(),
+    ]).then(
+      (values) => {
+        'dashboard': values[0] as Map<String, dynamic>,
+        'reports': values[1] as List<dynamic>,
+        'user': values[2] as Map<String, dynamic>,
+      },
+    );
   }
 
   Future<void> _refresh() async {
-    final dashboardFuture = _dashboardService.getDashboardStats();
-    final reportsFuture = _reportService.getReports();
-    final userFuture = _authService.getCurrentUser();
+    final future = Future.wait<dynamic>([
+      _dashboardService.getDashboardStats(),
+      _reportService.getReports(),
+      _authService.getCurrentUser(),
+    ]).then(
+      (values) => {
+        'dashboard': values[0] as Map<String, dynamic>,
+        'reports': values[1] as List<dynamic>,
+        'user': values[2] as Map<String, dynamic>,
+      },
+    );
 
     setState(() {
-      _dashboardFuture = dashboardFuture;
-      _reportsFuture = reportsFuture;
-      _userFuture = userFuture;
+      _payloadFuture = future;
     });
 
-    await Future.wait([
-      dashboardFuture,
-      reportsFuture,
-      userFuture,
-    ]);
+    await future;
   }
 
   Future<void> _openSubmitReport() async {
@@ -84,18 +89,20 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
         builder: (_) => const MyComplaintsScreen(),
       ),
     );
+
     if (!mounted) return;
     setState(() => _currentIndex = 0);
     await _refresh();
   }
 
-  Future<void> _openNotifications(List<dynamic> reports) async {
+  Future<void> _openNotifications() async {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => CitizenNotificationsScreen(reports: reports),
+        builder: (_) => const CitizenNotificationsScreen(),
       ),
     );
+
     if (!mounted) return;
     setState(() => _currentIndex = 0);
     await _refresh();
@@ -108,6 +115,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
         builder: (_) => CitizenProfileScreen(user: user),
       ),
     );
+
     if (!mounted) return;
     setState(() => _currentIndex = 0);
     await _refresh();
@@ -121,133 +129,95 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const primaryBlue = Color(0xFF2563EB);
-
     return Scaffold(
-      backgroundColor: const Color(0xFF0C1727),
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFF0C1727),
-                  Color(0xFF1E293B),
-                  Color(0xFF463327),
-                ],
-              ),
-            ),
+      backgroundColor: const Color(0xFF0B1322),
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF0B1322),
+              Color(0xFF10192E),
+              Color(0xFF0E1525),
+            ],
           ),
-          SafeArea(
-            child: RefreshIndicator(
-              onRefresh: _refresh,
-              child: FutureBuilder<Map<String, dynamic>>(
-            future: Future.wait<dynamic>([
-              _dashboardFuture,
-              _reportsFuture,
-              _userFuture,
-            ]).then(
-              (values) => {
-                'dashboard': values[0] as Map<String, dynamic>,
-                'reports': values[1] as List<dynamic>,
-                'user': values[2] as Map<String, dynamic>,
-              },
-            ),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const Center(child: CircularProgressIndicator());
-              }
+        ),
+        child: SafeArea(
+          child: RefreshIndicator(
+            onRefresh: _refresh,
+            child: FutureBuilder<Map<String, dynamic>>(
+              future: _payloadFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-              if (snapshot.hasError) {
+                if (snapshot.hasError) {
+                  return ListView(
+                    padding: const EdgeInsets.all(24),
+                    children: [
+                      Text(
+                        snapshot.error.toString().replaceFirst('Exception: ', ''),
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ],
+                  );
+                }
+
+                final payload = snapshot.data ?? const <String, dynamic>{};
+                final dashboard =
+                    payload['dashboard'] as Map<String, dynamic>? ?? const {};
+                final reports = payload['reports'] as List<dynamic>? ?? const [];
+                final user = payload['user'] as Map<String, dynamic>? ?? const {};
+                final visibleReports = _applySearch(_applyCategoryFilter(reports));
+                final notificationCount = reports
+                    .where((item) => _normalizedStatus(item as Map<String, dynamic>) != 'Resolved')
+                    .length;
+
                 return ListView(
-                  padding: const EdgeInsets.all(24),
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 108),
                   children: [
-                    Text(
-                      snapshot.error.toString().replaceFirst('Exception: ', ''),
-                    ),
-                  ],
-                );
-              }
-
-              final payload = snapshot.data ?? const <String, dynamic>{};
-              final dashboard =
-                  payload['dashboard'] as Map<String, dynamic>? ?? const {};
-              final reports = payload['reports'] as List<dynamic>? ?? const [];
-              final user = payload['user'] as Map<String, dynamic>? ?? const {};
-              final filteredReports = _applySearch(_applyFilter(reports));
-
-              return ListView(
-                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
-                children: [
-                  _buildHeader(user, reports),
-                  const SizedBox(height: 14),
-                  _buildGlassShell(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildSearchBar(reports.length),
-                        const SizedBox(height: 14),
-                        _buildStatsRow(dashboard),
-                        const SizedBox(height: 12),
-                        _buildReportCard(),
-                        const SizedBox(height: 10),
-                        _buildNoticeCard(),
-                        const SizedBox(height: 12),
-                        _buildFilterChips(reports),
-                        const SizedBox(height: 16),
-                        _buildRecentHeader(filteredReports.length),
-                        const SizedBox(height: 10),
-                        if (filteredReports.isEmpty)
-                          _buildEmptyState()
-                        else
-                          ...filteredReports.map(
-                            (report) => Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
+                    _buildHeader(user, notificationCount),
+                    const SizedBox(height: 16),
+                    _buildSearchBar(),
+                    const SizedBox(height: 18),
+                    _buildStatsRow(dashboard),
+                    const SizedBox(height: 18),
+                    _buildReportCard(),
+                    const SizedBox(height: 14),
+                    _buildNoticeCard(),
+                    const SizedBox(height: 16),
+                    _buildFilterChips(reports),
+                    const SizedBox(height: 14),
+                    _buildRecentHeader(visibleReports.length),
+                    const SizedBox(height: 12),
+                    if (visibleReports.isEmpty)
+                      _buildEmptyState()
+                    else
+                      ...visibleReports.take(6).map(
+                            (item) => Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
                               child: _IssueCard(
-                                report: report as Map<String, dynamic>,
-                                onTap: () {
-                                  final id = report['id'];
-                                  final reportId = id is int ? id : int.tryParse('$id');
-                                  if (reportId == null) return;
-
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => ComplaintDetailScreen(
-                                        reportId: reportId,
-                                      ),
-                                    ),
-                                  ).then((_) async {
-                                    if (!mounted) return;
-                                    setState(() => _currentIndex = 0);
-                                    await _refresh();
-                                  });
-                                },
+                                report: item as Map<String, dynamic>,
+                                onTap: _openMyReports,
                               ),
                             ),
                           ),
-                      ],
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
+                  ],
+                );
+              },
             ),
           ),
-        ],
+        ),
       ),
-      bottomNavigationBar: _buildBottomNav(primaryBlue),
+      bottomNavigationBar: _buildBottomNav(),
       floatingActionButton: SizedBox(
         width: 62,
         height: 62,
         child: FloatingActionButton(
           shape: const CircleBorder(),
-          backgroundColor: primaryBlue,
+          backgroundColor: const Color(0xFF3B82F6),
           onPressed: _openSubmitReport,
           child: const Icon(Icons.add, color: Colors.white, size: 28),
         ),
@@ -256,233 +226,101 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
     );
   }
 
-  List<dynamic> _applyFilter(List<dynamic> reports) {
-    return _filterReportsForIndex(reports, _selectedFilter);
-  }
-
-  List<dynamic> _applySearch(List<dynamic> reports) {
-    final query = _searchQuery.trim().toLowerCase();
-    if (query.isEmpty) {
-      return reports;
-    }
-
-    return reports.where((item) {
-      final report = item as Map<String, dynamic>;
-      final title = (report['title'] ?? '').toString().toLowerCase();
-      final location = (report['location'] ?? '').toString().toLowerCase();
-      final barangay = (report['barangay'] ?? '').toString().toLowerCase();
-      return title.contains(query) ||
-          location.contains(query) ||
-          barangay.contains(query);
-    }).toList();
-  }
-
-  List<dynamic> _filterReportsForIndex(List<dynamic> reports, int index) {
-    if (index == 0) {
-      return reports;
-    }
-
-    final selected = _filterOptions[index].toLowerCase();
-    return reports.where((item) {
-      final report = item as Map<String, dynamic>;
-      final category = (report['category'] as Map<String, dynamic>?)?['name']
-              ?.toString()
-              .toLowerCase() ??
-          '';
-      return category.contains(selected);
-    }).toList();
-  }
-
-  List<String> get _filterOptions => const [
-        'All Issues',
-        'Roads',
-        'Water',
-        'Electric',
-      ];
-
-  Widget _buildHeader(Map<String, dynamic> user, List<dynamic> reports) {
-    final name = (user['name'] ?? 'Citizen').toString().trim();
-    final firstName = name.isEmpty ? 'Citizen' : name.split(' ').first;
-    final activeNotifications = reports
-        .where(
-          (item) => ((item as Map<String, dynamic>)['status'] ?? 'New')
-                  .toString() !=
-              'Resolved',
-        )
-        .length;
-
-    return _buildGlassShell(
-      child: Row(
-        children: [
-          Container(
-            width: 68,
-            height: 68,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.white.withOpacity(0.14),
-              border: Border.all(
-                color: const Color(0xFFD8B15A),
-                width: 2,
-              ),
+  Widget _buildHeader(
+    Map<String, dynamic> user,
+    int notificationCount,
+  ) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: const Color(0xFF3B82F6),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.22),
+              width: 1.5,
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(5),
-              child: ClipOval(
-                child: Image.asset(
-                  'assets/images/logo.png',
-                  fit: BoxFit.contain,
-                ),
+          ),
+          child: ClipOval(
+            child: SizedBox.expand(
+              child: Image.asset(
+                'assets/images/logo.png',
+                fit: BoxFit.cover,
               ),
             ),
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Good day',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.72),
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  firstName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  'Tacloban City Engineering Office',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.82),
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Column(
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(.12),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.location_on_outlined, color: Colors.white, size: 14),
-                    SizedBox(width: 4),
-                    Text(
-                      'Tacloban',
-                      style: TextStyle(color: Colors.white, fontSize: 11),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              InkWell(
-                onTap: () => _openNotifications(reports),
-                borderRadius: BorderRadius.circular(17),
-                child: Stack(
-                  children: [
-                    Container(
-                      width: 34,
-                      height: 34,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(.16),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.notifications_none,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    ),
-                    if (activeNotifications > 0)
-                      Positioned(
-                        right: 0,
-                        top: 0,
-                        child: Container(
-                          width: 18,
-                          height: 18,
-                          decoration: BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            activeNotifications > 9 ? '9+' : '$activeNotifications',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 7,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
+              const Text(
+                'Citizen Tacloban City\nFeedback',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  height: 1.35,
                 ),
               ),
             ],
           ),
-        ],
-      ),
+        ),
+        _HeaderPill(
+          icon: Icons.location_on,
+          label: 'Tacloban',
+          onTap: () {},
+        ),
+        const SizedBox(width: 10),
+        _BellButton(
+          count: notificationCount,
+          onTap: _openNotifications,
+        ),
+      ],
     );
   }
 
-  Widget _buildSearchBar(int reportsCount) {
+  Widget _buildSearchBar() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      height: 50,
+      height: 52,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withOpacity(0.16)),
+        color: const Color(0xFF1A2338),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
       ),
       child: Row(
         children: [
-          Icon(Icons.search, color: Colors.white.withOpacity(0.72), size: 20),
-          const SizedBox(width: 8),
+          const Icon(Icons.search, color: Color(0xFF7C8AAA), size: 20),
+          const SizedBox(width: 10),
           Expanded(
             child: TextField(
               controller: _searchController,
               onChanged: (value) {
                 setState(() => _searchQuery = value);
               },
-              decoration: InputDecoration(
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
                 border: InputBorder.none,
-                hintText: reportsCount == 0
-                    ? 'No submitted issues yet'
-                    : 'Search by title or location',
+                hintText: 'Search by title or location...',
                 hintStyle: TextStyle(
-                  color: Colors.white.withOpacity(0.45),
-                  fontSize: 13,
+                  color: Color(0xFF7C8AAA),
+                  fontSize: 15,
                 ),
               ),
-              style: const TextStyle(color: Colors.white),
             ),
           ),
           if (_searchQuery.isNotEmpty)
-            InkWell(
+            GestureDetector(
               onTap: () {
                 _searchController.clear();
                 setState(() => _searchQuery = '');
               },
-              child: Icon(
-                Icons.close,
-                color: Colors.white.withOpacity(0.72),
-                size: 18,
-              ),
+              child: const Icon(Icons.close, color: Color(0xFF7C8AAA), size: 18),
             ),
         ],
       ),
@@ -490,46 +328,41 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
   }
 
   Widget _buildStatsRow(Map<String, dynamic> dashboard) {
-    final total = '${dashboard['total_reports'] ?? 0}';
-    final newCount = '${dashboard['new'] ?? 0}';
-    final inProgress = '${dashboard['in_progress'] ?? 0}';
-    final resolved = '${dashboard['resolved'] ?? 0}';
-
     return Row(
       children: [
         Expanded(
-          child: _StatCard(
-            number: total,
-            label: 'Total\nIssues',
-            color: const Color(0xFF94D82D),
-            icon: Icons.insert_chart_outlined,
+          child: _StatTile(
+            icon: Icons.bar_chart_rounded,
+            iconColor: const Color(0xFF6EE7B7),
+            value: '${dashboard['total_reports'] ?? 0}',
+            label: 'Total Issues',
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 10),
         Expanded(
-          child: _StatCard(
-            number: newCount,
-            label: 'New',
-            color: const Color(0xFF20C997),
+          child: _StatTile(
             icon: Icons.fiber_new_rounded,
+            iconColor: const Color(0xFFFBBF24),
+            value: '${dashboard['new'] ?? 0}',
+            label: 'New',
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 10),
         Expanded(
-          child: _StatCard(
-            number: inProgress,
+          child: _StatTile(
+            icon: Icons.access_time_filled_rounded,
+            iconColor: const Color(0xFFE5E7EB),
+            value: '${dashboard['in_progress'] ?? 0}',
             label: 'Active',
-            color: const Color(0xFFFF922B),
-            icon: Icons.access_time,
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 10),
         Expanded(
-          child: _StatCard(
-            number: resolved,
+          child: _StatTile(
+            icon: Icons.check_box_rounded,
+            iconColor: const Color(0xFF4ADE80),
+            value: '${dashboard['resolved'] ?? 0}',
             label: 'Resolved',
-            color: const Color(0xFFFF6B6B),
-            icon: Icons.check_circle_outline,
           ),
         ),
       ],
@@ -537,19 +370,22 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
   }
 
   Widget _buildReportCard() {
-    const primaryBlue = Color(0xFF2563EB);
-
     return InkWell(
       onTap: _openSubmitReport,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(18),
       child: Container(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         decoration: BoxDecoration(
-          color: primaryBlue.withOpacity(0.92),
-          borderRadius: BorderRadius.circular(16),
+          gradient: const LinearGradient(
+            colors: [
+              Color(0xFF4F83FF),
+              Color(0xFF3B82F6),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
-              color: primaryBlue.withOpacity(0.28),
+              color: const Color(0xFF3B82F6).withOpacity(0.32),
               blurRadius: 18,
               offset: const Offset(0, 10),
             ),
@@ -558,11 +394,11 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
         child: const Row(
           children: [
             CircleAvatar(
-              radius: 17,
-              backgroundColor: Color(0x33FFFFFF),
+              radius: 19,
+              backgroundColor: Color(0x30FFFFFF),
               child: Icon(Icons.add, color: Colors.white),
             ),
-            SizedBox(width: 12),
+            SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -572,15 +408,15 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
-                      fontSize: 15,
+                      fontSize: 18,
                     ),
                   ),
                   SizedBox(height: 2),
-                    Text(
-                    'Submit a new issue directly to the live system',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 11,
+                  Text(
+                    'Submit directly to the live system',
+                    style: TextStyle(
+                      color: Color(0xFFDCEAFF),
+                      fontSize: 13,
                     ),
                   ),
                 ],
@@ -595,37 +431,36 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
 
   Widget _buildNoticeCard() {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF4D6),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFFFE8A3)),
+        color: const Color(0xFF2A2112),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFF8F6A1F)),
       ),
-      child: const Row(
+      child: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.info_outline, color: Color(0xFFFFA000), size: 18),
-          SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Live reporting is enabled',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 12,
-                    color: Color(0xFF8D6E00),
-                  ),
+          Row(
+            children: [
+              Icon(Icons.circle, color: Color(0xFFFBBF24), size: 10),
+              SizedBox(width: 8),
+              Text(
+                'Live reporting is enabled',
+                style: TextStyle(
+                  color: Color(0xFFFBBF24),
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
                 ),
-                SizedBox(height: 2),
-                Text(
-                  'New reports submitted from this form are stored in the backend database immediately.',
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    color: Color(0xFF8D6E00),
-                  ),
-                ),
-              ],
+              ),
+            ],
+          ),
+          SizedBox(height: 8),
+          Text(
+            'New reports submitted are stored in the backend database immediately.',
+            style: TextStyle(
+              color: Color(0xFFD7C7A5),
+              fontSize: 12.5,
+              height: 1.4,
             ),
           ),
         ],
@@ -634,38 +469,41 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
   }
 
   Widget _buildFilterChips(List<dynamic> reports) {
+    final filters = _buildFilters(reports);
+
     return SizedBox(
-      height: 34,
+      height: 38,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: _filterOptions.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemCount: filters.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
         itemBuilder: (context, index) {
+          final filter = filters[index];
           final selected = _selectedFilter == index;
-          final count = _filterReportsForIndex(reports, index).length;
+
           return GestureDetector(
             onTap: () {
               setState(() => _selectedFilter = index);
             },
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 9),
               decoration: BoxDecoration(
-                color: selected
-                    ? const Color(0xFF2563EB)
-                    : Colors.white.withOpacity(0.10),
-                borderRadius: BorderRadius.circular(18),
+                color: selected ? const Color(0xFF3B82F6) : const Color(0xFF121B2F),
+                borderRadius: BorderRadius.circular(22),
                 border: Border.all(
                   color: selected
-                      ? const Color(0xFF2563EB)
-                      : Colors.white.withOpacity(0.14),
+                      ? const Color(0xFF3B82F6)
+                      : Colors.white.withOpacity(0.08),
                 ),
               ),
               child: Text(
-                '${_filterOptions[index]}${index == 0 ? '' : ' ($count)'}',
+                filter == 'All Issues'
+                    ? filter
+                    : '$filter (${_filterCountFor(reports, filter)})',
                 style: TextStyle(
-                  color: selected ? Colors.white : Colors.white.withOpacity(0.78),
-                  fontSize: 12,
+                  color: selected ? Colors.white : const Color(0xFFB7C0D5),
                   fontWeight: FontWeight.w600,
+                  fontSize: 12,
                 ),
               ),
             ),
@@ -681,15 +519,18 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
         const Text(
           'Recent Issues',
           style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
             color: Colors.white,
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
           ),
         ),
         const Spacer(),
         Text(
           '$count reports',
-          style: TextStyle(color: Colors.white.withOpacity(0.56), fontSize: 11),
+          style: const TextStyle(
+            color: Color(0xFF77839D),
+            fontSize: 12,
+          ),
         ),
       ],
     );
@@ -697,60 +538,58 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
 
   Widget _buildEmptyState() {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: const Color(0xFF151E31),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
       ),
       child: Column(
         children: [
-          Icon(
-            Icons.inbox_outlined,
-            size: 36,
-            color: Colors.white.withOpacity(0.7),
-          ),
+          const Icon(Icons.inbox_outlined, color: Colors.white70, size: 32),
           const SizedBox(height: 10),
           const Text(
-            'No reports yet',
+            'No reports found',
             style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
               color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: 16,
             ),
           ),
           const SizedBox(height: 6),
           Text(
-            'Tap "Report an Issue" to create your first real report and save it to the database.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white.withOpacity(0.68)),
+            'Try another search or submit your first complaint.',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.62),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildBottomNav(Color primaryBlue) {
+  Widget _buildBottomNav() {
     return BottomAppBar(
+      color: const Color(0xFF101827),
       shape: const CircularNotchedRectangle(),
-      notchMargin: 8,
-      color: const Color(0xFF1B2334),
+      notchMargin: 10,
       child: SizedBox(
-        height: 68,
+        height: 72,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
             _NavItem(
-              icon: Icons.home_outlined,
+              icon: Icons.home_filled,
               label: 'Home',
               selected: _currentIndex == 0,
+              color: const Color(0xFF3B82F6),
               onTap: () => setState(() => _currentIndex = 0),
             ),
             _NavItem(
               icon: Icons.description_outlined,
               label: 'Reports',
               selected: _currentIndex == 1,
+              color: const Color(0xFFE5E7EB),
               onTap: () {
                 setState(() => _currentIndex = 1);
                 _openMyReports();
@@ -758,21 +597,25 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
             ),
             const SizedBox(width: 56),
             _NavItem(
-              icon: Icons.notifications_none,
+              icon: Icons.notifications_active_outlined,
               label: 'Alerts',
               selected: _currentIndex == 3,
+              color: const Color(0xFFFBBF24),
               onTap: () {
                 setState(() => _currentIndex = 3);
-                _reportsFuture.then(_openNotifications);
+                _openNotifications();
               },
             ),
             _NavItem(
               icon: Icons.person_outline,
               label: 'Profile',
               selected: _currentIndex == 4,
-              onTap: () {
+              color: const Color(0xFF8B5CF6),
+              onTap: () async {
+                final user = await _authService.getCurrentUser();
+                if (!mounted) return;
                 setState(() => _currentIndex = 4);
-                _userFuture.then(_openProfile);
+                await _openProfile(user);
               },
             ),
           ],
@@ -781,83 +624,219 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
     );
   }
 
-  Widget _buildGlassShell({required Widget child}) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withOpacity(0.18)),
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Colors.white.withOpacity(0.18),
-                Colors.white.withOpacity(0.08),
-              ],
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.18),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
+  List<String> _buildFilters(List<dynamic> reports) {
+    final names = reports
+        .map((item) => ((item as Map<String, dynamic>)['category']
+                as Map<String, dynamic>?)?['name']
+            ?.toString())
+        .whereType<String>()
+        .toSet()
+        .toList()
+      ..sort();
+
+    return ['All Issues', ...names];
+  }
+
+  List<dynamic> _applyCategoryFilter(List<dynamic> reports) {
+    final filters = _buildFilters(reports);
+    final selected = filters[_selectedFilter.clamp(0, filters.length - 1)];
+    if (selected == 'All Issues') {
+      return reports;
+    }
+
+    return reports.where((item) {
+      final category = ((item as Map<String, dynamic>)['category']
+                  as Map<String, dynamic>?)?['name']
+              ?.toString() ??
+          '';
+      return category == selected;
+    }).toList();
+  }
+
+  int _filterCountFor(List<dynamic> reports, String filter) {
+    if (filter == 'All Issues') {
+      return reports.length;
+    }
+
+    return reports.where((item) {
+      final category = ((item as Map<String, dynamic>)['category']
+                  as Map<String, dynamic>?)?['name']
+              ?.toString() ??
+          '';
+      return category == filter;
+    }).length;
+  }
+
+  List<dynamic> _applySearch(List<dynamic> reports) {
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isEmpty) {
+      return reports;
+    }
+
+    return reports.where((item) {
+      final report = item as Map<String, dynamic>;
+      final title = (report['title'] ?? '').toString().toLowerCase();
+      final location = (report['location'] ?? '').toString().toLowerCase();
+      return title.contains(query) || location.contains(query);
+    }).toList();
+  }
+
+  String _normalizedStatus(Map<String, dynamic> report) {
+    final raw = (report['status'] ?? 'Submitted').toString();
+    switch (raw) {
+      case 'New':
+        return 'New';
+      case 'Pending':
+        return 'Pending';
+      default:
+        return raw;
+    }
+  }
+}
+
+class _HeaderPill extends StatelessWidget {
+  const _HeaderPill({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(22),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF182238),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: Colors.white.withOpacity(0.08)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: const Color(0xFFF472B6), size: 15),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Color(0xFFB9C3D9),
+                fontSize: 12,
               ),
-            ],
-          ),
-          child: child,
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.number,
-    required this.label,
-    required this.color,
-    required this.icon,
+class _BellButton extends StatelessWidget {
+  const _BellButton({
+    required this.count,
+    required this.onTap,
   });
 
-  final String number;
-  final String label;
-  final Color color;
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: const Color(0xFF182238),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.white.withOpacity(0.08)),
+            ),
+            child: const Icon(
+              Icons.notifications_active,
+              color: Color(0xFFFBBF24),
+              size: 19,
+            ),
+          ),
+          if (count > 0)
+            Positioned(
+              right: -2,
+              top: -2,
+              child: Container(
+                width: 18,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFF0B1322), width: 2),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  count > 9 ? '9+' : '$count',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 8,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatTile extends StatelessWidget {
+  const _StatTile({
+    required this.icon,
+    required this.iconColor,
+    required this.value,
+    required this.label,
+  });
+
   final IconData icon;
+  final Color iconColor;
+  final String value;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(minHeight: 82),
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        color: const Color(0xFF171F32),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
       ),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: color, size: 18),
-          const SizedBox(height: 6),
+          Icon(icon, color: iconColor, size: 20),
+          const SizedBox(height: 10),
           Text(
-            number,
+            value,
             style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
               color: Colors.white,
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              height: 1,
             ),
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 4),
           Text(
             label,
             textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 10,
-              color: Colors.white.withOpacity(0.72),
-              height: 1.2,
+            style: const TextStyle(
+              color: Color(0xFF9EA9C2),
+              fontSize: 12,
             ),
           ),
         ],
@@ -875,80 +854,45 @@ class _IssueCard extends StatelessWidget {
   final Map<String, dynamic> report;
   final VoidCallback onTap;
 
-  Color _statusColor(String status) {
-    switch (status) {
-      case 'Resolved':
-        return const Color(0xFF69DB7C);
-      case 'In Progress':
-        return const Color(0xFFFFC078);
-      case 'Pending':
-        return const Color(0xFF74C0FC);
-      case 'New':
-        return const Color(0xFFE599F7);
-      default:
-        return Colors.grey;
-    }
-  }
-
-  IconData _categoryIcon(String categoryName) {
-    final normalized = categoryName.toLowerCase();
-    if (normalized.contains('road')) return Icons.construction;
-    if (normalized.contains('water')) return Icons.water_drop;
-    if (normalized.contains('electric')) return Icons.bolt;
-    if (normalized.contains('waste')) return Icons.delete_outline;
-    return Icons.report_problem_outlined;
-  }
-
-  Color _categoryColor(String categoryName) {
-    final normalized = categoryName.toLowerCase();
-    if (normalized.contains('road')) return const Color(0xFFFF6B6B);
-    if (normalized.contains('water')) return const Color(0xFF4DABF7);
-    if (normalized.contains('electric')) return const Color(0xFFFFA94D);
-    if (normalized.contains('waste')) return const Color(0xFFADB5BD);
-    return const Color(0xFF7C83FD);
-  }
-
   @override
   Widget build(BuildContext context) {
     final title = (report['title'] ?? 'Untitled report').toString();
-    final location = (report['location'] ?? report['barangay'] ?? 'No location')
-        .toString();
     final categoryName =
         ((report['category'] as Map<String, dynamic>?)?['name'] ?? 'General')
             .toString();
-    final priority = (report['priority'] ?? 'Normal').toString();
-    final status = (report['status'] ?? 'New').toString();
-    final color = _categoryColor(categoryName);
+    final location = (report['location'] ?? 'No location').toString();
+    final officeName =
+        ((report['office'] as Map<String, dynamic>?)?['name'] ?? 'Assigned office')
+            .toString();
+    final status = _displayStatus((report['status'] ?? 'Pending').toString());
     final statusColor = _statusColor(status);
-    final date = (report['created_at'] ?? '').toString();
+    final iconColor = _iconColor(categoryName);
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(18),
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.10),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withOpacity(0.14)),
+          color: const Color(0xFF171F32),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Colors.white.withOpacity(0.08)),
         ),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              width: 34,
-              height: 34,
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
-                color: color.withOpacity(.12),
-                borderRadius: BorderRadius.circular(10),
+                color: iconColor.withOpacity(0.14),
+                borderRadius: BorderRadius.circular(14),
               ),
               child: Icon(
-                _categoryIcon(categoryName),
-                color: color,
-                size: 18,
+                _issueIcon(categoryName),
+                color: iconColor,
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -958,36 +902,31 @@ class _IssueCard extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      height: 1.25,
                       color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 18,
+                      height: 1.15,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    location,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.62),
-                      fontSize: 10.5,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Row(
                     children: [
-                      _smallTag(
-                        priority,
-                        bg: color.withOpacity(.12),
-                        textColor: color,
+                      const Text(
+                        '•',
+                        style: TextStyle(
+                          color: Color(0xFFFB7185),
+                          fontSize: 12,
+                        ),
                       ),
-                      const SizedBox(width: 8),
-                      Flexible(
+                      const SizedBox(width: 6),
+                      Expanded(
                         child: Text(
-                          categoryName,
+                          '$location - $officeName',
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.58),
-                            fontSize: 10.5,
+                          style: const TextStyle(
+                            color: Color(0xFFA2AEC7),
+                            fontSize: 12.5,
                           ),
                         ),
                       ),
@@ -996,24 +935,21 @@ class _IssueCard extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                _smallTag(
-                  status,
-                  bg: statusColor.withOpacity(.15),
-                  textColor: statusColor,
+            const SizedBox(width: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: statusColor.withOpacity(0.18),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Text(
+                status,
+                style: TextStyle(
+                  color: statusColor,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
                 ),
-                const SizedBox(height: 28),
-                Text(
-                  date.isEmpty ? '' : date.substring(0, 10),
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.56),
-                    fontSize: 10,
-                  ),
-                ),
-              ],
+              ),
             ),
           ],
         ),
@@ -1021,26 +957,46 @@ class _IssueCard extends StatelessWidget {
     );
   }
 
-  Widget _smallTag(
-    String text, {
-    required Color bg,
-    required Color textColor,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: textColor,
-          fontSize: 9.5,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
+  String _displayStatus(String raw) {
+    switch (raw) {
+      case 'New':
+        return 'New';
+      case 'Pending':
+        return 'Pending';
+      default:
+        return raw;
+    }
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'Resolved':
+        return const Color(0xFF4ADE80);
+      case 'In Progress':
+        return const Color(0xFF60A5FA);
+      case 'Pending':
+        return const Color(0xFFFBBF24);
+      case 'New':
+        return const Color(0xFFFB7185);
+      default:
+        return Colors.white70;
+    }
+  }
+
+  IconData _issueIcon(String category) {
+    final normalized = category.toLowerCase();
+    if (normalized.contains('road')) return Icons.handyman_outlined;
+    if (normalized.contains('water')) return Icons.water_drop_outlined;
+    if (normalized.contains('electric')) return Icons.bolt_outlined;
+    return Icons.report_outlined;
+  }
+
+  Color _iconColor(String category) {
+    final normalized = category.toLowerCase();
+    if (normalized.contains('road')) return const Color(0xFFF472B6);
+    if (normalized.contains('water')) return const Color(0xFF60A5FA);
+    if (normalized.contains('electric')) return const Color(0xFFFBBF24);
+    return const Color(0xFFA78BFA);
   }
 }
 
@@ -1049,38 +1005,38 @@ class _NavItem extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.selected,
+    required this.color,
     required this.onTap,
   });
 
   final IconData icon;
   final String label;
   final bool selected;
+  final Color color;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    const active = Color(0xFF2563EB);
-
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: SizedBox(
-        width: 56,
+        width: 58,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               icon,
               size: 22,
-              color: selected ? active : Colors.white.withOpacity(0.6),
+              color: selected ? color : const Color(0xFF7B86A1),
             ),
             const SizedBox(height: 2),
             Text(
               label,
               style: TextStyle(
-                fontSize: 10,
-                color: selected ? active : Colors.white.withOpacity(0.6),
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                fontSize: 10.5,
+                color: selected ? color : const Color(0xFF7B86A1),
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
               ),
             ),
           ],

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../data/tacloban_barangays.dart';
+import '../../services/report_feedback_service.dart';
 import '../../services/report_service.dart';
 
 class SubmitComplaintScreen extends StatefulWidget {
@@ -26,98 +28,270 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _locationController = TextEditingController();
   final TextEditingController _barangayController = TextEditingController();
+  final TextEditingController _latitudeController = TextEditingController();
+  final TextEditingController _longitudeController = TextEditingController();
 
   late Future<List<dynamic>> _categoriesFuture;
+  late Future<List<dynamic>> _officesFuture;
+
   int? _selectedCategoryId;
+  int? _selectedOfficeId;
   String _selectedPriority = 'Normal';
+  bool _showGpsFields = false;
   bool _isSubmitting = false;
-  final List<XFile> _selectedImages = [];
+  final List<_SelectedMediaItem> _selectedMedia = [];
+
   String? _categoryError;
+  String? _officeError;
   String? _titleError;
   String? _locationError;
   String? _barangayError;
+  String? _latitudeError;
+  String? _longitudeError;
   String? _descriptionError;
 
-  static const List<String> _priorities = [
-    'Low',
-    'Normal',
-    'High',
-    'Urgent',
-  ];
-
+  static const List<String> _priorities = ['Low', 'Normal', 'High', 'Urgent'];
   @override
   void initState() {
     super.initState();
     _categoriesFuture = _reportService.getCategories();
+    _officesFuture = _reportService.getOffices();
   }
 
-  Future<void> _pickImages() async {
-    try {
-      final files = await _imagePicker.pickMultiImage(imageQuality: 80);
-      if (files.isEmpty) return;
-
-      setState(() {
-        final remainingSlots = 3 - _selectedImages.length;
-        _selectedImages.addAll(files.take(remainingSlots));
-      });
-    } catch (e) {
-      _showSnack('Unable to select images: ${e.toString().replaceFirst('Exception: ', '')}');
-    }
-  }
-
-  void _removeImageAt(int index) {
-    setState(() => _selectedImages.removeAt(index));
-  }
-
-  void _reloadCategories() {
-    setState(() {
-      _selectedCategoryId = null;
-      _categoryError = null;
-      _categoriesFuture = _reportService.getCategories();
-    });
-  }
-
-  bool _containsEmoji(String value) {
-    return _emojiRegex.hasMatch(value);
-  }
+  bool _containsEmoji(String value) => _emojiRegex.hasMatch(value);
 
   void _clearErrors() {
     _categoryError = null;
+    _officeError = null;
     _titleError = null;
     _locationError = null;
     _barangayError = null;
+    _latitudeError = null;
+    _longitudeError = null;
     _descriptionError = null;
+  }
+
+  Future<void> _pickImages() async {
+    final files = await _imagePicker.pickMultiImage(imageQuality: 80);
+    if (files.isEmpty) return;
+
+    setState(() {
+      final remaining = 3 - _selectedMedia.length;
+      _selectedMedia.addAll(
+        files.take(remaining).map(
+              (file) => _SelectedMediaItem(file: file, mediaType: 'image'),
+            ),
+      );
+    });
+  }
+
+  Future<void> _pickVideo() async {
+    if (_selectedMedia.length >= 3) {
+      _showSnack('You can upload up to 3 attachments only.');
+      return;
+    }
+
+    final file = await _imagePicker.pickVideo(source: ImageSource.gallery);
+    if (file == null) return;
+
+    setState(() {
+      _selectedMedia.add(_SelectedMediaItem(file: file, mediaType: 'video'));
+    });
+  }
+
+  Future<void> _showMediaPickerOptions() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF141C2B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Upload Evidence',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Choose image or video evidence for this report.',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.68),
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                _buildMediaOptionTile(
+                  icon: Icons.photo_library_outlined,
+                  title: 'Add photos',
+                  subtitle: 'Upload JPG or PNG images',
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickImages();
+                  },
+                ),
+                const SizedBox(height: 12),
+                _buildMediaOptionTile(
+                  icon: Icons.videocam_outlined,
+                  title: 'Add video',
+                  subtitle: 'Upload one MP4 video',
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickVideo();
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showBarangayPicker() async {
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF141C2B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        final searchController = TextEditingController();
+        var filtered = List<String>.from(taclobanBarangays);
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            void filter(String value) {
+              final query = value.trim().toLowerCase();
+              setModalState(() {
+                filtered = taclobanBarangays
+                    .where((barangay) => barangay.toLowerCase().contains(query))
+                    .toList();
+              });
+            }
+
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  16,
+                  16,
+                  MediaQuery.of(context).viewInsets.bottom + 16,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: searchController,
+                      onChanged: filter,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: _inputDecoration(
+                        'Search Tacloban barangay',
+                        prefixIcon: const Icon(
+                          Icons.search,
+                          color: Colors.white54,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 360),
+                      child: filtered.isEmpty
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Text(
+                                  'No Tacloban barangay matched your search.',
+                                  style: TextStyle(color: Colors.white.withOpacity(0.72)),
+                                ),
+                              ),
+                            )
+                          : ListView.separated(
+                              shrinkWrap: true,
+                              itemCount: filtered.length,
+                              separatorBuilder: (_, __) => Divider(
+                                height: 1,
+                                color: Colors.white.withOpacity(0.08),
+                              ),
+                              itemBuilder: (context, index) {
+                                final barangay = filtered[index];
+                                return ListTile(
+                                  title: Text(
+                                    barangay,
+                                    style: const TextStyle(color: Colors.white),
+                                  ),
+                                  onTap: () => Navigator.pop(context, barangay),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (!mounted || selected == null) return;
+
+    setState(() {
+      _locationController.text = selected;
+      _locationError = null;
+      _barangayError = null;
+    });
   }
 
   Future<void> _submit() async {
     final title = _titleController.text.trim();
     final description = _descriptionController.text.trim();
-    final location = _locationController.text.trim();
-    final barangay = _barangayController.text.trim();
+    final selectedBarangay = _locationController.text.trim();
+    final landmark = _barangayController.text.trim();
+    final location = landmark.isEmpty
+        ? '$selectedBarangay, Tacloban City'
+        : '$landmark, $selectedBarangay, Tacloban City';
+    final barangay = selectedBarangay;
+    final latitudeText = _latitudeController.text.trim();
+    final longitudeText = _longitudeController.text.trim();
+    final latitude = latitudeText.isEmpty ? null : double.tryParse(latitudeText);
+    final longitude = longitudeText.isEmpty ? null : double.tryParse(longitudeText);
 
     setState(() {
       _clearErrors();
 
-      if (_selectedCategoryId == null) {
-        _categoryError = 'Please select a category.';
-      }
-
+      if (_selectedOfficeId == null) _officeError = 'Please select a government office.';
+      if (_selectedCategoryId == null) _categoryError = 'Please select a category.';
       if (title.isEmpty) {
         _titleError = 'Issue title is required.';
       } else if (_containsEmoji(title)) {
         _titleError = 'Emoji characters are not allowed.';
       }
-
-      if (location.isEmpty) {
-        _locationError = 'Location is required.';
-      } else if (_containsEmoji(location)) {
-        _locationError = 'Emoji characters are not allowed.';
+      if (selectedBarangay.isEmpty) {
+        _locationError = 'Please select a Tacloban City barangay.';
+      } else if (!taclobanBarangays.contains(selectedBarangay)) {
+        _locationError = 'Choose a valid Tacloban City barangay from the list.';
       }
-
-      if (barangay.isNotEmpty && _containsEmoji(barangay)) {
+      if (landmark.isNotEmpty && _containsEmoji(landmark)) {
         _barangayError = 'Emoji characters are not allowed.';
       }
-
+      if (latitudeText.isNotEmpty && latitude == null) {
+        _latitudeError = 'Enter a valid latitude value.';
+      }
+      if (longitudeText.isNotEmpty && longitude == null) {
+        _longitudeError = 'Enter a valid longitude value.';
+      }
       if (description.isEmpty) {
         _descriptionError = 'Description is required.';
       } else if (_containsEmoji(description)) {
@@ -125,63 +299,190 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
       }
     });
 
-    if (_categoryError != null ||
-        _titleError != null ||
-        _locationError != null ||
-        _barangayError != null ||
-        _descriptionError != null) {
+    if ([
+      _categoryError,
+      _officeError,
+      _titleError,
+      _locationError,
+      _barangayError,
+      _latitudeError,
+      _longitudeError,
+      _descriptionError,
+    ].any((item) => item != null)) {
       return;
     }
 
     setState(() => _isSubmitting = true);
 
     try {
-      final categories = await _categoriesFuture.catchError(
-        (_) => <dynamic>[],
-      );
+      final categories = await _categoriesFuture.catchError((_) => <dynamic>[]);
       final selectedCategory = _selectedCategory(categories);
 
-      final response = await _reportService.createReport(
-        categoryId: selectedCategory == null
-            ? _selectedCategoryId
-            : _categoryIdOf(selectedCategory),
-        categoryName: selectedCategory == null
-            ? null
-            : (selectedCategory['name'] ?? '').toString(),
+      final verification = await _reportService.requestSubmissionVerification(
+        categoryId: selectedCategory == null ? _selectedCategoryId : _categoryIdOf(selectedCategory),
+        categoryName: selectedCategory == null ? null : (selectedCategory['name'] ?? '').toString(),
+        officeId: _selectedOfficeId,
         title: title,
         description: description,
         location: location,
         barangay: barangay,
         priority: _selectedPriority,
+        latitude: latitude,
+        longitude: longitude,
       );
 
       if (!mounted) return;
 
+      final response = await _showOtpVerificationDialog(
+        verification['email']?.toString() ?? '',
+      );
+      if (!mounted || response == null) return;
+
       final report = response['report'] as Map<String, dynamic>?;
       final rawReportId = report?['id'];
-      final reportId = rawReportId is int
-          ? rawReportId
-          : int.tryParse('${report?['id']}');
+      final reportId = rawReportId is int ? rawReportId : int.tryParse('$rawReportId');
 
-      if (reportId != null && _selectedImages.isNotEmpty) {
-        for (final image in _selectedImages) {
-          await _reportService.uploadImage(
-            reportId: reportId,
-            imageFile: image,
-          );
+      if (reportId != null && _selectedMedia.isNotEmpty) {
+        for (final media in _selectedMedia) {
+          await _reportService.uploadMedia(reportId: reportId, mediaFile: media.file);
         }
       }
 
-      _showSnack('Report submitted successfully.');
+      await _showSubmissionResult(report);
+      if (!mounted) return;
       Navigator.pop(context, report);
     } catch (e) {
       if (!mounted) return;
       _showSnack(e.toString().replaceFirst('Exception: ', ''));
     } finally {
-      if (mounted) {
-        setState(() => _isSubmitting = false);
-      }
+      if (mounted) setState(() => _isSubmitting = false);
     }
+  }
+
+  Future<Map<String, dynamic>?> _showOtpVerificationDialog(String email) async {
+    final controller = TextEditingController();
+    String? errorText;
+    bool isVerifying = false;
+
+    final result = await showDialog<Map<String, dynamic>?>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Future<void> verify() async {
+              final otp = controller.text.trim();
+              if (otp.length != 6) {
+                setDialogState(() => errorText = 'Enter the 6-digit code sent to your email.');
+                return;
+              }
+
+              setDialogState(() {
+                errorText = null;
+                isVerifying = true;
+              });
+
+              try {
+                final response = await _reportService.verifySubmissionAndCreateReport(otp: otp);
+                if (!mounted) return;
+                Navigator.pop(context, response);
+              } catch (e) {
+                setDialogState(() {
+                  errorText = e.toString().replaceFirst('Exception: ', '');
+                  isVerifying = false;
+                });
+              }
+            }
+
+            return AlertDialog(
+              backgroundColor: const Color(0xFF172235),
+              title: const Text('Email verification', style: TextStyle(color: Colors.white)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    email.isEmpty
+                        ? 'Enter the 6-digit code sent to your account email.'
+                        : 'Enter the 6-digit code sent to $email.',
+                    style: TextStyle(color: Colors.white.withOpacity(0.78)),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: controller,
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: _inputDecoration('6-digit OTP', errorText: errorText)
+                        .copyWith(counterText: ''),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isVerifying ? null : () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: isVerifying ? null : verify,
+                  child: isVerifying
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Verify & submit'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    controller.dispose();
+    return result;
+  }
+
+  Future<void> _showSubmissionResult(Map<String, dynamic>? report) async {
+    final rawId = report?['id'];
+    final reportId = rawId is int ? rawId : int.tryParse('$rawId');
+    final trackingId = reportId == null
+        ? 'Tracking ID pending'
+        : ReportFeedbackService.buildTrackingId(reportId);
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF172235),
+        title: const Text('Submission received', style: TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Your complaint has been sent successfully.',
+              style: TextStyle(color: Colors.white.withOpacity(0.82)),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              trackingId,
+              style: const TextStyle(
+                color: Color(0xFFBFDBFE),
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showSnack(String message) {
@@ -194,36 +495,27 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     _descriptionController.dispose();
     _locationController.dispose();
     _barangayController.dispose();
+    _latitudeController.dispose();
+    _longitudeController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    const accent = Color(0xFF2563EB);
+    const accent = Color(0xFF4B82F7);
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0C1727),
+      backgroundColor: const Color(0xFF101826),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: const Color(0xFF0C1727),
+        backgroundColor: const Color(0xFF101826),
         foregroundColor: Colors.white,
-        title: const Text('Submit Report'),
+        titleSpacing: 0,
+        title: const Text('Submit Complaints'),
       ),
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0C1727),
-              Color(0xFF1E293B),
-              Color(0xFF463327),
-            ],
-          ),
-        ),
-        child: FutureBuilder<List<dynamic>>(
-        future: _categoriesFuture,
+      body: FutureBuilder<List<dynamic>>(
+        future: Future.wait<dynamic>([_categoriesFuture, _officesFuture]),
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
             return const Center(child: CircularProgressIndicator());
@@ -242,207 +534,172 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
             );
           }
 
-          final categories = snapshot.data ?? const [];
-          final selectedCategory = _selectedCategory(categories);
+          final values = snapshot.data ?? const <dynamic>[];
+          final categories = values.isNotEmpty ? values[0] as List<dynamic> : const [];
+          final offices = values.length > 1 ? values[1] as List<dynamic> : const [];
 
           return ListView(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: EdgeInsets.fromLTRB(16, 8, 16, bottomInset + 24),
+            padding: EdgeInsets.fromLTRB(8, 8, 8, bottomInset + 18),
             children: [
               Container(
-                padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withOpacity(0.16)),
+                  border: Border(
+                    top: BorderSide(color: Colors.white.withOpacity(0.05)),
+                  ),
                 ),
+                padding: const EdgeInsets.only(top: 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Report a city issue',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Fill in the real incident details below. This will be saved directly to the system database.',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.72),
-                        fontSize: 13,
-                      ),
-                    ),
-                    if (selectedCategory != null) ...[
-                      const SizedBox(height: 16),
-                      _buildSelectedCategoryCard(selectedCategory),
-                    ],
-                    const SizedBox(height: 18),
-                    _buildLabel('Category'),
-                    const SizedBox(height: 8),
-                    _buildCategoryDropdown(
-                      categories,
-                      errorText: _categoryError,
-                    ),
-                    const SizedBox(height: 16),
-                    _buildLabel('Issue title'),
+                    _buildLabel('Title'),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _titleController,
                       textInputAction: TextInputAction.next,
                       style: const TextStyle(color: Colors.white),
-                      cursorColor: Colors.white,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.deny(_emojiRegex),
-                      ],
-                      onChanged: (_) {
-                        if (_titleError != null) {
-                          setState(() => _titleError = null);
-                        }
-                      },
+                      inputFormatters: [FilteringTextInputFormatter.deny(_emojiRegex)],
                       decoration: _inputDecoration(
-                        'Example: Broken street light',
+                        'e.g. Broken road near school',
                         errorText: _titleError,
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    _buildLabel('Location'),
+                    const SizedBox(height: 14),
+                    _buildLabel('Description'),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _descriptionController,
+                      minLines: 4,
+                      maxLines: 5,
+                      style: const TextStyle(color: Colors.white),
+                      inputFormatters: [FilteringTextInputFormatter.deny(_emojiRegex)],
+                      decoration: _inputDecoration(
+                        'Describe the issue in detail...',
+                        errorText: _descriptionError,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    _buildLabel('Category'),
+                    const SizedBox(height: 8),
+                    _buildCategoryDropdown(categories),
+                    const SizedBox(height: 14),
+                    _buildLabel('Department'),
+                    const SizedBox(height: 8),
+                    _buildOfficeDropdown(offices),
+                    const SizedBox(height: 14),
+                    _buildLabel('Location / Barangay'),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _locationController,
-                      textInputAction: TextInputAction.next,
+                      readOnly: true,
+                      onTap: _showBarangayPicker,
                       style: const TextStyle(color: Colors.white),
-                      cursorColor: Colors.white,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.deny(_emojiRegex),
-                      ],
-                      onChanged: (_) {
-                        if (_locationError != null) {
-                          setState(() => _locationError = null);
-                        }
-                      },
                       decoration: _inputDecoration(
-                        'Street, landmark, or area',
+                        'Select a Tacloban City barangay',
                         errorText: _locationError,
+                        prefixIcon: const Icon(
+                          Icons.location_on_rounded,
+                          color: Color(0xFFFF5A7A),
+                          size: 16,
+                        ),
+                        suffixIcon: const Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: Colors.white54,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    _buildLabel('Barangay'),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
                     TextField(
                       controller: _barangayController,
                       textInputAction: TextInputAction.next,
                       style: const TextStyle(color: Colors.white),
-                      cursorColor: Colors.white,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.deny(_emojiRegex),
-                      ],
-                      onChanged: (_) {
-                        if (_barangayError != null) {
-                          setState(() => _barangayError = null);
-                        }
-                      },
+                      inputFormatters: [FilteringTextInputFormatter.deny(_emojiRegex)],
                       decoration: _inputDecoration(
-                        'Optional barangay name',
+                        'Specific street, purok, or landmark (optional)',
                         errorText: _barangayError,
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    _buildLabel('Priority'),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      value: _selectedPriority,
-                      dropdownColor: const Color(0xFF253248),
-                      style: const TextStyle(color: Colors.white),
-                      iconEnabledColor: Colors.white,
-                      decoration: _inputDecoration('Priority'),
-                      items: _priorities
-                          .map(
-                            (priority) => DropdownMenuItem<String>(
-                              value: priority,
-                              child: Text(
-                                priority,
-                                style: const TextStyle(color: Colors.white),
+                    const SizedBox(height: 10),
+                    TextButton.icon(
+                      onPressed: () => setState(() => _showGpsFields = !_showGpsFields),
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFF8DA2C0),
+                        padding: EdgeInsets.zero,
+                      ),
+                      icon: Icon(
+                        _showGpsFields ? Icons.expand_less : Icons.add_location_alt_outlined,
+                        size: 18,
+                      ),
+                      label: Text(_showGpsFields ? 'Hide GPS coordinates' : 'Add GPS coordinates'),
+                    ),
+                    if (_showGpsFields) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _latitudeController,
+                              keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true,
+                                signed: true,
+                              ),
+                              style: const TextStyle(color: Colors.white),
+                              decoration: _inputDecoration(
+                                'Latitude',
+                                errorText: _latitudeError,
                               ),
                             ),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        if (value == null) return;
-                        setState(() => _selectedPriority = value);
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    _buildLabel('Photos'),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextField(
+                              controller: _longitudeController,
+                              keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true,
+                                signed: true,
+                              ),
+                              style: const TextStyle(color: Colors.white),
+                              decoration: _inputDecoration(
+                                'Longitude',
+                                errorText: _longitudeError,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+                    _buildLabel('Priority'),
                     const SizedBox(height: 8),
-                    OutlinedButton.icon(
-                      onPressed: _selectedImages.length >= 3 ? null : _pickImages,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: BorderSide(color: Colors.white.withOpacity(0.22)),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 14,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      icon: const Icon(Icons.photo_library_outlined),
-                      label: Text(
-                        _selectedImages.isEmpty
-                            ? 'Add up to 3 photos'
-                            : 'Add more photos',
-                      ),
-                    ),
-                    if (_selectedImages.isNotEmpty) ...[
+                    _buildPrioritySelector(),
+                    const SizedBox(height: 14),
+                    _buildLabel('Upload Evidence'),
+                    const SizedBox(height: 8),
+                    _buildEvidenceCard(),
+                    if (_selectedMedia.isNotEmpty) ...[
                       const SizedBox(height: 12),
                       Wrap(
                         spacing: 10,
                         runSpacing: 10,
                         children: List.generate(
-                          _selectedImages.length,
-                          (index) => _SelectedImageChip(
-                            image: _selectedImages[index],
-                            onRemove: () => _removeImageAt(index),
+                          _selectedMedia.length,
+                          (index) => _SelectedMediaChip(
+                            item: _selectedMedia[index],
+                            onRemove: () => setState(() => _selectedMedia.removeAt(index)),
                           ),
                         ),
                       ),
                     ],
-                    const SizedBox(height: 16),
-                    _buildLabel('Description'),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _descriptionController,
-                      minLines: 5,
-                      maxLines: 7,
-                      textInputAction: TextInputAction.done,
-                      style: const TextStyle(color: Colors.white),
-                      cursorColor: Colors.white,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.deny(_emojiRegex),
-                      ],
-                      onChanged: (_) {
-                        if (_descriptionError != null) {
-                          setState(() => _descriptionError = null);
-                        }
-                      },
-                      decoration: _inputDecoration(
-                        'Describe the issue, what happened, and any important details.',
-                        errorText: _descriptionError,
-                      ),
-                    ),
-                    const SizedBox(height: 22),
+                    const SizedBox(height: 20),
                     SizedBox(
                       width: double.infinity,
-                      height: 52,
+                      height: 50,
                       child: ElevatedButton(
                         onPressed: _isSubmitting ? null : _submit,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: accent,
                           foregroundColor: Colors.white,
+                          elevation: 0,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
                           ),
@@ -457,7 +714,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                                 ),
                               )
                             : const Text(
-                                'Submit',
+                                'Submit Report',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w700,
@@ -472,70 +729,58 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
           );
         },
       ),
-      ),
     );
   }
 
   Widget _buildLabel(String text) {
     return Text(
       text,
-      style: const TextStyle(
-        fontSize: 14,
-        fontWeight: FontWeight.w700,
-        color: Colors.white,
+      style: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 1.1,
+        color: Colors.white.withOpacity(0.72),
       ),
     );
   }
 
-  InputDecoration _inputDecoration(String hint, {String? errorText}) {
+  InputDecoration _inputDecoration(
+    String hint, {
+    String? errorText,
+    Widget? prefixIcon,
+    Widget? suffixIcon,
+  }) {
     return InputDecoration(
       hintText: hint,
       filled: true,
-      fillColor: Colors.white.withOpacity(0.10),
+      fillColor: const Color(0xFF1D2536),
+      prefixIcon: prefixIcon,
+      suffixIcon: suffixIcon,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.white.withOpacity(0.16)),
+        borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.white.withOpacity(0.16)),
+        borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.4),
+        borderSide: const BorderSide(color: Color(0xFF4B82F7), width: 1.2),
       ),
-      hintStyle: TextStyle(color: Colors.white.withOpacity(0.45)),
+      hintStyle: TextStyle(color: Colors.white.withOpacity(0.38)),
       errorText: errorText,
       errorMaxLines: 2,
-      errorStyle: const TextStyle(
-        color: Color(0xFFFFB4B4),
-        fontSize: 12,
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.2),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.3),
-      ),
     );
   }
 
   Map<String, dynamic>? _selectedCategory(List<dynamic> categories) {
-    if (_selectedCategoryId == null) {
-      return null;
-    }
-
     for (final item in categories) {
       final category = item as Map<String, dynamic>;
-      final rawId = category['id'];
-      final id = rawId is int ? rawId : int.tryParse('$rawId');
-      if (id == _selectedCategoryId) {
-        return category;
-      }
+      final id = category['id'] is int ? category['id'] as int : int.tryParse('${category['id']}');
+      if (id == _selectedCategoryId) return category;
     }
-
     return null;
   }
 
@@ -544,195 +789,346 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     return rawId is int ? rawId : int.tryParse('$rawId');
   }
 
-  Widget _buildSelectedCategoryCard(Map<String, dynamic> category) {
-    final categoryName = (category['name'] ?? 'Unnamed').toString();
-    final icon = _categoryIcon(categoryName);
-    final color = _categoryColor(categoryName);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.14),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.42)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.18),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Selected category',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.68),
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  categoryName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  IconData _categoryIcon(String categoryName) {
-    final normalized = categoryName.toLowerCase();
-    if (normalized.contains('road')) return Icons.construction;
-    if (normalized.contains('water')) return Icons.water_drop_outlined;
-    if (normalized.contains('electric')) return Icons.bolt_outlined;
-    if (normalized.contains('garbage') || normalized.contains('waste')) {
-      return Icons.delete_outline;
-    }
-    if (normalized.contains('drain')) return Icons.water_damage_outlined;
-    if (normalized.contains('light')) return Icons.lightbulb_outline;
-    return Icons.report_problem_outlined;
-  }
-
-  Color _categoryColor(String categoryName) {
-    final normalized = categoryName.toLowerCase();
-    if (normalized.contains('road')) return const Color(0xFFFF8A65);
-    if (normalized.contains('water')) return const Color(0xFF4FC3F7);
-    if (normalized.contains('electric')) return const Color(0xFFFFD54F);
-    if (normalized.contains('garbage') || normalized.contains('waste')) {
-      return const Color(0xFFA5D6A7);
-    }
-    if (normalized.contains('drain')) return const Color(0xFF80CBC4);
-    if (normalized.contains('light')) return const Color(0xFFFFCC80);
-    return const Color(0xFFD8B15A);
-  }
-
-  Widget _buildCategoryDropdown(List<dynamic> categories, {String? errorText}) {
-    if (categories.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.white.withOpacity(0.14)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'No categories available',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Please seed the categories table in the backend, then refresh this page.',
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.68),
-                fontSize: 12,
-              ),
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: _reloadCategories,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Refresh categories'),
-            ),
-          ],
-        ),
-      );
-    }
-
+  Widget _buildCategoryDropdown(List<dynamic> categories) {
     return DropdownButtonFormField<int>(
       value: _selectedCategoryId,
       isExpanded: true,
       dropdownColor: const Color(0xFF253248),
       style: const TextStyle(color: Colors.white),
       iconEnabledColor: Colors.white,
-      decoration: _inputDecoration('Select a category', errorText: errorText),
+      decoration: _inputDecoration('Select category', errorText: _categoryError),
       items: categories.map((item) {
         final category = item as Map<String, dynamic>;
-        final rawId = category['id'];
-        final categoryId = rawId is int ? rawId : int.tryParse('$rawId');
-        final categoryName = (category['name'] ?? 'Unnamed').toString();
-        final icon = _categoryIcon(categoryName);
-        final color = _categoryColor(categoryName);
-
-        if (categoryId == null) {
-          return null;
-        }
-
+        final categoryId = category['id'] is int ? category['id'] as int : int.tryParse('${category['id']}');
+        if (categoryId == null) return null;
         return DropdownMenuItem<int>(
           value: categoryId,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.18),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, color: color, size: 16),
-              ),
-              const SizedBox(width: 10),
-              Flexible(
-                child: Text(
-                  categoryName,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white),
-                ),
-              ),
-            ],
-          ),
+          child: Text((category['name'] ?? 'Unnamed').toString()),
         );
       }).whereType<DropdownMenuItem<int>>().toList(),
-      onChanged: (value) {
-        if (value == null) return;
-        setState(() {
-          _selectedCategoryId = value;
-          _categoryError = null;
-        });
-      },
+      onChanged: (value) => setState(() => _selectedCategoryId = value),
+    );
+  }
+
+  Widget _buildOfficeDropdown(List<dynamic> offices) {
+    final orderedOffices = _orderedDepartmentOffices(offices);
+
+    return DropdownButtonFormField<int>(
+      value: _selectedOfficeId,
+      isExpanded: true,
+      dropdownColor: const Color(0xFF253248),
+      style: const TextStyle(color: Colors.white),
+      iconEnabledColor: Colors.white,
+      decoration: _inputDecoration(
+        'Select Department',
+        errorText: _officeError,
+      ),
+      items: orderedOffices.map((item) {
+        final office = item as Map<String, dynamic>;
+        final officeId = office['id'] is int ? office['id'] as int : int.tryParse('${office['id']}');
+        if (officeId == null) return null;
+        return DropdownMenuItem<int>(
+          value: officeId,
+          child: Text((office['name'] ?? 'Unnamed office').toString()),
+        );
+      }).whereType<DropdownMenuItem<int>>().toList(),
+      onChanged: (value) => setState(() => _selectedOfficeId = value),
+    );
+  }
+
+  List<dynamic> _orderedDepartmentOffices(List<dynamic> offices) {
+    final allowedNames = <String>{
+      "City Civil Registrar's Office",
+      "City Treasurer's Office",
+      'Land Transportation Office',
+      'Business Permit and Licensing Division',
+      'City Health Office',
+      'City Social Welfare and Development Office',
+      "City Engineer's Office",
+      'TOMECO (Traffic Operation)',
+      'City Tourism Operations Office',
+      "City Mayor's Office",
+      'City Disaster Risk Reduction and Management Office',
+      "City Assessor's Office",
+      'City Agriculturist Office',
+    };
+
+    final filtered = offices
+        .whereType<Map<String, dynamic>>()
+        .where(
+          (office) => allowedNames.contains((office['name'] ?? '').toString().trim()),
+        )
+        .toList();
+
+    filtered.sort((a, b) {
+      final aName = (a['name'] ?? '').toString().toLowerCase();
+      final bName = (b['name'] ?? '').toString().toLowerCase();
+      return aName.compareTo(bName);
+    });
+
+    return filtered;
+  }
+
+  Widget _buildPrioritySelector() {
+    return Row(
+      children: _priorities.map((priority) {
+        final isSelected = _selectedPriority == priority;
+        final palette = _priorityPalette(priority);
+
+        return Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(right: priority == _priorities.last ? 0 : 8),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => setState(() => _selectedPriority = priority),
+              child: Container(
+                height: 40,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: isSelected ? palette.fill : const Color(0xFF1D2536),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isSelected
+                        ? palette.border
+                        : Colors.white.withOpacity(0.08),
+                  ),
+                ),
+                child: Text(
+                  priority,
+                  style: TextStyle(
+                    color: isSelected
+                        ? palette.text
+                        : Colors.white.withOpacity(0.72),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  _PriorityPalette _priorityPalette(String priority) {
+    switch (priority) {
+      case 'Low':
+        return const _PriorityPalette(
+          fill: Color(0xFF243E73),
+          border: Color(0xFF4B82F7),
+          text: Colors.white,
+        );
+      case 'Normal':
+        return const _PriorityPalette(
+          fill: Color(0xFF1F4D3A),
+          border: Color(0xFF22C55E),
+          text: Colors.white,
+        );
+      case 'High':
+        return const _PriorityPalette(
+          fill: Color(0xFF6B421A),
+          border: Color(0xFFF59E0B),
+          text: Colors.white,
+        );
+      case 'Urgent':
+        return const _PriorityPalette(
+          fill: Color(0xFF6A2430),
+          border: Color(0xFFEF4444),
+          text: Color(0xFFFFD5D8),
+        );
+      default:
+        return const _PriorityPalette(
+          fill: Color(0xFF293248),
+          border: Color(0xFF4B82F7),
+          text: Colors.white,
+        );
+    }
+  }
+
+  Widget _buildEvidenceCard() {
+    final attachmentText = _selectedMedia.isEmpty
+        ? 'Tap to upload image or video'
+        : '${_selectedMedia.length} attachment${_selectedMedia.length == 1 ? '' : 's'} selected';
+
+    return InkWell(
+      onTap: _selectedMedia.length >= 3 ? null : _showMediaPickerOptions,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 26),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1D2536),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white.withOpacity(0.12)),
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.photo_camera_outlined, color: Colors.white70),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              attachmentText,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Max 50MB . JPG, PNG, MP4',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.45),
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMediaOptionTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1D2536),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withOpacity(0.08)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: Colors.white),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.6),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: Colors.white54),
+          ],
+        ),
+      ),
     );
   }
 }
 
-class _SelectedImageChip extends StatelessWidget {
-  const _SelectedImageChip({
-    required this.image,
+class _SelectedMediaItem {
+  const _SelectedMediaItem({
+    required this.file,
+    required this.mediaType,
+  });
+
+  final XFile file;
+  final String mediaType;
+
+  bool get isVideo => mediaType == 'video';
+}
+
+class _PriorityPalette {
+  const _PriorityPalette({
+    required this.fill,
+    required this.border,
+    required this.text,
+  });
+
+  final Color fill;
+  final Color border;
+  final Color text;
+}
+
+class _SelectedMediaChip extends StatelessWidget {
+  const _SelectedMediaChip({
+    required this.item,
     required this.onRemove,
   });
 
-  final XFile image;
+  final _SelectedMediaItem item;
   final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
+    if (item.isVideo) {
+      return Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 140,
+            height: 92,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              color: Colors.white.withOpacity(0.10),
+              border: Border.all(color: Colors.white.withOpacity(0.16)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.videocam_outlined, color: Colors.white),
+                const SizedBox(height: 8),
+                Text(
+                  item.file.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          Positioned(top: -6, right: -6, child: _RemoveMediaButton(onTap: onRemove)),
+        ],
+      );
+    }
+
     return Stack(
       clipBehavior: Clip.none,
       children: [
         FutureBuilder<Uint8List>(
-          future: image.readAsBytes(),
+          future: item.file.readAsBytes(),
           builder: (context, snapshot) {
             return Container(
               width: 92,
@@ -740,12 +1136,8 @@ class _SelectedImageChip extends StatelessWidget {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(14),
                 color: const Color(0xFFF3F4F6),
-                border: Border.all(color: const Color(0xFFE5E7EB)),
                 image: snapshot.hasData
-                    ? DecorationImage(
-                        image: MemoryImage(snapshot.data!),
-                        fit: BoxFit.cover,
-                      )
+                    ? DecorationImage(image: MemoryImage(snapshot.data!), fit: BoxFit.cover)
                     : null,
               ),
               child: snapshot.hasData
@@ -760,27 +1152,30 @@ class _SelectedImageChip extends StatelessWidget {
             );
           },
         ),
-        Positioned(
-          top: -6,
-          right: -6,
-          child: InkWell(
-            onTap: onRemove,
-            child: Container(
-              width: 24,
-              height: 24,
-              decoration: const BoxDecoration(
-                color: Color(0xFF111827),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.close,
-                size: 14,
-                color: Colors.white,
-              ),
-            ),
-          ),
-        ),
+        Positioned(top: -6, right: -6, child: _RemoveMediaButton(onTap: onRemove)),
       ],
+    );
+  }
+}
+
+class _RemoveMediaButton extends StatelessWidget {
+  const _RemoveMediaButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        width: 24,
+        height: 24,
+        decoration: const BoxDecoration(
+          color: Color(0xFF111827),
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(Icons.close, size: 14, color: Colors.white),
+      ),
     );
   }
 }

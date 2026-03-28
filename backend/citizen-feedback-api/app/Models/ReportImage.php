@@ -12,6 +12,8 @@ class ReportImage extends Model
     protected $fillable = [
         'report_id',
         'image_path',
+        'media_type',
+        'original_name',
     ];
 
     public function report()

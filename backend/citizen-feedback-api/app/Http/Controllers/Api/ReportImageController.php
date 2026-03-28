@@ -32,20 +32,26 @@ class ReportImageController extends Controller
     public function store(Request $request, $reportId)
     {
         $request->validate([
-            'image' => 'required|image|mimes:jpeg,png,jpg|max:2048',
+            'media' => 'required|file|mimes:jpeg,png,jpg,mp4,mov,avi,wmv,webm|max:51200',
         ]);
 
         $report = Report::findOrFail($reportId);
 
-        $path = $request->file('image')->store('report_images', 'public');
+        $file = $request->file('media');
+        $mimeType = (string) $file->getMimeType();
+        $mediaType = str_starts_with($mimeType, 'video/') ? 'video' : 'image';
+        $directory = $mediaType === 'video' ? 'report_videos' : 'report_images';
+        $path = $file->store($directory, 'public');
 
         $reportImage = ReportImage::create([
             'report_id' => $report->id,
             'image_path' => $path,
+            'media_type' => $mediaType,
+            'original_name' => $file->getClientOriginalName(),
         ]);
 
         return response()->json([
-            'message' => 'Image uploaded successfully',
+            'message' => ucfirst($mediaType) . ' uploaded successfully',
             'image' => $reportImage,
         ], 201);
     }

@@ -12,6 +12,7 @@ class Report extends Model
     protected $fillable = [
         'user_id',
         'category_id',
+        'office_id',
         'title',
         'description',
         'location',
@@ -32,6 +33,11 @@ class Report extends Model
     public function category()
     {
         return $this->belongsTo(Category::class);
+    }
+
+    public function office()
+    {
+        return $this->belongsTo(Office::class);
     }
 
     public function images()

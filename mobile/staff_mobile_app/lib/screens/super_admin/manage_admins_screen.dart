@@ -295,10 +295,12 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
                                 isActive,
                               );
 
-                              return _UserCard(
-                                name: (user['name'] ?? 'Unnamed User').toString(),
-                                email: (user['email'] ?? '').toString(),
-                                role: role,
+                      return _UserCard(
+                        name: (user['name'] ?? 'Unnamed User').toString(),
+                        email: (user['email'] ?? '').toString(),
+                        department:
+                            (user['department'] ?? 'No office assigned').toString(),
+                        role: role,
                                 isActive: isActive,
                                 onVerify: isPending
                                     ? () => _verify(user['id'] as int)
@@ -529,6 +531,7 @@ class _UserCard extends StatelessWidget {
   const _UserCard({
     required this.name,
     required this.email,
+    required this.department,
     required this.role,
     required this.isActive,
     this.onVerify,
@@ -538,6 +541,7 @@ class _UserCard extends StatelessWidget {
 
   final String name;
   final String email;
+  final String department;
   final String role;
   final bool isActive;
   final VoidCallback? onVerify;
@@ -619,6 +623,11 @@ class _UserCard extends StatelessWidget {
                     Text(
                       email,
                       style: TextStyle(color: Colors.white.withOpacity(0.72)),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      department,
+                      style: TextStyle(color: Colors.white.withOpacity(0.60)),
                     ),
                   ],
                 ),

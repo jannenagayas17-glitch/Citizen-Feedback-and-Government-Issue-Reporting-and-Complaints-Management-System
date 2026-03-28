@@ -13,9 +13,15 @@ class ReportService {
     return _decodeListResponse(response, fallbackMessage: 'Failed to fetch categories');
   }
 
+  Future<List<dynamic>> getOffices() async {
+    final response = await _apiClient.get('/offices', authRequired: true);
+    return _decodeListResponse(response, fallbackMessage: 'Failed to fetch offices');
+  }
+
   Future<Map<String, dynamic>> createReport({
     int? categoryId,
     String? categoryName,
+    int? officeId,
     required String title,
     required String description,
     required String location,
@@ -31,6 +37,7 @@ class ReportService {
         if (categoryId != null) 'category_id': categoryId,
         if (categoryName != null && categoryName.trim().isNotEmpty)
           'category_name': categoryName.trim(),
+        if (officeId != null) 'office_id': officeId,
         'title': title,
         'description': description,
         'location': location,
@@ -54,6 +61,77 @@ class ReportService {
           (data['errors'] != null
               ? data['errors'].toString()
               : 'Failed to create report'),
+    );
+  }
+
+  Future<Map<String, dynamic>> requestSubmissionVerification({
+    int? categoryId,
+    String? categoryName,
+    int? officeId,
+    required String title,
+    required String description,
+    required String location,
+    String? barangay,
+    String? priority,
+    double? latitude,
+    double? longitude,
+  }) async {
+    final response = await _apiClient.post(
+      '/reports/request-verification',
+      authRequired: true,
+      body: {
+        if (categoryId != null) 'category_id': categoryId,
+        if (categoryName != null && categoryName.trim().isNotEmpty)
+          'category_name': categoryName.trim(),
+        if (officeId != null) 'office_id': officeId,
+        'title': title,
+        'description': description,
+        'location': location,
+        if (barangay != null && barangay.trim().isNotEmpty)
+          'barangay': barangay.trim(),
+        if (priority != null && priority.trim().isNotEmpty)
+          'priority': priority.trim(),
+        if (latitude != null) 'latitude': latitude,
+        if (longitude != null) 'longitude': longitude,
+      },
+    );
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+    if (response.statusCode == 200) {
+      return data;
+    }
+
+    throw Exception(
+      data['message']?.toString() ??
+          (data['errors'] != null
+              ? data['errors'].toString()
+              : 'Failed to send verification code'),
+    );
+  }
+
+  Future<Map<String, dynamic>> verifySubmissionAndCreateReport({
+    required String otp,
+  }) async {
+    final response = await _apiClient.post(
+      '/reports/verify-and-store',
+      authRequired: true,
+      body: {
+        'otp': otp,
+      },
+    );
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return data;
+    }
+
+    throw Exception(
+      data['message']?.toString() ??
+          (data['errors'] != null
+              ? data['errors'].toString()
+              : 'Failed to verify submission'),
     );
   }
 
@@ -128,9 +206,9 @@ class ReportService {
     throw Exception(fallbackMessage);
   }
 
-  Future<Map<String, dynamic>> uploadImage({
+  Future<Map<String, dynamic>> uploadMedia({
     required int reportId,
-    required XFile imageFile,
+    required XFile mediaFile,
   }) async {
     final token = await TokenStorage.getToken();
 
@@ -142,12 +220,12 @@ class ReportService {
     request.headers['Accept'] = 'application/json';
     request.headers['Authorization'] = 'Bearer $token';
 
-    final bytes = await imageFile.readAsBytes();
+    final bytes = await mediaFile.readAsBytes();
     request.files.add(
       http.MultipartFile.fromBytes(
-        'image',
+        'media',
         bytes,
-        filename: imageFile.name,
+        filename: mediaFile.name,
       ),
     );
 
@@ -164,7 +242,7 @@ class ReportService {
       data['message']?.toString() ??
           (data['errors'] != null
               ? data['errors'].toString()
-              : 'Failed to upload image'),
+              : 'Failed to upload attachment'),
     );
   }
 }

@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\PasswordResetController;
+use App\Http\Controllers\Api\OfficeController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\ReportImageController;
@@ -54,6 +55,7 @@ Route::post('/reset-password', [PasswordResetController::class, 'resetPassword']
 */
 
 Route::get('/categories', [CategoryController::class, 'index']);
+Route::get('/offices', [OfficeController::class, 'index']);
 Route::get('/report-images/{path}', [ReportImageController::class, 'show'])
     ->where('path', '.*');
 
@@ -90,6 +92,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('reports')->group(function () {
 
         Route::post('/', [ReportController::class, 'store']);        // submit complaint
+        Route::post('/request-verification', [ReportController::class, 'requestSubmissionVerification']);
+        Route::post('/verify-and-store', [ReportController::class, 'verifySubmissionAndStore']);
         Route::get('/', [ReportController::class, 'index']);         // user complaints
         Route::get('/{id}', [ReportController::class, 'show']);      // complaint details
         Route::post('/{id}/images', [ReportImageController::class, 'store']);
@@ -119,6 +123,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/reports/export', [ReportController::class, 'exportAdminReports']);
         Route::post('/reports/{id}/status', [ReportController::class, 'updateStatus']);
         Route::get('/users', [AuthController::class, 'adminUsers']);
+        Route::get('/offices', [OfficeController::class, 'index']);
+        Route::post('/offices', [OfficeController::class, 'store']);
 
         Route::post('/verify-account/{id}', [AuthController::class, 'verifyAccount']);
 

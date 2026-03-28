@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/api_config.dart';
 import '../../services/report_service.dart';
@@ -86,10 +87,14 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
             final adminResponses = (report['admin_responses'] as List<dynamic>? ??
                 report['adminResponses'] as List<dynamic>? ??
                 const []);
-            final images = (report['images'] as List<dynamic>? ?? const []);
+            final attachments = (report['images'] as List<dynamic>? ?? const []);
             final categoryName =
                 ((report['category'] as Map<String, dynamic>?)?['name'] ??
                         'Uncategorized')
+                    .toString();
+            final officeName =
+                ((report['office'] as Map<String, dynamic>?)?['name'] ??
+                        'Unassigned office')
                     .toString();
             final status = (report['status'] ?? 'Pending').toString();
             final submittedBy =
@@ -133,6 +138,10 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                       ),
                       const SizedBox(height: 12),
                       _DetailRow(
+                        label: 'Office',
+                        value: officeName,
+                      ),
+                      _DetailRow(
                         label: 'Location',
                         value: location,
                       ),
@@ -174,7 +183,7 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Uploaded Images',
+                        'Attachments',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
@@ -182,70 +191,34 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      if (images.isEmpty)
+                      if (attachments.isEmpty)
                         Text(
-                          'No images uploaded for this report.',
+                          'No attachments uploaded for this report.',
                           style: TextStyle(color: Colors.white.withOpacity(0.72)),
                         )
                       else
-                        SizedBox(
-                          height: 148,
-                          child: ListView.separated(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: images.length,
-                            separatorBuilder: (_, __) => const SizedBox(width: 12),
-                            itemBuilder: (context, index) {
-                              final image = images[index] as Map<String, dynamic>;
-                              final imageUrl = _buildImageUrl(
-                                (image['image_path'] ?? '').toString(),
-                              );
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: attachments.map((item) {
+                            final attachment = item as Map<String, dynamic>;
+                            final mediaType =
+                                (attachment['media_type'] ?? 'image').toString();
+                            final attachmentUrl = _buildImageUrl(
+                              (attachment['image_path'] ?? '').toString(),
+                            );
 
-                              return ClipRRect(
-                                borderRadius: BorderRadius.circular(14),
-                                child: Container(
-                                  width: 180,
-                                  color: Colors.white.withOpacity(0.10),
-                                  child: imageUrl == null
-                                      ? Center(
-                                          child: Text(
-                                            'Invalid image path',
-                                            style: TextStyle(
-                                              color: Colors.white.withOpacity(0.72),
-                                            ),
-                                          ),
-                                        )
-                                      : Image.network(
-                                          imageUrl,
-                                          fit: BoxFit.cover,
-                                          loadingBuilder: (context, child, progress) {
-                                            if (progress == null) return child;
-                                            return const Center(
-                                              child: SizedBox(
-                                                width: 22,
-                                                height: 22,
-                                                child: CircularProgressIndicator(strokeWidth: 2),
-                                              ),
-                                            );
-                                          },
-                                          errorBuilder: (_, __, ___) {
-                                            return Center(
-                                              child: Padding(
-                                                padding: const EdgeInsets.all(12),
-                                                child: Text(
-                                                  'Unable to load image',
-                                                  textAlign: TextAlign.center,
-                                                  style: TextStyle(
-                                                    color: Colors.white.withOpacity(0.72),
-                                                  ),
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                ),
+                            if (mediaType == 'video') {
+                              return _VideoAttachmentCard(
+                                fileName: (attachment['original_name'] ?? 'video').toString(),
+                                onOpen: attachmentUrl == null
+                                    ? null
+                                    : () => _openAttachment(attachmentUrl),
                               );
-                            },
-                          ),
+                            }
+
+                            return _ImageAttachmentCard(imageUrl: attachmentUrl);
+                          }).toList(),
                         ),
                     ],
                   ),
@@ -316,6 +289,25 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
           fragment: null,
         )
         .toString();
+  }
+
+  Future<void> _openAttachment(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      _showSnack('Invalid attachment link.');
+      return;
+    }
+
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      _showSnack('Unable to open attachment.');
+    }
+  }
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   Widget _buildGlassSection({required Widget child}) {
@@ -521,6 +513,113 @@ class _InfoBadge extends StatelessWidget {
               fontSize: 11,
               fontWeight: FontWeight.w700,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ImageAttachmentCard extends StatelessWidget {
+  const _ImageAttachmentCard({
+    required this.imageUrl,
+  });
+
+  final String? imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: 180,
+        height: 148,
+        color: Colors.white.withOpacity(0.10),
+        child: imageUrl == null
+            ? Center(
+                child: Text(
+                  'Invalid image path',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.72),
+                  ),
+                ),
+              )
+            : Image.network(
+                imageUrl!,
+                fit: BoxFit.cover,
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) return child;
+                  return const Center(
+                    child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  );
+                },
+                errorBuilder: (_, __, ___) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(
+                        'Unable to load image',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.72),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+      ),
+    );
+  }
+}
+
+class _VideoAttachmentCard extends StatelessWidget {
+  const _VideoAttachmentCard({
+    required this.fileName,
+    required this.onOpen,
+  });
+
+  final String fileName;
+  final VoidCallback? onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 180,
+      height: 148,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        color: Colors.white.withOpacity(0.10),
+        border: Border.all(color: Colors.white.withOpacity(0.14)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.videocam_outlined, color: Colors.white),
+          const SizedBox(height: 10),
+          Text(
+            fileName,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const Spacer(),
+          FilledButton.icon(
+            onPressed: onOpen,
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.open_in_new, size: 16),
+            label: const Text('Open video'),
           ),
         ],
       ),

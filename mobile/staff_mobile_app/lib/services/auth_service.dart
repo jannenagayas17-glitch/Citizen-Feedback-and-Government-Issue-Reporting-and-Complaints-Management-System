@@ -293,6 +293,61 @@ class AuthService {
     throw Exception('Failed to fetch users');
   }
 
+  Future<List<dynamic>> getOffices({bool includeInactive = false}) async {
+    final suffix = includeInactive ? '?include_inactive=1' : '';
+    final response = await http.get(
+      _buildUri('/offices$suffix'),
+      headers: await _headers(authRequired: true),
+    );
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200 && data is List<dynamic>) {
+      return data;
+    }
+
+    if (data is Map<String, dynamic>) {
+      throw Exception(
+        data['message']?.toString() ??
+            (data['errors'] != null
+                ? data['errors'].toString()
+                : 'Failed to fetch offices'),
+      );
+    }
+
+    throw Exception('Failed to fetch offices');
+  }
+
+  Future<Map<String, dynamic>> createOffice({
+    required String name,
+    String? code,
+    String? description,
+  }) async {
+    final response = await http.post(
+      _buildUri('/admin/offices'),
+      headers: await _headers(authRequired: true),
+      body: jsonEncode({
+        'name': name,
+        if (code != null && code.trim().isNotEmpty) 'code': code.trim(),
+        if (description != null && description.trim().isNotEmpty)
+          'description': description.trim(),
+      }),
+    );
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return data;
+    }
+
+    throw Exception(
+      data['message']?.toString() ??
+          (data['errors'] != null
+              ? data['errors'].toString()
+              : 'Failed to add office'),
+    );
+  }
+
   Future<Map<String, dynamic>> verifyAccount(int id) async {
     final response = await http.post(
       _buildUri('/admin/verify-account/$id'),

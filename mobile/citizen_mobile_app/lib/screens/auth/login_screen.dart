@@ -251,7 +251,7 @@ class _LoginScreenState extends State<LoginScreen> {
               fit: StackFit.expand,
               children: [
                 Image.asset(
-                  'assets/images/engineering_office_bg.png',
+                  'assets/images/Tacloban_City_bg.png',
                   fit: BoxFit.cover,
                 ),
                 DecoratedBox(
@@ -310,12 +310,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                   width: 2,
                                 ),
                               ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(10),
-                                child: ClipOval(
+                              child: ClipOval(
+                                child: SizedBox.expand(
                                   child: Image.asset(
                                     'assets/images/logo.png',
-                                    fit: BoxFit.contain,
+                                    fit: BoxFit.cover,
                                   ),
                                 ),
                               ),

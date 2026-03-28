@@ -13,12 +13,14 @@ class DashboardController extends Controller
 {
     public function index()
     {
+        $query = Report::query();
+
         return response()->json([
-            'total_reports' => Report::count(),
-            'new' => Report::where('status', 'New')->count(),
-            'pending' => Report::where('status', 'Pending')->count(),
-            'in_progress' => Report::where('status', 'In Progress')->count(),
-            'resolved' => Report::where('status', 'Resolved')->count(),
+            'total_reports' => (clone $query)->count(),
+            'new' => (clone $query)->where('status', 'New')->count(),
+            'pending' => (clone $query)->where('status', 'Pending')->count(),
+            'in_progress' => (clone $query)->where('status', 'In Progress')->count(),
+            'resolved' => (clone $query)->where('status', 'Resolved')->count(),
         ]);
     }
 
@@ -31,14 +33,16 @@ class DashboardController extends Controller
         $statuses = ['New', 'Pending', 'In Progress', 'Resolved'];
         $priorities = ['Low', 'Normal', 'High', 'Urgent'];
 
-        $statusBreakdown = collect($statuses)->map(function (string $status) {
+        $baseQuery = $this->scopedReports($request);
+
+        $statusBreakdown = collect($statuses)->map(function (string $status) use ($baseQuery) {
             return [
                 'label' => $status,
-                'count' => Report::where('status', $status)->count(),
+                'count' => (clone $baseQuery)->where('status', $status)->count(),
             ];
         })->values();
 
-        $priorityCounts = Report::query()
+        $priorityCounts = (clone $baseQuery)
             ->select('priority', DB::raw('COUNT(*) as total'))
             ->groupBy('priority')
             ->pluck('total', 'priority');
@@ -51,19 +55,20 @@ class DashboardController extends Controller
         })->values();
 
         $categoryBreakdown = Category::query()
-            ->withCount('reports')
-            ->orderByDesc('reports_count')
-            ->limit(6)
             ->get()
-            ->map(function (Category $category) {
+            ->map(function (Category $category) use ($baseQuery) {
                 return [
                     'label' => $category->name,
-                    'count' => $category->reports_count,
+                    'count' => (clone $baseQuery)
+                        ->where('category_id', $category->id)
+                        ->count(),
                 ];
             })
+            ->sortByDesc('count')
+            ->take(6)
             ->values();
 
-        $locationBreakdown = Report::query()
+        $locationBreakdown = (clone $baseQuery)
             ->select('location', DB::raw('COUNT(*) as total'))
             ->whereNotNull('location')
             ->where('location', '!=', '')
@@ -79,7 +84,7 @@ class DashboardController extends Controller
             })
             ->values();
 
-        $monthlyCounts = Report::query()
+        $monthlyCounts = (clone $baseQuery)
             ->selectRaw('DATE_FORMAT(created_at, "%Y-%m") as month_key, COUNT(*) as total')
             ->where('created_at', '>=', now()->subMonths(5)->startOfMonth())
             ->groupBy('month_key')
@@ -99,11 +104,11 @@ class DashboardController extends Controller
 
         return response()->json([
             'overview' => [
-                'total_reports' => Report::count(),
-                'new' => Report::where('status', 'New')->count(),
-                'pending' => Report::where('status', 'Pending')->count(),
-                'in_progress' => Report::where('status', 'In Progress')->count(),
-                'resolved' => Report::where('status', 'Resolved')->count(),
+                'total_reports' => (clone $baseQuery)->count(),
+                'new' => (clone $baseQuery)->where('status', 'New')->count(),
+                'pending' => (clone $baseQuery)->where('status', 'Pending')->count(),
+                'in_progress' => (clone $baseQuery)->where('status', 'In Progress')->count(),
+                'resolved' => (clone $baseQuery)->where('status', 'Resolved')->count(),
             ],
             'status_breakdown' => $statusBreakdown,
             'priority_breakdown' => $priorityBreakdown,
@@ -112,5 +117,24 @@ class DashboardController extends Controller
             'monthly_trend' => $monthlyTrend,
             'generated_at' => now()->toIso8601String(),
         ]);
+    }
+
+    private function scopedReports(Request $request)
+    {
+        $query = Report::query();
+
+        if (($request->user()->role ?? null) === 'admin') {
+            $department = trim((string) ($request->user()->department ?? ''));
+
+            if ($department === '') {
+                $query->whereRaw('1 = 0');
+            } else {
+                $query->whereHas('office', function ($officeQuery) use ($department) {
+                    $officeQuery->where('name', $department);
+                });
+            }
+        }
+
+        return $query;
     }
 }

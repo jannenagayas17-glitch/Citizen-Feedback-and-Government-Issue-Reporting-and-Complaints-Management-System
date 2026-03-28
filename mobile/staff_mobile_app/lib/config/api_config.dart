@@ -5,6 +5,7 @@ class ApiConfig {
   static const String _defaultAndroidEmulatorHost = '10.0.2.2';
   static const String _defaultLocalHost = '127.0.0.1';
   static const String _defaultPort = '8000';
+  static const String _defaultScheme = 'http';
 
   static const String _fullBaseUrlOverride = String.fromEnvironment(
     'API_BASE_URL',
@@ -18,9 +19,21 @@ class ApiConfig {
       return _normalizeBaseUrl(fullOverride);
     }
 
+    final scheme = _resolvedScheme;
     final host = _resolvedHost;
     final port = _resolvedPort;
-    return 'http://$host:$port/api';
+    return '$scheme://$host:$port/api';
+  }
+
+  static String get _resolvedScheme {
+    if (kIsWeb) {
+      final scheme = Uri.base.scheme.trim();
+      if (scheme == 'http' || scheme == 'https') {
+        return scheme;
+      }
+    }
+
+    return _defaultScheme;
   }
 
   static String get _resolvedHost {
@@ -30,7 +43,10 @@ class ApiConfig {
     }
 
     if (kIsWeb) {
-      return _defaultLocalHost;
+      final currentHost = Uri.base.host.trim();
+      if (currentHost.isNotEmpty) {
+        return currentHost;
+      }
     }
 
     if (Platform.isAndroid) {

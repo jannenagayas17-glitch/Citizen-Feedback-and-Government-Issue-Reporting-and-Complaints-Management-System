@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Office;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -52,10 +53,21 @@ class AuthController extends Controller
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email', 'not_regex:' . self::EMOJI_REGEX],
             'mobile_number' => ['required', 'regex:/^\d{11}$/'],
             'password' => ['required', 'string', 'min:8', 'not_regex:' . self::EMOJI_REGEX],
-            'department' => ['required', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
+            'department' => ['required', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX, 'exists:offices,name'],
             'job_title' => ['required', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
             'access_code' => ['required', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
         ], $this->validationMessages());
+
+        $office = Office::query()
+            ->where('name', trim((string) $request->department))
+            ->where('is_active', true)
+            ->first();
+
+        if (! $office) {
+            throw ValidationException::withMessages([
+                'department' => ['Please select an active government office.'],
+            ]);
+        }
 
         $user = User::create([
             'name' => $request->name,
@@ -63,7 +75,7 @@ class AuthController extends Controller
             'mobile_number' => $request->mobile_number,
             'password' => Hash::make($request->password),
             'role' => 'admin',
-            'department' => $request->department,
+            'department' => $office->name,
             'job_title' => $request->job_title,
         ]);
 
@@ -376,6 +388,7 @@ class AuthController extends Controller
             'email.not_regex' => 'Emoji characters are not allowed.',
             'password.not_regex' => 'Emoji characters are not allowed.',
             'department.not_regex' => 'Emoji characters are not allowed.',
+            'department.exists' => 'Please select a valid government office.',
             'job_title.not_regex' => 'Emoji characters are not allowed.',
             'access_code.not_regex' => 'Emoji characters are not allowed.',
         ];

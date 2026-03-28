@@ -22,7 +22,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   );
   final AuthService _authService = AuthService();
 
-  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _firstNameController = TextEditingController();
+  final TextEditingController _lastNameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
@@ -32,7 +33,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isLoading = false;
-  String? _nameError;
+  String? _firstNameError;
+  String? _lastNameError;
   String? _emailError;
   String? _phoneError;
   String? _passwordError;
@@ -59,23 +61,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return _emojiRegex.hasMatch(value);
   }
 
-  bool _isValidFullName(String name) {
-    final parts = name
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((part) => part.isNotEmpty)
-        .toList();
-
-    if (parts.length < 2) {
+  bool _isValidNamePart(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
       return false;
     }
-
     final partRegex = RegExp(r"^[A-Za-z]+(?:[.'-][A-Za-z]+)*\.?$");
-    return parts.every(partRegex.hasMatch);
+    return partRegex.hasMatch(trimmed);
   }
 
   void _clearErrors() {
-    _nameError = null;
+    _firstNameError = null;
+    _lastNameError = null;
     _emailError = null;
     _phoneError = null;
     _passwordError = null;
@@ -83,7 +80,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _submit() async {
-    final name = _nameController.text.trim();
+    final firstName = _firstNameController.text.trim();
+    final lastName = _lastNameController.text.trim();
+    final name = '$firstName $lastName'.trim();
     final email = _emailController.text.trim();
     final phone = _phoneController.text.trim();
     final password = _passwordController.text.trim();
@@ -92,12 +91,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() {
       _clearErrors();
 
-      if (name.isEmpty) {
-        _nameError = 'Full name is required.';
-      } else if (_containsEmoji(name)) {
-        _nameError = 'Emoji characters are not allowed.';
-      } else if (!_isValidFullName(name)) {
-        _nameError = 'Enter your full name with first and last name.';
+      if (firstName.isEmpty) {
+        _firstNameError = 'First name is required.';
+      } else if (_containsEmoji(firstName)) {
+        _firstNameError = 'Emoji characters are not allowed.';
+      } else if (!_isValidNamePart(firstName)) {
+        _firstNameError = 'Enter a valid first name.';
+      }
+
+      if (lastName.isEmpty) {
+        _lastNameError = 'Last name is required.';
+      } else if (_containsEmoji(lastName)) {
+        _lastNameError = 'Emoji characters are not allowed.';
+      } else if (!_isValidNamePart(lastName)) {
+        _lastNameError = 'Enter a valid last name.';
       }
 
       if (email.isEmpty) {
@@ -132,7 +139,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     });
 
-    if (_nameError != null ||
+    if (_firstNameError != null ||
+        _lastNameError != null ||
         _emailError != null ||
         _phoneError != null ||
         _passwordError != null ||
@@ -176,7 +184,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   void dispose() {
-    _nameController.dispose();
+    _firstNameController.dispose();
+    _lastNameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
     _passwordController.dispose();
@@ -208,7 +217,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               fit: StackFit.expand,
               children: [
                 Image.asset(
-                  'assets/images/engineering_office_bg.png',
+                  'assets/images/Tacloban_City_bg.png',
                   fit: BoxFit.cover,
                 ),
                 DecoratedBox(
@@ -267,9 +276,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   width: 2,
                                 ),
                               ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(6),
-                                child: ClipOval(
+                              child: ClipOval(
+                                child: SizedBox.expand(
                                   child: Image.asset(
                                     'assets/images/logo.png',
                                     fit: BoxFit.cover,
@@ -329,19 +337,36 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             ],
                           ),
                           const SizedBox(height: 16),
-                          _buildLabel('Full Name'),
+                          _buildLabel('First Name'),
                           const SizedBox(height: 8),
                           _buildTextField(
-                            controller: _nameController,
-                            hintText: 'your full name',
+                            controller: _firstNameController,
+                            hintText: 'your first name',
                             prefixIcon: Icons.person_outline,
                             inputFormatters: [
                               FilteringTextInputFormatter.deny(_emojiRegex),
                             ],
-                            errorText: _nameError,
+                            errorText: _firstNameError,
                             onChanged: (_) {
-                              if (_nameError != null) {
-                                setState(() => _nameError = null);
+                              if (_firstNameError != null) {
+                                setState(() => _firstNameError = null);
+                              }
+                            },
+                          ),
+                          const SizedBox(height: 14),
+                          _buildLabel('Last Name'),
+                          const SizedBox(height: 8),
+                          _buildTextField(
+                            controller: _lastNameController,
+                            hintText: 'your last name',
+                            prefixIcon: Icons.badge_outlined,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.deny(_emojiRegex),
+                            ],
+                            errorText: _lastNameError,
+                            onChanged: (_) {
+                              if (_lastNameError != null) {
+                                setState(() => _lastNameError = null);
                               }
                             },
                           ),

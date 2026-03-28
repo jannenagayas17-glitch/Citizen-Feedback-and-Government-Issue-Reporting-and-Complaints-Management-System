@@ -1,340 +1,346 @@
 import 'package:flutter/material.dart';
 
-class CitizenNotificationsScreen extends StatelessWidget {
-  const CitizenNotificationsScreen({
-    super.key,
-    required this.reports,
-  });
+import '../../services/report_feedback_service.dart';
+import '../../services/report_service.dart';
 
-  final List<dynamic> reports;
+class CitizenNotificationsScreen extends StatefulWidget {
+  const CitizenNotificationsScreen({super.key});
+
+  @override
+  State<CitizenNotificationsScreen> createState() => _CitizenNotificationsScreenState();
+}
+
+class _CitizenNotificationsScreenState extends State<CitizenNotificationsScreen> {
+  final ReportService _reportService = ReportService();
+  late Future<List<dynamic>> _reportsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _reportsFuture = _reportService.getReports();
+  }
+
+  Future<void> _refresh() async {
+    final future = _reportService.getReports();
+    setState(() {
+      _reportsFuture = future;
+    });
+    await future;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final notifications = reports
-        .map((item) => item as Map<String, dynamic>)
-        .map(_buildNotification)
-        .toList()
-      ..sort(
-        (a, b) => b.timestamp.compareTo(a.timestamp),
-      );
-
     return Scaffold(
-      backgroundColor: const Color(0xFF0C1727),
+      backgroundColor: const Color(0xFF101826),
       appBar: AppBar(
-        title: const Text('Notifications'),
-        backgroundColor: const Color(0xFF0C1727),
+        backgroundColor: const Color(0xFF101826),
         foregroundColor: Colors.white,
+        elevation: 0,
+        title: const Text('Complaint Updates'),
       ),
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0C1727),
-              Color(0xFF1E293B),
-              Color(0xFF463327),
-            ],
-          ),
-        ),
-        child: notifications.isEmpty
-          ? ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                _SummaryCard(
-                  title: 'Notifications',
-                  subtitle: 'Stay updated on your submitted reports.',
-                  countLabel: '0 updates',
-                ),
-                const SizedBox(height: 16),
-                _EmptyState(
-                  icon: Icons.notifications_off_outlined,
-                  title: 'No notifications yet',
-                  message:
-                      'When your reports are reviewed, updated, or resolved, you will see them here.',
-                ),
-              ],
-            )
-          : ListView.separated(
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.all(16),
-              itemCount: notifications.length + 1,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (context, index) {
-                if (index == 0) {
-                  final resolvedCount = notifications
-                      .where((item) => item.title == 'Issue resolved')
-                      .length;
-                  return _SummaryCard(
-                    title: 'Notifications',
-                    subtitle: 'Latest updates on your submitted reports.',
-                    countLabel:
-                        '${notifications.length} updates • $resolvedCount resolved',
-                  );
-                }
+      body: RefreshIndicator(
+        onRefresh: _refresh,
+        child: FutureBuilder<List<dynamic>>(
+          future: _reportsFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-                final item = notifications[index - 1];
+            if (snapshot.hasError) {
+              return ListView(
+                padding: const EdgeInsets.all(24),
+                children: [
+                  Text(
+                    snapshot.error.toString().replaceFirst('Exception: ', ''),
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ],
+              );
+            }
+
+            final reports = snapshot.data ?? const [];
+            if (reports.isEmpty) {
+              return ListView(
+                padding: const EdgeInsets.all(16),
+                children: const [
+                  _NotificationsEmptyState(),
+                ],
+              );
+            }
+
+            return ListView.separated(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+              itemCount: reports.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final report = reports[index] as Map<String, dynamic>;
+                final rawId = report['id'];
+                final reportId = rawId is int ? rawId : int.tryParse('$rawId');
+                final trackingId = reportId == null
+                    ? 'Tracking pending'
+                    : ReportFeedbackService.buildTrackingId(reportId);
+                final title = (report['title'] ?? 'Untitled report').toString();
+                final rawStatus = (report['status'] ?? 'New').toString();
+                final status = _normalizedStatus(rawStatus);
+                final location = (report['location'] ?? report['barangay'] ?? 'No location')
+                    .toString();
+                final createdAt = DateTime.tryParse((report['created_at'] ?? '').toString());
+                final officeName =
+                    ((report['office'] as Map<String, dynamic>?)?['name'] ?? 'Assigned office')
+                        .toString();
 
                 return Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.10),
+                    color: const Color(0xFF1A2233),
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: Colors.white.withOpacity(0.14)),
+                    border: Border.all(color: Colors.white.withOpacity(0.08)),
                   ),
-                  child: Row(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      CircleAvatar(
-                        radius: 22,
-                        backgroundColor: item.color.withOpacity(0.12),
-                        child: Icon(item.icon, color: item.color),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: _statusColor(status).withOpacity(0.16),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              _statusIcon(status),
+                              color: _statusColor(status),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Expanded(
-                                  child: Text(
-                                    item.title,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white,
-                                    ),
+                                Text(
+                                  title,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 16,
                                   ),
                                 ),
-                                const SizedBox(width: 8),
+                                const SizedBox(height: 6),
                                 Text(
-                                  _timeAgo(item.timestamp),
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(0.52),
-                                    fontSize: 11,
+                                  trackingId,
+                                  style: const TextStyle(
+                                    color: Color(0xFF93C5FD),
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12,
                                   ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 6),
-                            Text(
-                              item.message,
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.82),
-                                height: 1.3,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: item.color.withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: Text(
-                                item.caption,
-                                style: TextStyle(
-                                  color: item.color,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 10),
+                          _StatusBadge(status: status),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      _NotificationRow(
+                        icon: Icons.location_on_outlined,
+                        value: location,
+                      ),
+                      const SizedBox(height: 6),
+                      _NotificationRow(
+                        icon: Icons.apartment_outlined,
+                        value: officeName,
+                      ),
+                      const SizedBox(height: 6),
+                      _NotificationRow(
+                        icon: Icons.update_rounded,
+                        value: _statusMessage(status, createdAt),
                       ),
                     ],
                   ),
                 );
               },
-            ),
+            );
+          },
+        ),
       ),
     );
   }
 
-  String _timeAgo(DateTime timestamp) {
-    final now = DateTime.now();
-    final difference = now.difference(timestamp);
-
-    if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
-    }
-    if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
-    }
-    if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
-    }
-    return 'Just now';
-  }
-
-  _CitizenNotification _buildNotification(Map<String, dynamic> report) {
-    final title = (report['title'] ?? 'Untitled report').toString();
-    final status = (report['status'] ?? 'New').toString();
-    final location = (report['location'] ?? report['barangay'] ?? 'No location')
-        .toString();
-    final createdAt = DateTime.tryParse((report['created_at'] ?? '').toString()) ??
-        DateTime.fromMillisecondsSinceEpoch(0);
-
-    switch (status) {
-      case 'In Progress':
-        return _CitizenNotification(
-          title: 'Work has started',
-          message: 'Your report "$title" is now In Progress.',
-          caption: location,
-          color: const Color(0xFFF59E0B),
-          icon: Icons.engineering_outlined,
-          timestamp: createdAt,
-        );
-      case 'Pending':
-        return _CitizenNotification(
-          title: 'Report under review',
-          message: 'Your report "$title" is waiting for review.',
-          caption: location,
-          color: const Color(0xFF3B82F6),
-          icon: Icons.hourglass_top_rounded,
-          timestamp: createdAt,
-        );
-      case 'Resolved':
-        return _CitizenNotification(
-          title: 'Issue resolved',
-          message: 'Your report "$title" has been marked Resolved.',
-          caption: location,
-          color: const Color(0xFF22C55E),
-          icon: Icons.check_circle_outline,
-          timestamp: createdAt,
-        );
+  String _normalizedStatus(String raw) {
+    switch (raw) {
       case 'New':
+        return 'Submitted';
+      case 'Pending':
+        return 'Under Review';
       default:
-        return _CitizenNotification(
-          title: 'Report received',
-          message: 'Your report "$title" was submitted successfully.',
-          caption: location,
-          color: const Color(0xFF8B5CF6),
-          icon: Icons.mark_email_read_outlined,
-          timestamp: createdAt,
-        );
+        return raw;
     }
+  }
+
+  String _statusMessage(String status, DateTime? createdAt) {
+    final dateLabel = _formatDate(createdAt);
+    switch (status) {
+      case 'Submitted':
+        return 'Submitted on $dateLabel and waiting for office review.';
+      case 'Under Review':
+        return 'Validated by the office. Review update posted on $dateLabel.';
+      case 'In Progress':
+        return 'Your complaint is now being handled by the assigned office.';
+      case 'Resolved':
+        return 'Marked resolved. You may now review the service experience.';
+      default:
+        return 'A new update is available for this complaint.';
+    }
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'Submitted':
+        return const Color(0xFF22C55E);
+      case 'Under Review':
+        return const Color(0xFFF59E0B);
+      case 'In Progress':
+        return const Color(0xFF4B82F7);
+      case 'Resolved':
+        return const Color(0xFF64748B);
+      default:
+        return Colors.white70;
+    }
+  }
+
+  IconData _statusIcon(String status) {
+    switch (status) {
+      case 'Submitted':
+        return Icons.check_circle_rounded;
+      case 'Under Review':
+        return Icons.fact_check_rounded;
+      case 'In Progress':
+        return Icons.sync_rounded;
+      case 'Resolved':
+        return Icons.task_alt_rounded;
+      default:
+        return Icons.notifications_active_outlined;
+    }
+  }
+
+  String _formatDate(DateTime? date) {
+    if (date == null) return 'an unknown date';
+    const months = <String>[
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 }
 
-class _CitizenNotification {
-  const _CitizenNotification({
-    required this.title,
-    required this.message,
-    required this.caption,
-    required this.color,
-    required this.icon,
-    required this.timestamp,
-  });
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({required this.status});
 
-  final String title;
-  final String message;
-  final String caption;
-  final Color color;
-  final IconData icon;
-  final DateTime timestamp;
-}
-
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({
-    required this.title,
-    required this.subtitle,
-    required this.countLabel,
-  });
-
-  final String title;
-  final String subtitle;
-  final String countLabel;
+  final String status;
 
   @override
   Widget build(BuildContext context) {
+    Color color;
+    switch (status) {
+      case 'Submitted':
+        color = const Color(0xFF22C55E);
+        break;
+      case 'Under Review':
+        color = const Color(0xFFF59E0B);
+        break;
+      case 'In Progress':
+        color = const Color(0xFF4B82F7);
+        break;
+      case 'Resolved':
+        color = const Color(0xFF64748B);
+        break;
+      default:
+        color = Colors.white70;
+    }
+
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        color: color.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(18),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            subtitle,
-            style: TextStyle(color: Colors.white.withOpacity(0.72)),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-            decoration: BoxDecoration(
-              color: const Color(0xFF2563EB).withOpacity(0.18),
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Text(
-              countLabel,
-              style: const TextStyle(
-                color: Color(0xFFB8D3FF),
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
+      child: Text(
+        status,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
 }
 
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({
+class _NotificationRow extends StatelessWidget {
+  const _NotificationRow({
     required this.icon,
-    required this.title,
-    required this.message,
+    required this.value,
   });
 
   final IconData icon;
-  final String title;
-  final String message;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 15, color: Colors.white54),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.74),
+              fontSize: 12.5,
+              height: 1.4,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _NotificationsEmptyState extends StatelessWidget {
+  const _NotificationsEmptyState();
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        color: const Color(0xFF1A2233),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
       ),
-      child: Column(
-        children: [
-          Icon(icon, size: 36, color: Colors.white.withOpacity(0.72)),
-          const SizedBox(height: 12),
-          Text(
-            title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white.withOpacity(0.72)),
-          ),
-        ],
+      child: Text(
+        'No complaint updates yet. Submit a report first so status changes appear here.',
+        style: TextStyle(
+          color: Colors.white.withOpacity(0.72),
+          height: 1.5,
+        ),
       ),
     );
   }
