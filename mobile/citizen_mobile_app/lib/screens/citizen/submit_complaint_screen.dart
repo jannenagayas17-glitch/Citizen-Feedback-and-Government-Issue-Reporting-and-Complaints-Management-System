@@ -24,7 +24,6 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   final ReportService _reportService = ReportService();
   final ImagePicker _imagePicker = ImagePicker();
 
-  final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _locationController = TextEditingController();
   final TextEditingController _barangayController = TextEditingController();
@@ -36,6 +35,8 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
 
   int? _selectedCategoryId;
   int? _selectedOfficeId;
+  String? _selectedOfficeNameValue;
+  String? _selectedCustomIssueType;
   String _selectedPriority = 'Normal';
   bool _showGpsFields = false;
   bool _isSubmitting = false;
@@ -43,7 +44,6 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
 
   String? _categoryError;
   String? _officeError;
-  String? _titleError;
   String? _locationError;
   String? _barangayError;
   String? _latitudeError;
@@ -51,6 +51,91 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   String? _descriptionError;
 
   static const List<String> _priorities = ['Low', 'Normal', 'High', 'Urgent'];
+  static const Map<String, List<String>> _departmentIssueTypes = {
+    "City Civil Registrar's Office": [
+      'Document Errors',
+      'Delayed Registration',
+      'Staff Courtesy',
+      'Certification Requests',
+      'Others',
+    ],
+    "City Treasurer's Office": [
+      'Tax Payments',
+      'Payment Queues',
+      'Online Payment Issues',
+      'Official Receipts',
+      'Others',
+    ],
+    "City Assessor's Office": [
+      'Property Valuation',
+      'Tax Mapping',
+      'Transfer of Ownership',
+      'Others',
+    ],
+    'City Health Office': [
+      'Medical Supplies',
+      'Health Center Service',
+      'Sanitary Permits',
+      'Vaccination Programs',
+      'Others',
+    ],
+    'City Social Welfare and Development Office': [
+      'Financial Assistance (AICS)',
+      'Sectoral IDs',
+      'Relief Distribution',
+      'Others',
+    ],
+    'City Agriculturist Office': [
+      'Farmer Support',
+      'Livestock Health',
+      'Technical Training',
+      'Crop Damage Reporting',
+      'Others',
+    ],
+    "City Engineer's Office": [
+      'Road Repairs',
+      'Drainage/Sewerage',
+      'Public Facilities',
+      'Streetlighting',
+      'Others',
+    ],
+    'City Disaster Risk Reduction and Management Office': [
+      'Emergency Response',
+      'Hazard Reporting',
+      'Training Requests',
+      'Others',
+    ],
+    'Land Transportation Office': [
+      "Driver's Licenses",
+      'Vehicle Registration',
+      'Plate Numbers',
+      'Others',
+    ],
+    'TOMECO (Traffic Operation)': [
+      'Illegal Parking',
+      'Enforcer Conduct',
+      'Traffic Flow',
+      'Others',
+    ],
+    'Business Permit and Licensing Division': [
+      'Business Registration',
+      'Illegal Operations',
+      'Permit Renewal',
+      'Others',
+    ],
+    "City Mayor's Office": [
+      'Executive Action',
+      'Graft & Corruption',
+      'General Commendation',
+      'Others',
+    ],
+    'City Tourism Operations Office': [
+      'Site Maintenance',
+      'Event Logistics',
+      'Hotel/Resort Standards',
+      'Others',
+    ],
+  };
   @override
   void initState() {
     super.initState();
@@ -63,7 +148,6 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   void _clearErrors() {
     _categoryError = null;
     _officeError = null;
-    _titleError = null;
     _locationError = null;
     _barangayError = null;
     _latitudeError = null;
@@ -255,7 +339,6 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   }
 
   Future<void> _submit() async {
-    final title = _titleController.text.trim();
     final description = _descriptionController.text.trim();
     final selectedBarangay = _locationController.text.trim();
     final landmark = _barangayController.text.trim();
@@ -272,11 +355,12 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
       _clearErrors();
 
       if (_selectedOfficeId == null) _officeError = 'Please select a government office.';
-      if (_selectedCategoryId == null) _categoryError = 'Please select a category.';
-      if (title.isEmpty) {
-        _titleError = 'Issue title is required.';
-      } else if (_containsEmoji(title)) {
-        _titleError = 'Emoji characters are not allowed.';
+      if (_hasDepartmentSpecificIssueTypes) {
+        if ((_selectedCustomIssueType ?? '').trim().isEmpty) {
+          _categoryError = 'Please select an issue type.';
+        }
+      } else if (_selectedCategoryId == null) {
+        _categoryError = 'Please select an issue type.';
       }
       if (selectedBarangay.isEmpty) {
         _locationError = 'Please select a Tacloban City barangay.';
@@ -302,7 +386,6 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     if ([
       _categoryError,
       _officeError,
-      _titleError,
       _locationError,
       _barangayError,
       _latitudeError,
@@ -316,13 +399,23 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
 
     try {
       final categories = await _categoriesFuture.catchError((_) => <dynamic>[]);
+      final offices = await _officesFuture.catchError((_) => <dynamic>[]);
       final selectedCategory = _selectedCategory(categories);
+      final selectedOffice = _selectedOffice(offices);
+      final selectedIssueTypeName = _selectedIssueTypeName(selectedCategory);
+      final generatedTitle = _buildGeneratedTitle(
+        selectedOfficeName: selectedOffice?['name']?.toString(),
+        selectedCategoryName: selectedIssueTypeName,
+        barangay: barangay,
+      );
 
       final verification = await _reportService.requestSubmissionVerification(
-        categoryId: selectedCategory == null ? _selectedCategoryId : _categoryIdOf(selectedCategory),
-        categoryName: selectedCategory == null ? null : (selectedCategory['name'] ?? '').toString(),
+        categoryId: _hasDepartmentSpecificIssueTypes
+            ? null
+            : (selectedCategory == null ? _selectedCategoryId : _categoryIdOf(selectedCategory)),
+        categoryName: selectedIssueTypeName,
         officeId: _selectedOfficeId,
-        title: title,
+        title: generatedTitle,
         description: description,
         location: location,
         barangay: barangay,
@@ -491,7 +584,6 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
 
   @override
   void dispose() {
-    _titleController.dispose();
     _descriptionController.dispose();
     _locationController.dispose();
     _barangayController.dispose();
@@ -552,18 +644,13 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildLabel('Title'),
+                    _buildLabel('Department'),
                     const SizedBox(height: 8),
-                    TextField(
-                      controller: _titleController,
-                      textInputAction: TextInputAction.next,
-                      style: const TextStyle(color: Colors.white),
-                      inputFormatters: [FilteringTextInputFormatter.deny(_emojiRegex)],
-                      decoration: _inputDecoration(
-                        'e.g. Broken road near school',
-                        errorText: _titleError,
-                      ),
-                    ),
+                    _buildOfficeDropdown(offices),
+                    const SizedBox(height: 14),
+                    _buildLabel('Issue Type'),
+                    const SizedBox(height: 8),
+                    _buildCategoryDropdown(categories),
                     const SizedBox(height: 14),
                     _buildLabel('Description'),
                     const SizedBox(height: 8),
@@ -578,14 +665,6 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                         errorText: _descriptionError,
                       ),
                     ),
-                    const SizedBox(height: 14),
-                    _buildLabel('Category'),
-                    const SizedBox(height: 8),
-                    _buildCategoryDropdown(categories),
-                    const SizedBox(height: 14),
-                    _buildLabel('Department'),
-                    const SizedBox(height: 8),
-                    _buildOfficeDropdown(offices),
                     const SizedBox(height: 14),
                     _buildLabel('Location / Barangay'),
                     const SizedBox(height: 8),
@@ -789,14 +868,83 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     return rawId is int ? rawId : int.tryParse('$rawId');
   }
 
+  bool get _hasDepartmentSpecificIssueTypes => _departmentSpecificIssueTypes.isNotEmpty;
+
+  List<String> get _departmentSpecificIssueTypes {
+    final officeName = (_selectedOfficeNameValue ?? '').trim();
+    return _departmentIssueTypes[officeName] ?? const <String>[];
+  }
+
+  Map<String, dynamic>? _selectedOffice(List<dynamic> offices) {
+    for (final item in offices) {
+      final office = item as Map<String, dynamic>;
+      final id = office['id'] is int ? office['id'] as int : int.tryParse('${office['id']}');
+      if (id == _selectedOfficeId) return office;
+    }
+    return null;
+  }
+
+  String? _selectedIssueTypeName(Map<String, dynamic>? selectedCategory) {
+    if (_hasDepartmentSpecificIssueTypes) {
+      final custom = (_selectedCustomIssueType ?? '').trim();
+      return custom.isEmpty ? null : custom;
+    }
+
+    final categoryName = (selectedCategory?['name'] ?? '').toString().trim();
+    if (categoryName.isNotEmpty) return categoryName;
+    return null;
+  }
+
+  String _buildGeneratedTitle({
+    String? selectedOfficeName,
+    String? selectedCategoryName,
+    required String barangay,
+  }) {
+    final officeName = (selectedOfficeName ?? '').trim();
+    final categoryName = (selectedCategoryName ?? '').trim();
+    final barangayName = barangay.trim();
+
+    final parts = <String>[
+      if (officeName.isNotEmpty) officeName,
+      if (categoryName.isNotEmpty) categoryName,
+      if (barangayName.isNotEmpty) barangayName,
+    ];
+
+    return parts.isEmpty ? 'Citizen Complaint' : parts.join(' - ');
+  }
+
   Widget _buildCategoryDropdown(List<dynamic> categories) {
+    if (_hasDepartmentSpecificIssueTypes) {
+      return DropdownButtonFormField<String>(
+        value: _selectedCustomIssueType,
+        isExpanded: true,
+        menuMaxHeight: 320,
+        borderRadius: BorderRadius.circular(16),
+        dropdownColor: const Color(0xFF1D2536),
+        style: const TextStyle(color: Colors.white),
+        iconEnabledColor: Colors.white,
+        decoration: _inputDecoration('Select issue type', errorText: _categoryError),
+        items: _departmentSpecificIssueTypes
+            .map(
+              (issueType) => DropdownMenuItem<String>(
+                value: issueType,
+                child: Text(issueType),
+              ),
+            )
+            .toList(),
+        onChanged: (value) => setState(() => _selectedCustomIssueType = value),
+      );
+    }
+
     return DropdownButtonFormField<int>(
       value: _selectedCategoryId,
       isExpanded: true,
-      dropdownColor: const Color(0xFF253248),
+      menuMaxHeight: 320,
+      borderRadius: BorderRadius.circular(16),
+      dropdownColor: const Color(0xFF1D2536),
       style: const TextStyle(color: Colors.white),
       iconEnabledColor: Colors.white,
-      decoration: _inputDecoration('Select category', errorText: _categoryError),
+      decoration: _inputDecoration('Select issue type', errorText: _categoryError),
       items: categories.map((item) {
         final category = item as Map<String, dynamic>;
         final categoryId = category['id'] is int ? category['id'] as int : int.tryParse('${category['id']}');
@@ -816,7 +964,9 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     return DropdownButtonFormField<int>(
       value: _selectedOfficeId,
       isExpanded: true,
-      dropdownColor: const Color(0xFF253248),
+      menuMaxHeight: 320,
+      borderRadius: BorderRadius.circular(16),
+      dropdownColor: const Color(0xFF1D2536),
       style: const TextStyle(color: Colors.white),
       iconEnabledColor: Colors.white,
       decoration: _inputDecoration(
@@ -832,7 +982,25 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
           child: Text((office['name'] ?? 'Unnamed office').toString()),
         );
       }).whereType<DropdownMenuItem<int>>().toList(),
-      onChanged: (value) => setState(() => _selectedOfficeId = value),
+      onChanged: (value) {
+        Map<String, dynamic>? selectedOffice;
+        for (final item in orderedOffices.whereType<Map<String, dynamic>>()) {
+          final rawId = item['id'];
+          final officeId = rawId is int ? rawId : int.tryParse('$rawId');
+          if (officeId == value) {
+            selectedOffice = item;
+            break;
+          }
+        }
+
+        setState(() {
+          _selectedOfficeId = value;
+          _selectedOfficeNameValue = selectedOffice?['name']?.toString().trim();
+          _categoryError = null;
+          _selectedCategoryId = null;
+          _selectedCustomIssueType = null;
+        });
+      },
     );
   }
 

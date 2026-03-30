@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../services/dashboard_service.dart';
 import '../../services/report_service.dart';
+import '../../widgets/citizen_avatar.dart';
 import 'citizen_notifications_screen.dart';
 import 'citizen_profile_screen.dart';
 import 'my_complaints_screen.dart';
@@ -230,44 +231,32 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
     Map<String, dynamic> user,
     int notificationCount,
   ) {
+    final profileName = (user['name'] ?? 'Citizen').toString().trim();
+
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: const Color(0xFF3B82F6),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.22),
-              width: 1.5,
-            ),
-          ),
-          child: ClipOval(
-            child: SizedBox.expand(
-              child: Image.asset(
-                'assets/images/logo.png',
-                fit: BoxFit.cover,
-              ),
-            ),
-          ),
+        CitizenAvatar(
+          name: profileName,
+          size: 48,
+          backgroundColor: const Color(0xFF2D447B),
+          textColor: const Color(0xFFC6D6FF),
+          borderColor: Colors.white.withOpacity(0.22),
+          borderWidth: 1.5,
+          fontSize: 22,
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Citizen Tacloban City\nFeedback',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  height: 1.35,
-                ),
-              ),
-            ],
+          child: Text(
+            profileName.isEmpty ? 'Citizen' : profileName,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              height: 1.35,
+            ),
           ),
         ),
         _HeaderPill(
@@ -335,7 +324,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
             icon: Icons.bar_chart_rounded,
             iconColor: const Color(0xFF6EE7B7),
             value: '${dashboard['total_reports'] ?? 0}',
-            label: 'Total Issues',
+            label: 'All Issues',
           ),
         ),
         const SizedBox(width: 10),
@@ -353,7 +342,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
             icon: Icons.access_time_filled_rounded,
             iconColor: const Color(0xFFE5E7EB),
             value: '${dashboard['in_progress'] ?? 0}',
-            label: 'Active',
+            label: 'In-Progress',
           ),
         ),
         const SizedBox(width: 10),

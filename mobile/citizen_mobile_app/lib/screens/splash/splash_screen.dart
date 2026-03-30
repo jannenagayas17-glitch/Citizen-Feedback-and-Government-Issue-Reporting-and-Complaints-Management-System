@@ -130,18 +130,18 @@ class _SplashScreenState extends State<SplashScreen> {
                           ),
                           const SizedBox(height: 28),
                           const Text(
-                            'Tacloban City\nEngineering\nOffice',
+                            'CityTrack',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Colors.white,
-                              fontSize: 22,
+                              fontSize: 26,
                               fontWeight: FontWeight.w700,
                               height: 1.25,
                             ),
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            'Citizen Feedback & Reports System',
+                            'Tacloban City Citizen Feedback',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.78),

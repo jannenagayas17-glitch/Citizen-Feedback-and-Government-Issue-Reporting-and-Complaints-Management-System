@@ -322,18 +322,18 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 18),
                           const Text(
-                            'Tacloban City Engineering\nOffice',
+                            'CityTrack',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Colors.white,
-                              fontSize: 19,
+                              fontSize: 23,
                               fontWeight: FontWeight.w700,
                               height: 1.25,
                             ),
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Citizen Feedback & Reports System',
+                            'Tacloban City Citizen Feedback',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.82),

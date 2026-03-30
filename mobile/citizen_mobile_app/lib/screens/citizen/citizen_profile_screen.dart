@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../services/auth_service.dart';
+import '../../services/citizen_avatar_service.dart';
 import '../../utils/app_routes.dart';
+import '../../widgets/citizen_avatar.dart';
 import 'my_complaints_screen.dart';
 import 'send_feedback_screen.dart';
 
@@ -76,8 +79,10 @@ class CitizenProfileScreen extends StatefulWidget {
 
 class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
   final AuthService _authService = AuthService();
+  final ImagePicker _imagePicker = ImagePicker();
   bool _isLoggingOut = false;
   bool _isSavingProfile = false;
+  bool _isSavingAvatar = false;
   late Map<String, dynamic> _user;
 
   @override
@@ -157,6 +162,39 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
       if (mounted) {
         setState(() => _isSavingProfile = false);
       }
+    }
+  }
+
+  Future<void> _pickProfileImage() async {
+    setState(() => _isSavingAvatar = true);
+
+    try {
+      final file = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 80,
+      );
+
+      if (file == null) {
+        if (mounted) {
+          setState(() => _isSavingAvatar = false);
+        }
+        return;
+      }
+
+      final bytes = await file.readAsBytes();
+      await CitizenAvatarService.saveAvatarBytes(bytes);
+
+      if (!mounted) return;
+      setState(() => _isSavingAvatar = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile photo updated.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSavingAvatar = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
     }
   }
 
@@ -303,17 +341,50 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
       ),
       child: Column(
         children: [
-          CircleAvatar(
-            radius: 38,
-            backgroundColor: const Color(0xFF2563EB).withOpacity(0.16),
-            child: Text(
-              name.isEmpty ? 'C' : name[0].toUpperCase(),
-              style: const TextStyle(
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              CitizenAvatar(
+                name: name,
+                size: 76,
+                backgroundColor: const Color(0xFF2563EB).withOpacity(0.16),
+                textColor: const Color(0xFF9DBEFF),
                 fontSize: 26,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF9DBEFF),
               ),
-            ),
+              Positioned(
+                right: -4,
+                bottom: -4,
+                child: InkWell(
+                  onTap: _isSavingAvatar ? null : _pickProfileImage,
+                  borderRadius: BorderRadius.circular(18),
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2563EB),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFF0C1727),
+                        width: 2,
+                      ),
+                    ),
+                    child: _isSavingAvatar
+                        ? const Padding(
+                            padding: EdgeInsets.all(7),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.camera_alt_rounded,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 14),
           Text(
