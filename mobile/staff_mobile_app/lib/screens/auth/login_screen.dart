@@ -14,7 +14,14 @@ import 'register_screen.dart';
 enum LoginMode { admin, superAdmin }
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({
+    super.key,
+    this.authService,
+    this.googleAuthService,
+  });
+
+  final AuthService? authService;
+  final GoogleAuthService? googleAuthService;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -28,11 +35,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   static const String _configuredSuperAdminEmail = String.fromEnvironment(
     'SUPER_ADMIN_EMAIL',
-    defaultValue: 'cityengineer@gov.ph',
+    defaultValue: 'superadmin@gmail.com',
   );
 
-  final AuthService _authService = AuthService();
-  final GoogleAuthService _googleAuthService = GoogleAuthService();
+  late final AuthService _authService;
+  GoogleAuthService? _googleAuthService;
 
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
@@ -53,8 +60,13 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
+    _authService = widget.authService ?? AuthService();
     _loadSavedEmailForMode();
   }
+
+  GoogleAuthService get _resolvedGoogleAuthService =>
+      _googleAuthService ??=
+          widget.googleAuthService ?? GoogleAuthService();
 
   String get _resolvedSuperAdminEmail {
     final configured = _configuredSuperAdminEmail.trim();
@@ -170,7 +182,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isGoogleLoading = true);
 
     try {
-      final credential = await _googleAuthService.signInWithGoogle();
+      final credential = await _resolvedGoogleAuthService.signInWithGoogle();
       final user = credential.user;
 
       if (!mounted) return;
@@ -361,7 +373,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 18),
                           const Text(
-                            'City Engineering Portal',
+                            'City Admin Portal',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Colors.white,

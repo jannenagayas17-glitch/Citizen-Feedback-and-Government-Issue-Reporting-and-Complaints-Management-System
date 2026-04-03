@@ -7,6 +7,7 @@ import '../citizen/complaint_detail_screen.dart';
 import 'analytics_reports_screen.dart';
 import '../auth/login_screen.dart';
 import '../super_admin/manage_admins_screen.dart';
+import '../super_admin/manage_offices_screen.dart';
 import 'admin_profile_screen.dart';
 import 'complaint_management_screen.dart';
 
@@ -20,8 +21,9 @@ class AdminHomeScreen extends StatefulWidget {
 enum _AdminDesktopSection {
   dashboard,
   reports,
+  staff,
+  offices,
   analytics,
-  users,
   profile,
 }
 
@@ -33,6 +35,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   late Future<_AdminHomeData> _homeFuture;
   _AdminDesktopSection _desktopSection = _AdminDesktopSection.dashboard;
   String _searchQuery = '';
+  String _statusFilter = 'All Status';
+  String _priorityFilter = 'All Priority';
 
   @override
   void initState() {
@@ -101,13 +105,27 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   Future<void> _openUsers() async {
     if (_isDesktopLayout(context)) {
       setState(() {
-        _desktopSection = _AdminDesktopSection.users;
+        _desktopSection = _AdminDesktopSection.staff;
       });
       return;
     }
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const ManageAdminsScreen()),
+    );
+    await _refresh();
+  }
+
+  Future<void> _openOffices() async {
+    if (_isDesktopLayout(context)) {
+      setState(() {
+        _desktopSection = _AdminDesktopSection.offices;
+      });
+      return;
+    }
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ManageOfficesScreen()),
     );
     await _refresh();
   }
@@ -175,6 +193,152 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
 
   bool _isDesktopLayout(BuildContext context) {
     return MediaQuery.of(context).size.width >= 1100;
+  }
+
+  List<Map<String, dynamic>> _reportMaps(List<dynamic> reports) {
+    return reports.whereType<Map<String, dynamic>>().toList();
+  }
+
+  String _departmentLabel(Map<String, dynamic> user) {
+    final office = user['office'];
+    if (office is Map<String, dynamic>) {
+      final officeName = (office['name'] ?? '').toString().trim();
+      if (officeName.isNotEmpty) return officeName;
+    }
+
+    final department = (user['department'] ?? '').toString().trim();
+    if (department.isNotEmpty) return department;
+
+    return 'Department Portal';
+  }
+
+  String _reportStatus(Map<String, dynamic> report) {
+    final raw = (report['status'] ?? 'Pending').toString().trim();
+    if (raw.isEmpty) return 'Pending';
+    return raw;
+  }
+
+  String _reportPriority(Map<String, dynamic> report) {
+    final raw = (report['priority'] ?? 'Normal').toString().trim();
+    if (raw.isEmpty) return 'Normal';
+    return raw;
+  }
+
+  String _reportTitle(Map<String, dynamic> report) {
+    return (report['title'] ?? 'Untitled report').toString();
+  }
+
+  String _reportLocation(Map<String, dynamic> report) {
+    return (report['location'] ?? 'No location').toString();
+  }
+
+  String _reportCategory(Map<String, dynamic> report) {
+    return (report['category_name'] ?? report['category']?['name'] ?? 'General')
+        .toString();
+  }
+
+  String _reportCitizen(Map<String, dynamic> report) {
+    final user = report['user'];
+    if (user is Map<String, dynamic>) {
+      final name = (user['name'] ?? '').toString().trim();
+      if (name.isNotEmpty) return name;
+    }
+    return 'Citizen Reporter';
+  }
+
+  int? _reportId(Map<String, dynamic> report) {
+    final raw = report['id'];
+    if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
+    return int.tryParse('$raw');
+  }
+
+  DateTime? _reportTimestamp(Map<String, dynamic> report) {
+    final rawTimestamp =
+        (report['updated_at'] ?? report['created_at'] ?? '').toString();
+    return DateTime.tryParse(rawTimestamp);
+  }
+
+  Color _priorityColor(String priority) {
+    switch (priority) {
+      case 'Urgent':
+        return const Color(0xFFEF4444);
+      case 'High':
+        return const Color(0xFFF97316);
+      case 'Low':
+        return const Color(0xFF60A5FA);
+      default:
+        return const Color(0xFFFBBF24);
+    }
+  }
+
+  InputDecoration _compactFilterDecoration() {
+    return InputDecoration(
+      filled: true,
+      fillColor: const Color(0xFF141C2B),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      focusedBorder: const OutlineInputBorder(
+        borderRadius: BorderRadius.all(Radius.circular(12)),
+        borderSide: BorderSide(color: Color(0xFF3B82F6)),
+      ),
+      hintStyle: const TextStyle(color: Color(0xFF71809C)),
+    );
+  }
+
+  int _statusCount(List<Map<String, dynamic>> reports, String status) {
+    return reports.where((report) => _reportStatus(report) == status).length;
+  }
+
+  List<Map<String, dynamic>> _triageReports(List<Map<String, dynamic>> reports) {
+    final triage = reports
+        .where((report) => const {'Pending', 'New', 'In Progress'}.contains(_reportStatus(report)))
+        .toList();
+    triage.sort((a, b) {
+      final aTime = _reportTimestamp(a);
+      final bTime = _reportTimestamp(b);
+      if (aTime == null && bTime == null) return 0;
+      if (aTime == null) return 1;
+      if (bTime == null) return -1;
+      return bTime.compareTo(aTime);
+    });
+    return triage.take(3).toList();
+  }
+
+  int _staleReportCount(List<Map<String, dynamic>> reports) {
+    return reports.where((report) {
+      final status = _reportStatus(report);
+      if (status == 'Resolved') return false;
+      final timestamp = _reportTimestamp(report);
+      if (timestamp == null) return false;
+      return DateTime.now().difference(timestamp).inHours >= 72;
+    }).length;
+  }
+
+  List<Map<String, dynamic>> _tableReports(List<Map<String, dynamic>> reports) {
+    return reports.where((report) {
+      final matchesSearch = _searchQuery.trim().isEmpty ||
+          [
+            _reportTitle(report),
+            _reportLocation(report),
+            _reportCategory(report),
+            _reportCitizen(report),
+          ].join(' ').toLowerCase().contains(_searchQuery.toLowerCase());
+
+      final matchesStatus =
+          _statusFilter == 'All Status' || _reportStatus(report) == _statusFilter;
+      final matchesPriority =
+          _priorityFilter == 'All Priority' || _reportPriority(report) == _priorityFilter;
+
+      return matchesSearch && matchesStatus && matchesPriority;
+    }).take(6).toList();
   }
 
   @override
@@ -417,18 +581,13 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                       keyboardDismissBehavior:
                           ScrollViewKeyboardDismissBehavior.onDrag,
                       children: [
-                        Center(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 1280),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                ...content,
-                                const SizedBox(height: 22),
-                                ...actions,
-                              ],
-                            ),
-                          ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ...content,
+                            const SizedBox(height: 22),
+                            ...actions,
+                          ],
                         ),
                       ],
                     );
@@ -436,29 +595,51 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
 
                   return Row(
                     children: [
-                      SizedBox(
-                        width: 250,
-                        child: _DashboardSidebar(
-                          adminName:
-                              (currentUser['name'] ?? 'Admin User').toString(),
-                          selectedSection: _desktopSection,
-                          onDashboard: _showDashboard,
-                          onReports: _openReports,
-                          onAnalytics: _openAnalytics,
-                          onUsers: _openUsers,
-                          onProfile: _openProfile,
-                          onLogout: _logout,
-                        ),
-                      ),
                       Expanded(
-                        child: _buildDesktopSection(
-                          bottomSafeArea: bottomSafeArea,
-                          data: data,
-                          reports: filteredReports,
-                          statusBreakdown: statusBreakdown,
-                          priorityBreakdown: priorityBreakdown,
-                          categoryBreakdown: categoryBreakdown,
-                          currentUser: currentUser,
+                        child: Column(
+                          children: [
+                            _DashboardTopBar(
+                              onMenuTap: _showDashboard,
+                              onReportsTap: _openReports,
+                              onProfileTap: _openProfile,
+                              departmentName: _departmentLabel(currentUser),
+                              adminName:
+                                  (currentUser['name'] ?? 'Admin User').toString(),
+                              notificationCount:
+                                  _triageReports(_reportMaps(filteredReports)).length,
+                            ),
+                            Expanded(
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  SizedBox(
+                                    width: 220,
+                                    child: _DashboardSidebar(
+                                      selectedSection: _desktopSection,
+                                      onDashboard: _showDashboard,
+                                      onReports: _openReports,
+                                      onAnalytics: _openAnalytics,
+                                      onUsers: _openUsers,
+                                      onOffices: _openOffices,
+                                      onProfile: _openProfile,
+                                      onLogout: _logout,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: _buildDesktopSection(
+                                      bottomSafeArea: bottomSafeArea,
+                                      data: data,
+                                      reports: filteredReports,
+                                      statusBreakdown: statusBreakdown,
+                                      priorityBreakdown: priorityBreakdown,
+                                      categoryBreakdown: categoryBreakdown,
+                                      currentUser: currentUser,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -490,13 +671,16 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           statusBreakdown: statusBreakdown,
           priorityBreakdown: priorityBreakdown,
           categoryBreakdown: categoryBreakdown,
+          currentUser: currentUser,
         );
       case _AdminDesktopSection.reports:
         return const ComplaintManagementScreen();
+      case _AdminDesktopSection.staff:
+        return const ManageAdminsScreen(embedded: true);
+      case _AdminDesktopSection.offices:
+        return const ManageOfficesScreen(embedded: true);
       case _AdminDesktopSection.analytics:
-        return const AnalyticsReportsScreen();
-      case _AdminDesktopSection.users:
-        return const ManageAdminsScreen();
+        return const AnalyticsReportsScreen(embedded: true);
       case _AdminDesktopSection.profile:
         return AdminProfileScreen(
           user: currentUser,
@@ -515,162 +699,238 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     required List<dynamic> statusBreakdown,
     required List<dynamic> priorityBreakdown,
     required List<dynamic> categoryBreakdown,
+    required Map<String, dynamic> currentUser,
   }) {
+    final reportList = _reportMaps(reports);
+    final departmentName = _departmentLabel(currentUser);
+    final triageQueue = _triageReports(reportList);
+    final tableReports = _tableReports(reportList);
+    final staleReports = _staleReportCount(reportList);
+    final assignedReports = reportList
+        .where((report) => _reportStatus(report) == 'In Progress')
+        .take(3)
+        .toList();
+    final rejectedCount = _statusCount(reportList, 'Rejected');
+
     return ListView(
-      padding: EdgeInsets.fromLTRB(14, 12, 14, 24 + bottomSafeArea),
+      padding: EdgeInsets.fromLTRB(14, 12, 14, 28 + bottomSafeArea),
       children: [
-        _DashboardTopBar(
-          searchQuery: _searchQuery,
-          onSearchChanged: (value) {
-            setState(() {
-              _searchQuery = value;
-            });
-          },
-          onMenuTap: _showDashboard,
-          onReportsTap: _openReports,
-          onAnalyticsTap: _openAnalytics,
-          onProfileTap: _openProfile,
+        Text(
+          'Dashboard',
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+              ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '$departmentName | Tacloban City',
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.56),
+            fontSize: 13,
+          ),
         ),
         const SizedBox(height: 18),
-        const _BreadcrumbCard(
-          title: 'Dashboard / Engineering Operations',
-        ),
-        const SizedBox(height: 18),
-        Wrap(
-          spacing: 14,
-          runSpacing: 14,
+        Row(
           children: [
-            _WideMetricCard(
-              title: 'Total Reports',
-              value: '${data.stats['total_reports'] ?? 0}',
-              subtitle: 'All infrastructure reports',
-              icon: Icons.assignment_outlined,
-              gradient: const LinearGradient(
-                colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
+            Expanded(
+              child: _WideMetricCard(
+                title: 'Total Reports',
+                value: '${data.stats['total_reports'] ?? 0}',
+                subtitle: '+${triageQueue.length} this week',
+                icon: Icons.bar_chart_rounded,
+                gradient: const LinearGradient(colors: [Color(0xFF1A2234), Color(0xFF1A2234)]),
+                valueColor: Colors.white,
+                subtitleColor: const Color(0xFF22C55E),
               ),
             ),
-            _WideMetricCard(
-              title: 'Pending',
-              value: '${data.stats['pending'] ?? 0}',
-              subtitle: 'Awaiting engineering review',
-              icon: Icons.hourglass_top_rounded,
-              gradient: const LinearGradient(
-                colors: [Color(0xFF6D28D9), Color(0xFF7C3AED)],
+            const SizedBox(width: 12),
+            Expanded(
+              child: _WideMetricCard(
+                title: 'Pending',
+                value: '${data.stats['pending'] ?? 0}',
+                subtitle: 'Needs triage',
+                icon: Icons.pending_actions_rounded,
+                gradient: const LinearGradient(colors: [Color(0xFF1A2234), Color(0xFF1A2234)]),
+                valueColor: const Color(0xFFFBBF24),
+                subtitleColor: const Color(0xFF94A3B8),
               ),
             ),
-            _WideMetricCard(
-              title: 'In Progress',
-              value: '${data.stats['in_progress'] ?? 0}',
-              subtitle: 'Active field coordination',
-              icon: Icons.construction_rounded,
-              gradient: const LinearGradient(
-                colors: [Color(0xFFDB2777), Color(0xFFEC4899)],
+            const SizedBox(width: 12),
+            Expanded(
+              child: _WideMetricCard(
+                title: 'In Progress',
+                value: '${data.stats['in_progress'] ?? 0}',
+                subtitle: '${assignedReports.length} assigned',
+                icon: Icons.sync_rounded,
+                gradient: const LinearGradient(colors: [Color(0xFF1A2234), Color(0xFF1A2234)]),
+                valueColor: const Color(0xFF60A5FA),
+                subtitleColor: const Color(0xFF22C55E),
               ),
             ),
-            _WideMetricCard(
-              title: 'Resolved',
-              value: '${data.stats['resolved'] ?? 0}',
-              subtitle: 'Closed with completed action',
-              icon: Icons.verified_rounded,
-              gradient: const LinearGradient(
-                colors: [Color(0xFF0F9D8A), Color(0xFF20B2AA)],
+            const SizedBox(width: 12),
+            Expanded(
+              child: _WideMetricCard(
+                title: 'Resolved',
+                value: '${data.stats['resolved'] ?? 0}',
+                subtitle: 'Updated today',
+                icon: Icons.check_circle_outline_rounded,
+                gradient: const LinearGradient(colors: [Color(0xFF1A2234), Color(0xFF1A2234)]),
+                valueColor: const Color(0xFF22C55E),
+                subtitleColor: const Color(0xFF22C55E),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _WideMetricCard(
+                title: 'Rejected',
+                value: '$rejectedCount',
+                subtitle: rejectedCount == 0 ? 'No rejected reports' : 'Invalid or prank',
+                icon: Icons.cancel_outlined,
+                gradient: const LinearGradient(colors: [Color(0xFF1A2234), Color(0xFF1A2234)]),
+                valueColor: const Color(0xFFEF4444),
+                subtitleColor: const Color(0xFFEF4444),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 18),
-        _DarkWebPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Expanded(
-                    child: _SectionTitle(
-                      title: 'Overview',
-                      subtitle:
-                          'See the main analytics snapshot directly from the dashboard.',
-                    ),
+        if (staleReports > 0) ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2C171B),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFF7F1D1D)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded, color: Color(0xFFF87171)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '$staleReports reports have exceeded 72 hours without update. Action required immediately.',
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.78)),
                   ),
-                  TextButton(
-                    onPressed: _openAnalytics,
-                    child: const Text('Open analytics'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  if (constraints.maxWidth < 950) {
-                    return Column(
-                      children: [
-                        _OverviewAnalyticsCard(
-                          title: 'Status Overview',
-                          child: _BreakdownOverview(
-                            title: 'Status Overview',
-                            items: statusBreakdown,
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        _OverviewAnalyticsCard(
-                          title: 'Priority Overview',
-                          child: _BreakdownOverview(
-                            title: 'Priority Overview',
-                            items: priorityBreakdown,
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        _OverviewAnalyticsCard(
-                          title: 'Top Categories',
-                          child: _BreakdownOverview(
-                            title: 'Top Categories',
-                            items: categoryBreakdown,
-                          ),
-                        ),
-                      ],
-                    );
-                  }
-
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: _OverviewAnalyticsCard(
-                          title: 'Status Overview',
-                          child: _BreakdownOverview(
-                            title: 'Status Overview',
-                            items: statusBreakdown,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 18),
-                      Expanded(
-                        child: _OverviewAnalyticsCard(
-                          title: 'Priority Overview',
-                          child: _BreakdownOverview(
-                            title: 'Priority Overview',
-                            items: priorityBreakdown,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 18),
-                      Expanded(
-                        child: _OverviewAnalyticsCard(
-                          title: 'Top Categories',
-                          child: _BreakdownOverview(
-                            title: 'Top Categories',
-                            items: categoryBreakdown,
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ],
+                ),
+                TextButton(onPressed: _openReports, child: const Text('View Reports')),
+              ],
+            ),
           ),
+        ],
+        const SizedBox(height: 16),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 6,
+              child: _DarkWebPanel(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: _SectionTitle(
+                            title: 'Incoming Reports - Triage Queue',
+                            subtitle: 'Pending review',
+                          ),
+                        ),
+                        TextButton(onPressed: _openReports, child: const Text('Open queue')),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    if (triageQueue.isEmpty)
+                      const _PanelEmptyState(
+                        title: 'Queue is clear',
+                        subtitle: 'No pending or active reports need review right now.',
+                      )
+                    else
+                      ...triageQueue.map((report) {
+                        final reportId = _reportId(report);
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _ReportPreviewCard(
+                            title: _reportTitle(report),
+                            citizen: _reportCitizen(report),
+                            location: _reportLocation(report),
+                            category: _reportCategory(report),
+                            status: _reportStatus(report),
+                            onTap: reportId == null ? _openReports : () => _openReportDetail(reportId),
+                          ),
+                        );
+                      }),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              flex: 4,
+              child: _DarkWebPanel(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: _SectionTitle(
+                            title: 'Assign Staff',
+                            subtitle: 'Active field workers',
+                          ),
+                        ),
+                        TextButton(onPressed: _openUsers, child: const Text('Manage')),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    if (assignedReports.isEmpty)
+                      const _PanelEmptyState(
+                        title: 'No active assignments',
+                        subtitle: 'Assigned reports will appear here once field work starts.',
+                      )
+                    else
+                      ...assignedReports.map((report) => Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: ListTile(
+                              tileColor: const Color(0xFF141C2B),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                side: BorderSide(color: Colors.white.withValues(alpha: 0.07)),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              leading: CircleAvatar(
+                                backgroundColor: _priorityColor(_reportPriority(report)).withValues(alpha: 0.20),
+                                child: Text(
+                                  _reportCitizen(report).substring(0, 1).toUpperCase(),
+                                  style: TextStyle(
+                                    color: _priorityColor(_reportPriority(report)),
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                              title: Text(
+                                _reportCitizen(report),
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                              ),
+                              subtitle: Text(
+                                _reportTitle(report),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(color: Colors.white.withValues(alpha: 0.56)),
+                              ),
+                              trailing: FilledButton(
+                                onPressed: _openUsers,
+                                child: const Text('Assign'),
+                              ),
+                            ),
+                          )),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 16),
         _DarkWebPanel(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -679,51 +939,152 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                 children: [
                   const Expanded(
                     child: _SectionTitle(
-                      title: 'Recent Reports',
-                      subtitle:
-                          'Latest citizen concerns needing engineering review.',
+                      title: 'All Reports',
+                      subtitle: 'Filtered working list',
                     ),
                   ),
-                  TextButton(
-                    onPressed: _openReports,
-                    child: const Text('Open full queue'),
+                  TextButton(onPressed: _openReports, child: const Text('Open full queue')),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      initialValue: _searchQuery,
+                      onChanged: (value) => setState(() => _searchQuery = value),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: _compactFilterDecoration().copyWith(
+                        hintText: 'Search reports...',
+                        prefixIcon: const Icon(Icons.search, color: Color(0xFF71809C), size: 18),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 150,
+                    child: DropdownButtonFormField<String>(
+                      value: _statusFilter,
+                      dropdownColor: const Color(0xFF141C2B),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: _compactFilterDecoration(),
+                      items: const ['All Status', 'Pending', 'In Progress', 'Resolved', 'Rejected', 'New']
+                          .map((item) => DropdownMenuItem(value: item, child: Text(item)))
+                          .toList(),
+                      onChanged: (value) => setState(() => _statusFilter = value ?? 'All Status'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 150,
+                    child: DropdownButtonFormField<String>(
+                      value: _priorityFilter,
+                      dropdownColor: const Color(0xFF141C2B),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: _compactFilterDecoration(),
+                      items: const ['All Priority', 'Low', 'Normal', 'High', 'Urgent']
+                          .map((item) => DropdownMenuItem(value: item, child: Text(item)))
+                          .toList(),
+                      onChanged: (value) => setState(() => _priorityFilter = value ?? 'All Priority'),
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-              if (reports.isEmpty)
-                _PanelEmptyState(
-                  title: _searchQuery.trim().isEmpty
-                      ? 'No recent reports yet'
-                      : 'No reports match your search',
-                  subtitle: _searchQuery.trim().isEmpty
-                      ? 'New reports submitted by citizens will appear here.'
-                      : 'Try a different report title, location, category, or citizen name.',
+              const SizedBox(height: 14),
+              if (tableReports.isEmpty)
+                const _PanelEmptyState(
+                  title: 'No reports match the current filters',
+                  subtitle: 'Try another search, status, or priority.',
                 )
               else
-                ...reports.take(4).map((item) {
-                  final report = item as Map<String, dynamic>;
-                  final user = report['user'] as Map<String, dynamic>?;
+                ...tableReports.map((report) {
+                  final reportId = _reportId(report);
                   return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.only(bottom: 10),
                     child: _ReportPreviewCard(
-                      title: (report['title'] ?? 'Untitled report').toString(),
-                      citizen:
-                          (user?['name'] ?? 'Citizen Reporter').toString(),
-                      location:
-                          (report['location'] ?? 'No location provided')
-                              .toString(),
-                      category: (report['category_name'] ??
-                              report['category']?['name'] ??
-                              'General')
-                          .toString(),
-                      status: (report['status'] ?? 'Pending').toString(),
-                      onTap: () => _openReportDetail(report['id'] as int),
+                      title: _reportTitle(report),
+                      citizen: _reportCitizen(report),
+                      location: _reportLocation(report),
+                      category: '${_reportCategory(report)} | ${_reportPriority(report)}',
+                      status: _reportStatus(report),
+                      onTap: reportId == null ? _openReports : () => _openReportDetail(reportId),
                     ),
                   );
                 }),
             ],
           ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _DarkWebPanel(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const _SectionTitle(
+                      title: 'Upload Resolution Proof',
+                      subtitle: 'Complete report updates from the queue.',
+                    ),
+                    const SizedBox(height: 16),
+                    const _PanelEmptyState(
+                      title: 'Proof uploads are handled in the report queue',
+                      subtitle: 'Open a report to attach resolution media and mark it resolved.',
+                    ),
+                    const SizedBox(height: 14),
+                    FilledButton(onPressed: _openReports, child: const Text('Open Report Queue')),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: _DarkWebPanel(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const _SectionTitle(
+                      title: 'Citizen Feedback',
+                      subtitle: 'Latest analytics snapshot',
+                    ),
+                    const SizedBox(height: 16),
+                    if (categoryBreakdown.isEmpty)
+                      const _PanelEmptyState(
+                        title: 'No feedback data yet',
+                        subtitle: 'Citizen praise, suggestions, and complaints will appear here.',
+                      )
+                    else
+                      ...categoryBreakdown.take(3).map((item) {
+                        final record = item as Map<String, dynamic>;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: ListTile(
+                            tileColor: const Color(0xFF141C2B),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              side: BorderSide(color: Colors.white.withValues(alpha: 0.07)),
+                            ),
+                            title: Text(
+                              (record['label'] ?? 'Feedback').toString(),
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                            ),
+                            subtitle: Text(
+                              '${record['count'] ?? 0} records in analytics',
+                              style: TextStyle(color: Colors.white.withValues(alpha: 0.56)),
+                            ),
+                            trailing: TextButton(
+                              onPressed: _openAnalytics,
+                              child: const Text('View'),
+                            ),
+                          ),
+                        );
+                      }),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -818,7 +1179,7 @@ class _AdminHeroCard extends StatelessWidget {
                     Text(
                       'Monitor report flow, assign follow-up, and keep response times visible.',
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.82),
+                        color: Colors.white.withValues(alpha: 0.82),
                         height: 1.35,
                       ),
                     ),
@@ -865,7 +1226,7 @@ class _HeroMiniStat extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.12),
+        color: Colors.white.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(18),
       ),
       child: Column(
@@ -874,7 +1235,7 @@ class _HeroMiniStat extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.74),
+              color: Colors.white.withValues(alpha: 0.74),
               fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
@@ -938,7 +1299,7 @@ class _MetricCard extends StatelessWidget {
                 Text(
                   label,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.72),
+                    color: Colors.white.withValues(alpha: 0.72),
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -987,7 +1348,7 @@ class _SectionTitle extends StatelessWidget {
         Text(
           subtitle,
           style: TextStyle(
-            color: Colors.white.withOpacity(0.70),
+            color: Colors.white.withValues(alpha: 0.70),
             height: 1.4,
           ),
         ),
@@ -1061,7 +1422,7 @@ class _ActionCard extends StatelessWidget {
             Text(
               subtitle,
               style: TextStyle(
-                color: Colors.white.withOpacity(0.72),
+                color: Colors.white.withValues(alpha: 0.72),
                 height: 1.4,
               ),
             ),
@@ -1118,11 +1479,11 @@ class _ReportPreviewCard extends StatelessWidget {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        color: const Color(0xFF141C2B),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
       ),
       child: InkWell(
         onTap: onTap,
@@ -1137,7 +1498,7 @@ class _ReportPreviewCard extends StatelessWidget {
                   width: 46,
                   height: 46,
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.14),
+                    color: statusColor.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Icon(
@@ -1162,7 +1523,7 @@ class _ReportPreviewCard extends StatelessWidget {
                       Text(
                         citizen,
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.72),
+                          color: Colors.white.withValues(alpha: 0.72),
                         ),
                       ),
                     ],
@@ -1201,7 +1562,7 @@ class _StatusChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.16),
+        color: color.withValues(alpha: 0.16),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
@@ -1230,7 +1591,7 @@ class _MetaChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
+        color: Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
@@ -1241,7 +1602,7 @@ class _MetaChip extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.82),
+              color: Colors.white.withValues(alpha: 0.82),
               fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
@@ -1266,9 +1627,9 @@ class _GlassMessageCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1285,7 +1646,7 @@ class _GlassMessageCard extends StatelessWidget {
           Text(
             message,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.72),
+              color: Colors.white.withValues(alpha: 0.72),
               height: 1.4,
             ),
           ),
@@ -1297,137 +1658,90 @@ class _GlassMessageCard extends StatelessWidget {
 
 class _DashboardSidebar extends StatelessWidget {
   const _DashboardSidebar({
-    required this.adminName,
     required this.selectedSection,
     required this.onDashboard,
     required this.onReports,
     required this.onAnalytics,
     required this.onUsers,
+    required this.onOffices,
     required this.onProfile,
     required this.onLogout,
   });
 
-  final String adminName;
   final _AdminDesktopSection selectedSection;
   final VoidCallback onDashboard;
   final VoidCallback onReports;
   final VoidCallback onAnalytics;
   final VoidCallback onUsers;
+  final VoidCallback onOffices;
   final VoidCallback onProfile;
   final VoidCallback onLogout;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: const Color(0xFF3D4458),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 16, 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'City Engineering Portal',
+      color: const Color(0xFF151B28),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 14, 12, 18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _SidebarNavItem(
+              icon: Icons.dashboard_outlined,
+              label: 'Dashboard',
+              isActive: selectedSection == _AdminDesktopSection.dashboard,
+              onTap: onDashboard,
+            ),
+            _SidebarNavItem(
+              icon: Icons.assignment_outlined,
+              label: 'Reports',
+              isActive: selectedSection == _AdminDesktopSection.reports,
+              onTap: onReports,
+            ),
+            _SidebarNavItem(
+              icon: Icons.groups_outlined,
+              label: 'Staff',
+              isActive: selectedSection == _AdminDesktopSection.staff,
+              onTap: onUsers,
+            ),
+            _SidebarNavItem(
+              icon: Icons.account_balance_outlined,
+              label: 'Department',
+              isActive: selectedSection == _AdminDesktopSection.offices,
+              onTap: onOffices,
+            ),
+            _SidebarNavItem(
+              icon: Icons.insights_outlined,
+              label: 'Analytics',
+              isActive: selectedSection == _AdminDesktopSection.analytics,
+              onTap: onAnalytics,
+            ),
+            _SidebarNavItem(
+              icon: Icons.person_outline,
+              label: 'Profile',
+              isActive: selectedSection == _AdminDesktopSection.profile,
+              onTap: onProfile,
+            ),
+            const Spacer(),
+            Padding(
+              padding: const EdgeInsets.only(left: 12, bottom: 10),
+              child: Text(
+                'ACCOUNT',
                 style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w600,
-                  height: 1.2,
+                  color: Colors.white.withValues(alpha: 0.32),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.1,
                 ),
               ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white24, width: 2),
-                    ),
-                    child: ClipOval(
-                      child: Image.asset(
-                        'assets/images/logo.png',
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          adminName.toUpperCase(),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1.1,
-                          ),
-                        ),
-                        Text(
-                          'Admin access',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.68),
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 26),
-              _SidebarNavItem(
-                icon: Icons.dashboard_outlined,
-                label: 'Dashboard',
-                isActive: selectedSection == _AdminDesktopSection.dashboard,
-                onTap: onDashboard,
-              ),
-              _SidebarNavItem(
-                icon: Icons.assignment_outlined,
-                label: 'Reports',
-                isActive: selectedSection == _AdminDesktopSection.reports,
-                onTap: onReports,
-              ),
-              _SidebarNavItem(
-                icon: Icons.insights_outlined,
-                label: 'Analytics',
-                isActive: selectedSection == _AdminDesktopSection.analytics,
-                onTap: onAnalytics,
-              ),
-              _SidebarNavItem(
-                icon: Icons.groups_outlined,
-                label: 'Users',
-                isActive: selectedSection == _AdminDesktopSection.users,
-                onTap: onUsers,
-              ),
-              _SidebarNavItem(
-                icon: Icons.person_outline,
-                label: 'Profile',
-                isActive: selectedSection == _AdminDesktopSection.profile,
-                onTap: onProfile,
-              ),
-              const Spacer(),
-              _SidebarNavItem(
-                icon: Icons.logout_rounded,
-                label: 'Logout',
-                isDestructive: true,
-                onTap: onLogout,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'City Engineering Portal',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.72),
-                  fontSize: 12,
-                  height: 1.4,
-                ),
-              ),
-            ],
-          ),
+            ),
+            _SidebarNavItem(
+              icon: Icons.logout_rounded,
+              label: 'Logout',
+              isDestructive: true,
+              onTap: onLogout,
+            ),
+          ],
         ),
       ),
     );
@@ -1451,30 +1765,25 @@ class _SidebarNavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const activeColor = Color(0xFFFBBF24);
-    const defaultColor = Colors.white;
-    const destructiveColor = Color(0xFFFCA5A5);
+    const activeColor = Color(0xFF8EB4FF);
+    const defaultColor = Color(0xFFB8C0D4);
+    const destructiveColor = Color(0xFFF87171);
     final itemColor = isDestructive
         ? destructiveColor
         : (isActive ? activeColor : defaultColor);
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 6),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
           decoration: BoxDecoration(
             color: isActive
-                ? const Color(0xFFF59E0B).withValues(alpha: 0.24)
+                ? const Color(0xFF22325A)
                 : Colors.transparent,
-            border: isActive
-                ? Border.all(
-                    color: const Color(0xFFFBBF24).withValues(alpha: 0.60),
-                  )
-                : null,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
             children: [
@@ -1493,15 +1802,15 @@ class _SidebarNavItem extends StatelessWidget {
                   ),
                 ),
               ),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: isDestructive
-                    ? destructiveColor.withValues(alpha: 0.80)
-                    : (isActive
-                        ? activeColor.withValues(alpha: 0.90)
-                        : defaultColor.withValues(alpha: 0.60)),
-                size: 18,
-              ),
+              if (!isDestructive)
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: isActive ? activeColor : Colors.transparent,
+                    shape: BoxShape.circle,
+                  ),
+                ),
             ],
           ),
         ),
@@ -1512,141 +1821,163 @@ class _SidebarNavItem extends StatelessWidget {
 
 class _DashboardTopBar extends StatelessWidget {
   const _DashboardTopBar({
-    required this.searchQuery,
-    required this.onSearchChanged,
     required this.onMenuTap,
     required this.onReportsTap,
-    required this.onAnalyticsTap,
     required this.onProfileTap,
+    required this.departmentName,
+    required this.adminName,
+    required this.notificationCount,
   });
 
-  final String searchQuery;
-  final ValueChanged<String> onSearchChanged;
   final VoidCallback onMenuTap;
   final VoidCallback onReportsTap;
-  final VoidCallback onAnalyticsTap;
   final VoidCallback onProfileTap;
+  final String departmentName;
+  final String adminName;
+  final int notificationCount;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+      decoration: const BoxDecoration(
+        color: Color(0xFF121A29),
+        border: Border(
+          bottom: BorderSide(color: Color(0x1AFFFFFF)),
+        ),
       ),
       child: Row(
         children: [
           InkWell(
             onTap: onMenuTap,
-            borderRadius: BorderRadius.circular(14),
-            child: Ink(
-              width: 42,
-              height: 42,
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              width: 22,
+              height: 22,
               decoration: BoxDecoration(
-                color: const Color(0xFFF3F4F6),
-                borderRadius: BorderRadius.circular(14),
+                color: const Color(0xFF3B82F6),
+                borderRadius: BorderRadius.circular(7),
               ),
-              child: const Icon(Icons.menu_rounded, color: Color(0xFFEF4444)),
+              padding: const EdgeInsets.all(3),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: Image.asset(
+                  'assets/images/logo.png',
+                  fit: BoxFit.cover,
+                ),
+              ),
             ),
           ),
-          const SizedBox(width: 16),
-          Expanded(
+          const SizedBox(width: 10),
+          const Text(
+            'CityTrack PH',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            'Admin Portal',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.34),
+              fontSize: 11,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            departmentName,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.60),
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              InkWell(
+                onTap: onReportsTap,
+                borderRadius: BorderRadius.circular(999),
+                child: Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1D2536),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                  ),
+                  child: const Icon(
+                    Icons.notifications_rounded,
+                    color: Color(0xFFFBBF24),
+                    size: 18,
+                  ),
+                ),
+              ),
+              if (notificationCount > 0)
+                Positioned(
+                  top: -2,
+                  right: -2,
+                  child: Container(
+                    width: 16,
+                    height: 16,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFEF4444),
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      notificationCount > 9 ? '9+' : '$notificationCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 8,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: 10),
+          InkWell(
+            onTap: onProfileTap,
+            borderRadius: BorderRadius.circular(999),
             child: Container(
-              height: 46,
-              padding: const EdgeInsets.symmetric(horizontal: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(14),
+                color: const Color(0xFF1D2536),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
               ),
               child: Row(
                 children: [
-                  Expanded(
-                    child: TextFormField(
-                      initialValue: searchQuery,
-                      onChanged: onSearchChanged,
-                      decoration: const InputDecoration(
-                        hintText: 'Search reports, locations, or citizens',
-                        hintStyle: TextStyle(color: Color(0xFF9CA3AF)),
-                        border: InputBorder.none,
-                        isCollapsed: true,
+                  CircleAvatar(
+                    radius: 10,
+                    backgroundColor: const Color(0xFF8B5CF6),
+                    child: Text(
+                      adminName.isEmpty ? 'A' : adminName.substring(0, 1).toUpperCase(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
                       ),
-                      style: const TextStyle(color: Color(0xFF334155)),
                     ),
                   ),
-                  const Icon(Icons.search, color: Color(0xFF6B7280)),
+                  const SizedBox(width: 8),
+                  Text(
+                    adminName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
-          const SizedBox(width: 16),
-          InkWell(
-            onTap: onReportsTap,
-            borderRadius: BorderRadius.circular(12),
-            child: const Padding(
-              padding: EdgeInsets.all(6),
-              child: Icon(Icons.assignment_outlined, color: Color(0xFF6B7280)),
-            ),
-          ),
-          const SizedBox(width: 14),
-          InkWell(
-            onTap: onAnalyticsTap,
-            borderRadius: BorderRadius.circular(12),
-            child: const Padding(
-              padding: EdgeInsets.all(6),
-              child: Icon(
-                Icons.insights_outlined,
-                color: Color(0xFF6B7280),
-              ),
-            ),
-          ),
-          const SizedBox(width: 14),
-          InkWell(
-            onTap: onProfileTap,
-            borderRadius: BorderRadius.circular(12),
-            child: const Padding(
-              padding: EdgeInsets.all(6),
-              child: Icon(
-                Icons.person_outline_rounded,
-                color: Color(0xFF6B7280),
-              ),
-            ),
-          ),
         ],
-      ),
-    );
-  }
-}
-
-class _BreadcrumbCard extends StatelessWidget {
-  const _BreadcrumbCard({
-    required this.title,
-  });
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
-      ),
-      child: Text(
-        title,
-        style: TextStyle(
-          color: Colors.white.withOpacity(0.90),
-          fontWeight: FontWeight.w700,
-        ),
       ),
     );
   }
@@ -1659,6 +1990,8 @@ class _WideMetricCard extends StatelessWidget {
     required this.subtitle,
     required this.gradient,
     required this.icon,
+    this.valueColor = Colors.white,
+    this.subtitleColor = const Color(0xFF94A3B8),
   });
 
   final String title;
@@ -1666,55 +1999,53 @@ class _WideMetricCard extends StatelessWidget {
   final String subtitle;
   final LinearGradient gradient;
   final IconData icon;
+  final Color valueColor;
+  final Color subtitleColor;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 248,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
         gradient: gradient,
-        boxShadow: [
-          BoxShadow(
-            color: gradient.colors.first.withOpacity(0.22),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
-        ],
+        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 36,
-              fontWeight: FontWeight.w800,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.68),
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
             ),
           ),
           const SizedBox(height: 10),
+          Text(
+            value,
+            style: TextStyle(
+              color: valueColor,
+              fontSize: 34,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
                 child: Text(
                   subtitle,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.88),
+                    color: subtitleColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
                     height: 1.35,
                   ),
                 ),
               ),
-              Icon(icon, color: Colors.white, size: 30),
+              Icon(icon, color: Colors.white.withValues(alpha: 0.52), size: 22),
             ],
           ),
         ],
@@ -1736,9 +2067,9 @@ class _DarkWebPanel extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        color: const Color(0xFF1A2234),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1754,24 +2085,22 @@ class _PanelEmptyState extends StatelessWidget {
   const _PanelEmptyState({
     this.title,
     this.subtitle,
-    this.message,
   });
 
   final String? title;
   final String? subtitle;
-  final String? message;
 
   @override
   Widget build(BuildContext context) {
     final heading = title;
-    final body = message ?? subtitle ?? '';
+    final body = subtitle ?? '';
 
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
+        color: Colors.white.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1791,128 +2120,12 @@ class _PanelEmptyState extends StatelessWidget {
           Text(
             body,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.72),
+              color: Colors.white.withValues(alpha: 0.72),
               height: 1.4,
             ),
           ),
         ],
       ),
-    );
-  }
-}
-
-class _OverviewAnalyticsCard extends StatelessWidget {
-  const _OverviewAnalyticsCard({
-    required this.title,
-    required this.child,
-  });
-
-  final String title;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 14),
-          child,
-        ],
-      ),
-    );
-  }
-}
-
-class _BreakdownOverview extends StatelessWidget {
-  const _BreakdownOverview({
-    required this.title,
-    required this.items,
-  });
-
-  final String title;
-  final List<dynamic> items;
-
-  @override
-  Widget build(BuildContext context) {
-    final maxCount = items.isEmpty
-        ? 1.0
-        : items
-            .map((item) => ((item as Map<String, dynamic>)['count'] as num?)?.toDouble() ?? 0)
-            .fold<double>(1, (maxValue, value) => value > maxValue ? value : maxValue);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (items.isEmpty)
-          const _PanelEmptyState(message: 'No analytics data yet.')
-        else
-          ...items.take(5).map((item) {
-            final record = item as Map<String, dynamic>;
-            final count = ((record['count'] ?? 0) as num).toDouble();
-            final progress = maxCount == 0 ? 0.0 : (count / maxCount).clamp(0.0, 1.0);
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.06),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.white.withOpacity(0.08)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            (record['label'] ?? 'Unknown').toString(),
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.78),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          count.toInt().toString(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(999),
-                      child: LinearProgressIndicator(
-                        minHeight: 8,
-                        value: progress,
-                        backgroundColor: Colors.white.withOpacity(0.08),
-                        valueColor: const AlwaysStoppedAnimation(Color(0xFF60A5FA)),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }),
-      ],
     );
   }
 }

@@ -50,4 +50,44 @@ class LoginTest extends TestCase
 
         $response->assertStatus(422);
     }
+
+    public function test_pending_admin_cannot_login_until_verified(): void
+    {
+        User::create([
+            'name' => 'Pending Admin',
+            'email' => 'pending@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'pending_admin',
+            'is_active' => true,
+        ]);
+
+        $response = $this->postJson('/api/auth/login', [
+            'email' => 'pending@example.com',
+            'password' => 'password123',
+        ]);
+
+        $response
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('email');
+    }
+
+    public function test_deactivated_user_cannot_login(): void
+    {
+        User::create([
+            'name' => 'Disabled Citizen',
+            'email' => 'disabled@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'citizen',
+            'is_active' => false,
+        ]);
+
+        $response = $this->postJson('/api/auth/login', [
+            'email' => 'disabled@example.com',
+            'password' => 'password123',
+        ]);
+
+        $response
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('email');
+    }
 }

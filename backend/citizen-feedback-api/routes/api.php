@@ -10,6 +10,9 @@ use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\ReportImageController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\CitizenFeedbackController;
+use App\Http\Controllers\Api\SystemSettingController;
+use App\Http\Controllers\Api\EscalationController;
 
 /*
 |--------------------------------------------------------------------------
@@ -100,6 +103,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
     });
 
+    Route::prefix('feedback')->group(function () {
+        Route::get('/', [CitizenFeedbackController::class, 'index']);
+        Route::post('/', [CitizenFeedbackController::class, 'store']);
+        Route::get('/export', [CitizenFeedbackController::class, 'export']);
+    });
+
 
     /*
     |--------------------------------------------------------------------------
@@ -130,6 +139,11 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::post('/deactivate-account/{id}', [AuthController::class, 'deactivateAccount']);
         Route::post('/reactivate-account/{id}', [AuthController::class, 'reactivateAccount']);
+        Route::delete('/delete-account/{id}', [AuthController::class, 'deleteAccount']);
+        Route::get('/settings', [SystemSettingController::class, 'show']);
+        Route::put('/settings', [SystemSettingController::class, 'update']);
+        Route::get('/escalations', [EscalationController::class, 'index']);
+        Route::post('/escalations/{report}', [EscalationController::class, 'update']);
 
     });
 

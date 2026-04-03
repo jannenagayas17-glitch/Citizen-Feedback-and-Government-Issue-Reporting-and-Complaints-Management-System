@@ -7,7 +7,12 @@ import '../../services/auth_service.dart';
 import '../../utils/app_routes.dart';
 
 class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({super.key});
+  const RegisterScreen({
+    super.key,
+    this.authService,
+  });
+
+  final AuthService? authService;
 
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
@@ -26,7 +31,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     'Administrative Staff',
   ];
 
-  final AuthService _authService = AuthService();
+  late final AuthService _authService;
 
   final TextEditingController _firstNameController = TextEditingController();
   final TextEditingController _lastNameController = TextEditingController();
@@ -55,6 +60,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   void initState() {
     super.initState();
+    _authService = widget.authService ?? AuthService();
     _loadOffices();
   }
 
@@ -65,7 +71,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final offices = await _authService.getOffices();
       if (!mounted) return;
       setState(() {
-        _offices = offices;
+        _offices = _orderedCitizenOfficeOptions(offices);
         _isLoadingOffices = false;
       });
     } catch (e) {
@@ -95,6 +101,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
     final partRegex = RegExp(r"^[A-Za-z]+(?:[.'-][A-Za-z]+)*\.?$");
     return partRegex.hasMatch(trimmed);
+  }
+
+  List<dynamic> _orderedCitizenOfficeOptions(List<dynamic> offices) {
+    final filtered = offices
+        .whereType<Map<String, dynamic>>()
+        .where((office) => (office['name'] ?? '').toString().trim().isNotEmpty)
+        .toList();
+
+    filtered.sort((a, b) {
+      final aName = (a['name'] ?? '').toString().toLowerCase();
+      final bName = (b['name'] ?? '').toString().toLowerCase();
+      return aName.compareTo(bName);
+    });
+
+    return filtered;
   }
 
   void _clearErrors() {
@@ -194,9 +215,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
         email: email,
         mobileNumber: phone,
         password: password,
+        passwordConfirmation: confirmPassword,
         department: _selectedOffice!,
         jobTitle: _selectedAdminType!,
-        accessCode: 'GOV-REQUEST',
       );
 
       if (!mounted) return;
@@ -332,7 +353,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ),
                           const SizedBox(height: 18),
                           const Text(
-                            'Request Admin Access',
+                            'Admin Registeration Portal',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Colors.white,

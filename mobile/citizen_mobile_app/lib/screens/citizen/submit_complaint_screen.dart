@@ -409,7 +409,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
         barangay: barangay,
       );
 
-      final verification = await _reportService.requestSubmissionVerification(
+      final response = await _reportService.createReport(
         categoryId: _hasDepartmentSpecificIssueTypes
             ? null
             : (selectedCategory == null ? _selectedCategoryId : _categoryIdOf(selectedCategory)),
@@ -423,13 +423,6 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
         latitude: latitude,
         longitude: longitude,
       );
-
-      if (!mounted) return;
-
-      final response = await _showOtpVerificationDialog(
-        verification['email']?.toString() ?? '',
-      );
-      if (!mounted || response == null) return;
 
       final report = response['report'] as Map<String, dynamic>?;
       final rawReportId = report?['id'];
@@ -450,91 +443,6 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
-  }
-
-  Future<Map<String, dynamic>?> _showOtpVerificationDialog(String email) async {
-    final controller = TextEditingController();
-    String? errorText;
-    bool isVerifying = false;
-
-    final result = await showDialog<Map<String, dynamic>?>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            Future<void> verify() async {
-              final otp = controller.text.trim();
-              if (otp.length != 6) {
-                setDialogState(() => errorText = 'Enter the 6-digit code sent to your email.');
-                return;
-              }
-
-              setDialogState(() {
-                errorText = null;
-                isVerifying = true;
-              });
-
-              try {
-                final response = await _reportService.verifySubmissionAndCreateReport(otp: otp);
-                if (!mounted) return;
-                Navigator.pop(context, response);
-              } catch (e) {
-                setDialogState(() {
-                  errorText = e.toString().replaceFirst('Exception: ', '');
-                  isVerifying = false;
-                });
-              }
-            }
-
-            return AlertDialog(
-              backgroundColor: const Color(0xFF172235),
-              title: const Text('Email verification', style: TextStyle(color: Colors.white)),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    email.isEmpty
-                        ? 'Enter the 6-digit code sent to your account email.'
-                        : 'Enter the 6-digit code sent to $email.',
-                    style: TextStyle(color: Colors.white.withOpacity(0.78)),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: controller,
-                    keyboardType: TextInputType.number,
-                    maxLength: 6,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: _inputDecoration('6-digit OTP', errorText: errorText)
-                        .copyWith(counterText: ''),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: isVerifying ? null : () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: isVerifying ? null : verify,
-                  child: isVerifying
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Text('Verify & submit'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-
-    controller.dispose();
-    return result;
   }
 
   Future<void> _showSubmissionResult(Map<String, dynamic>? report) async {
@@ -1005,26 +913,10 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   }
 
   List<dynamic> _orderedDepartmentOffices(List<dynamic> offices) {
-    final allowedNames = <String>{
-      "City Civil Registrar's Office",
-      "City Treasurer's Office",
-      'Land Transportation Office',
-      'Business Permit and Licensing Division',
-      'City Health Office',
-      'City Social Welfare and Development Office',
-      "City Engineer's Office",
-      'TOMECO (Traffic Operation)',
-      'City Tourism Operations Office',
-      "City Mayor's Office",
-      'City Disaster Risk Reduction and Management Office',
-      "City Assessor's Office",
-      'City Agriculturist Office',
-    };
-
     final filtered = offices
         .whereType<Map<String, dynamic>>()
         .where(
-          (office) => allowedNames.contains((office['name'] ?? '').toString().trim()),
+          (office) => (office['name'] ?? '').toString().trim().isNotEmpty,
         )
         .toList();
 

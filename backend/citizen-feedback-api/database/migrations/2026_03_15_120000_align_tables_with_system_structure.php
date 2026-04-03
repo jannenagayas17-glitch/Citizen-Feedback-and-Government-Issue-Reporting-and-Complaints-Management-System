@@ -54,7 +54,9 @@ return new class extends Migration
             }
         });
 
-        DB::statement("ALTER TABLE reports MODIFY status VARCHAR(255) NOT NULL DEFAULT 'New'");
+        if (in_array(DB::getDriverName(), ['mysql', 'mariadb'], true)) {
+            DB::statement("ALTER TABLE reports MODIFY status VARCHAR(255) NOT NULL DEFAULT 'New'");
+        }
     }
 
     public function down(): void
@@ -86,6 +88,8 @@ return new class extends Migration
             }
         });
 
-        DB::statement("ALTER TABLE reports MODIFY status VARCHAR(255) NOT NULL DEFAULT 'Pending'");
+        if (in_array(DB::getDriverName(), ['mysql', 'mariadb'], true)) {
+            DB::statement("ALTER TABLE reports MODIFY status VARCHAR(255) NOT NULL DEFAULT 'Pending'");
+        }
     }
 };

@@ -27,4 +27,9 @@ class Office extends Model
     {
         return $this->hasMany(Report::class);
     }
+
+    public function feedbackEntries()
+    {
+        return $this->hasMany(CitizenFeedback::class);
+    }
 }

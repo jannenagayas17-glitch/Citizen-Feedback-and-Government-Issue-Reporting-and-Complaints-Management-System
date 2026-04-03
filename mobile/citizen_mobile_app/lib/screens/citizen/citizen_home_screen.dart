@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import '../../services/auth_service.dart';
 import '../../services/dashboard_service.dart';
 import '../../services/report_service.dart';
@@ -324,7 +323,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
             icon: Icons.bar_chart_rounded,
             iconColor: const Color(0xFF6EE7B7),
             value: '${dashboard['total_reports'] ?? 0}',
-            label: 'All Issues',
+            label: 'Total Issues',
           ),
         ),
         const SizedBox(width: 10),
@@ -342,7 +341,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
             icon: Icons.access_time_filled_rounded,
             iconColor: const Color(0xFFE5E7EB),
             value: '${dashboard['in_progress'] ?? 0}',
-            label: 'In-Progress',
+            label: 'Active',
           ),
         ),
         const SizedBox(width: 10),

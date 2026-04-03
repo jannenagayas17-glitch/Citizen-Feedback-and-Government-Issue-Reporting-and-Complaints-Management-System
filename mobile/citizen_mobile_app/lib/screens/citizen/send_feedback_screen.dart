@@ -18,6 +18,7 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
   );
 
   final ReportService _reportService = ReportService();
+  final CitizenFeedbackService _feedbackService = CitizenFeedbackService();
   final TextEditingController _messageController = TextEditingController();
 
   late Future<List<dynamic>> _officesFuture;
@@ -35,7 +36,7 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
   void initState() {
     super.initState();
     _officesFuture = _reportService.getOffices();
-    _historyFuture = CitizenFeedbackService.getFeedbackEntries();
+    _historyFuture = _feedbackService.getFeedbackEntries();
   }
 
   @override
@@ -44,7 +45,7 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
     super.dispose();
   }
 
-  Future<void> _submit(List<dynamic> offices) async {
+  Future<void> _submit() async {
     final message = _messageController.text.trim();
 
     setState(() {
@@ -62,25 +63,12 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
       return;
     }
 
-    Map<String, dynamic>? office;
-    for (final item in offices) {
-      final current = item as Map<String, dynamic>;
-      final rawId = current['id'];
-      final id = rawId is int ? rawId : int.tryParse('$rawId');
-      if (id == _selectedOfficeId) {
-        office = current;
-        break;
-      }
-    }
-
-    final officeName = (office?['name'] ?? 'Selected department').toString();
-
     setState(() => _isSubmitting = true);
 
     try {
-      await CitizenFeedbackService.saveFeedbackEntry(
+      await _feedbackService.saveFeedbackEntry(
+        officeId: _selectedOfficeId!,
         type: _feedbackType,
-        officeName: officeName,
         message: message,
         rating: _rating,
       );
@@ -91,7 +79,7 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
         _messageController.clear();
         _selectedOfficeId = null;
         _rating = 4;
-        _historyFuture = CitizenFeedbackService.getFeedbackEntries();
+        _historyFuture = _feedbackService.getFeedbackEntries();
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -157,7 +145,7 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
                 width: double.infinity,
                 height: 50,
                 child: ElevatedButton(
-                  onPressed: _isSubmitting ? null : () => _submit(offices),
+                  onPressed: _isSubmitting ? null : _submit,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF4B82F7),
                     foregroundColor: Colors.white,
@@ -395,9 +383,16 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
 
   Widget _buildHistoryCard(Map<String, dynamic> entry) {
     final type = (entry['type'] ?? 'Feedback').toString();
-    final officeName = (entry['office_name'] ?? 'Department').toString();
+    final office = entry['office'];
+    final report = entry['report'];
+    final officeName = office is Map<String, dynamic>
+        ? (office['name'] ?? 'Department').toString()
+        : 'Department';
+    final reportTitle = report is Map<String, dynamic>
+        ? (report['title'] ?? '').toString().trim()
+        : '';
     final message = (entry['message'] ?? '').toString();
-    final submittedAt = DateTime.tryParse((entry['submitted_at'] ?? '').toString());
+    final submittedAt = DateTime.tryParse((entry['created_at'] ?? '').toString());
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -437,7 +432,7 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '$type | $officeName | ${_formatDate(submittedAt)}',
+                  '${reportTitle.isNotEmpty ? '$reportTitle | ' : ''}$type | $officeName | ${_formatDate(submittedAt)}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(

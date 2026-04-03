@@ -9,7 +9,10 @@ import '../../utils/app_routes.dart';
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({
     super.key,
+    this.authService,
   });
+
+  final AuthService? authService;
 
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
@@ -20,7 +23,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     r'[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]',
     unicode: true,
   );
-  final AuthService _authService = AuthService();
+  late final AuthService _authService;
 
   final TextEditingController _firstNameController = TextEditingController();
   final TextEditingController _lastNameController = TextEditingController();
@@ -180,6 +183,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _authService = widget.authService ?? AuthService();
   }
 
   @override

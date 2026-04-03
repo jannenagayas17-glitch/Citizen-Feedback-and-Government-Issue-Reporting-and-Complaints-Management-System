@@ -52,10 +52,9 @@ class AuthController extends Controller
             'name' => ['required', 'string', 'max:255', 'regex:' . self::FULL_NAME_REGEX, 'not_regex:' . self::EMOJI_REGEX],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email', 'not_regex:' . self::EMOJI_REGEX],
             'mobile_number' => ['required', 'regex:/^\d{11}$/'],
-            'password' => ['required', 'string', 'min:8', 'not_regex:' . self::EMOJI_REGEX],
+            'password' => ['required', 'string', 'min:8', 'confirmed', 'not_regex:' . self::EMOJI_REGEX],
             'department' => ['required', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX, 'exists:offices,name'],
             'job_title' => ['required', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
-            'access_code' => ['required', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
         ], $this->validationMessages());
 
         $office = Office::query()
@@ -74,17 +73,14 @@ class AuthController extends Controller
             'email' => $request->email,
             'mobile_number' => $request->mobile_number,
             'password' => Hash::make($request->password),
-            'role' => 'admin',
+            'role' => 'pending_admin',
             'department' => $office->name,
             'job_title' => $request->job_title,
         ]);
 
-        $token = $user->createToken('mobile-token')->plainTextToken;
-
         return response()->json([
-            'message' => 'Admin account registered successfully',
+            'message' => 'Admin access request submitted successfully. Please wait for super admin approval.',
             'user' => $user,
-            'token' => $token,
         ], 201);
     }
 
@@ -100,6 +96,12 @@ class AuthController extends Controller
         if (! $user || ! Hash::check($request->password, $user->password)) {
             throw ValidationException::withMessages([
                 'email' => ['The provided credentials are incorrect.'],
+            ]);
+        }
+
+        if ($user->role === 'pending_admin') {
+            throw ValidationException::withMessages([
+                'email' => ['Your admin access request is still pending approval.'],
             ]);
         }
 
@@ -288,6 +290,7 @@ class AuthController extends Controller
 
         return response()->json(
             User::query()
+                ->whereIn('role', ['super_admin', 'admin', 'pending_admin'])
                 ->orderByRaw("case when role = 'super_admin' then 0 when role = 'admin' then 1 when role = 'pending_admin' then 2 else 3 end")
                 ->orderBy('name')
                 ->get()
@@ -298,7 +301,18 @@ class AuthController extends Controller
     {
         $this->ensureElevatedRole($request);
 
+        if (($request->user()->role ?? null) !== 'super_admin') {
+            throw ValidationException::withMessages([
+                'user' => ['Only super admins can verify pending admin accounts.'],
+            ]);
+        }
+
         $user = User::findOrFail($id);
+        if ($user->role !== 'pending_admin') {
+            throw ValidationException::withMessages([
+                'user' => ['Only pending admin accounts can be verified.'],
+            ]);
+        }
         $user->role = 'admin';
         $user->is_active = true;
         $user->save();
@@ -372,6 +386,39 @@ class AuthController extends Controller
         ]);
     }
 
+    public function deleteAccount(Request $request, $id)
+    {
+        $this->ensureElevatedRole($request);
+
+        $actor = $request->user();
+        $user = User::findOrFail($id);
+
+        if (($actor->role ?? null) !== 'super_admin') {
+            throw ValidationException::withMessages([
+                'user' => ['Only super admins can delete accounts.'],
+            ]);
+        }
+
+        if ($user->id === $actor->id) {
+            throw ValidationException::withMessages([
+                'user' => ['You cannot delete your own account.'],
+            ]);
+        }
+
+        if ($user->role === 'super_admin') {
+            throw ValidationException::withMessages([
+                'user' => ['Super admin accounts cannot be deleted.'],
+            ]);
+        }
+
+        $user->tokens()->delete();
+        $user->delete();
+
+        return response()->json([
+            'message' => 'Account deleted successfully',
+        ]);
+    }
+
     private function ensureElevatedRole(Request $request): void
     {
         if (! in_array($request->user()->role, ['admin', 'super_admin'], true)) {
@@ -387,10 +434,10 @@ class AuthController extends Controller
             'name.not_regex' => 'Emoji characters are not allowed.',
             'email.not_regex' => 'Emoji characters are not allowed.',
             'password.not_regex' => 'Emoji characters are not allowed.',
+            'password.confirmed' => 'Password confirmation does not match.',
             'department.not_regex' => 'Emoji characters are not allowed.',
             'department.exists' => 'Please select a valid government office.',
             'job_title.not_regex' => 'Emoji characters are not allowed.',
-            'access_code.not_regex' => 'Emoji characters are not allowed.',
         ];
     }
 }

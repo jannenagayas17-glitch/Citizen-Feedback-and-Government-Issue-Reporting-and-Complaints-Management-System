@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import '../../services/report_feedback_service.dart';
 import '../../services/report_service.dart';
 
@@ -167,7 +166,7 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
                       child: Text(
                         adminRemark,
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.82),
+                          color: Colors.white.withValues(alpha: 0.82),
                           height: 1.45,
                         ),
                       ),
@@ -193,7 +192,7 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
                                 Text(
                                   assignedRole,
                                   style: TextStyle(
-                                    color: Colors.white.withOpacity(0.62),
+                                    color: Colors.white.withValues(alpha: 0.62),
                                     fontSize: 12,
                                   ),
                                 ),
@@ -451,7 +450,7 @@ class _SummaryCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.65),
+                    color: Colors.white.withValues(alpha: 0.65),
                     fontSize: 12,
                   ),
                 ),
@@ -485,7 +484,7 @@ class _SectionCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF1A2233),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -503,7 +502,7 @@ class _SectionCard extends StatelessWidget {
             Text(
               subtitle!,
               style: TextStyle(
-                color: Colors.white.withOpacity(0.56),
+                color: Colors.white.withValues(alpha: 0.56),
                 fontSize: 12,
               ),
             ),
@@ -596,7 +595,7 @@ class _TimelineItem extends StatelessWidget {
                   Text(
                     entry.caption,
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.48),
+                      color: Colors.white.withValues(alpha: 0.48),
                       fontSize: 12,
                     ),
                   ),
@@ -635,7 +634,7 @@ class _StatusPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.20),
+        color: color.withValues(alpha: 0.20),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
@@ -693,7 +692,7 @@ class _EmptySummaryCard extends StatelessWidget {
                 Text(
                   'Submit a complaint to start seeing your tracker updates here.',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.65),
+                    color: Colors.white.withValues(alpha: 0.65),
                     fontSize: 12,
                   ),
                 ),
@@ -757,7 +756,7 @@ class _EmptyMessage extends StatelessWidget {
     return Text(
       message,
       style: TextStyle(
-        color: Colors.white.withOpacity(0.78),
+        color: Colors.white.withValues(alpha: 0.78),
         height: 1.45,
       ),
     );
@@ -787,7 +786,7 @@ class _EmptyAssignedStaff extends StatelessWidget {
               Text(
                 'Staff will appear here after validation',
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.62),
+                  color: Colors.white.withValues(alpha: 0.62),
                   fontSize: 12,
                 ),
               ),
@@ -808,21 +807,6 @@ class _EmptyAssignedStaff extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _TrackerEmptyState extends StatelessWidget {
-  const _TrackerEmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      'No reports yet. Submit a complaint to start tracking updates here.',
-      style: TextStyle(
-        color: Colors.white.withOpacity(0.72),
-        height: 1.5,
-      ),
     );
   }
 }

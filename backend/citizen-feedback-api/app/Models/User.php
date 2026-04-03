@@ -51,5 +51,15 @@ class User extends Authenticatable
     {
         return $this->hasMany(AdminResponse::class);
     }
+
+    public function feedbackEntries()
+    {
+        return $this->hasMany(CitizenFeedback::class);
+    }
+
+    public function escalationActions()
+    {
+        return $this->hasMany(ReportEscalation::class, 'acted_by');
+    }
     
 }

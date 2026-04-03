@@ -12,7 +12,14 @@ import 'forgot_password_screen.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({
+    super.key,
+    this.authService,
+    this.googleAuthService,
+  });
+
+  final AuthService? authService;
+  final GoogleAuthService? googleAuthService;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -24,8 +31,8 @@ class _LoginScreenState extends State<LoginScreen> {
     unicode: true,
   );
 
-  final AuthService _authService = AuthService();
-  final GoogleAuthService _googleAuthService = GoogleAuthService();
+  late final AuthService _authService;
+  GoogleAuthService? _googleAuthService;
 
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
@@ -39,8 +46,13 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
+    _authService = widget.authService ?? AuthService();
     _loadSavedCitizenEmail();
   }
+
+  GoogleAuthService get _resolvedGoogleAuthService =>
+      _googleAuthService ??=
+          widget.googleAuthService ?? GoogleAuthService();
 
   bool _containsEmoji(String value) {
     return _emojiRegex.hasMatch(value);
@@ -137,7 +149,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isGoogleLoading = true);
 
     try {
-      final credential = await _googleAuthService.signInWithGoogle();
+      final credential = await _resolvedGoogleAuthService.signInWithGoogle();
       final user = credential.user;
 
       if (!mounted) return;

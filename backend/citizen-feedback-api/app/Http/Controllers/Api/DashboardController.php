@@ -30,7 +30,7 @@ class DashboardController extends Controller
             abort(403, 'Unauthorized action.');
         }
 
-        $statuses = ['New', 'Pending', 'In Progress', 'Resolved'];
+        $statuses = ['New', 'Pending', 'In Progress', 'Resolved', 'Rejected'];
         $priorities = ['Low', 'Normal', 'High', 'Urgent'];
 
         $baseQuery = $this->scopedReports($request);
@@ -68,6 +68,22 @@ class DashboardController extends Controller
             ->take(6)
             ->values();
 
+        $barangayBreakdown = (clone $baseQuery)
+            ->select('barangay', DB::raw('COUNT(*) as total'))
+            ->whereNotNull('barangay')
+            ->where('barangay', '!=', '')
+            ->groupBy('barangay')
+            ->orderByDesc('total')
+            ->limit(6)
+            ->get()
+            ->map(function ($row) {
+                return [
+                    'label' => $row->barangay,
+                    'count' => (int) $row->total,
+                ];
+            })
+            ->values();
+
         $locationBreakdown = (clone $baseQuery)
             ->select('location', DB::raw('COUNT(*) as total'))
             ->whereNotNull('location')
@@ -92,6 +108,21 @@ class DashboardController extends Controller
             ->get()
             ->pluck('total', 'month_key');
 
+        $monthlyResolvedCounts = (clone $baseQuery)
+            ->selectRaw('DATE_FORMAT(COALESCE(resolved_at, created_at), "%Y-%m") as month_key, COUNT(*) as total')
+            ->where('status', 'Resolved')
+            ->where(function ($query) {
+                $query->where('resolved_at', '>=', now()->subMonths(5)->startOfMonth())
+                    ->orWhere(function ($fallbackQuery) {
+                        $fallbackQuery->whereNull('resolved_at')
+                            ->where('created_at', '>=', now()->subMonths(5)->startOfMonth());
+                    });
+            })
+            ->groupBy('month_key')
+            ->orderBy('month_key')
+            ->get()
+            ->pluck('total', 'month_key');
+
         $monthlyTrend = collect(range(0, 5))->map(function (int $offset) use ($monthlyCounts) {
             $date = Carbon::now()->subMonths(5 - $offset);
             $key = $date->format('Y-m');
@@ -102,6 +133,38 @@ class DashboardController extends Controller
             ];
         })->values();
 
+        $monthlyTrend = collect(range(0, 5))->map(function (int $offset) use ($monthlyCounts, $monthlyResolvedCounts) {
+            $date = Carbon::now()->subMonths(5 - $offset);
+            $key = $date->format('Y-m');
+
+            return [
+                'label' => $date->format('M'),
+                'new_reports' => (int) ($monthlyCounts[$key] ?? 0),
+                'resolved_reports' => (int) ($monthlyResolvedCounts[$key] ?? 0),
+            ];
+        })->values();
+
+        $staffPerformance = (clone $baseQuery)
+            ->with('assignedAdmin:id,name')
+            ->whereNotNull('assigned_to')
+            ->get()
+            ->groupBy('assigned_to')
+            ->map(function ($reports, $userId) {
+                $firstReport = $reports->first();
+                $assignedAdmin = $firstReport?->assignedAdmin;
+
+                return [
+                    'id' => (int) $userId,
+                    'name' => $assignedAdmin?->name ?? 'Assigned Staff',
+                    'reports_count' => $reports->count(),
+                    'resolved_count' => $reports->where('status', 'Resolved')->count(),
+                    'in_progress_count' => $reports->where('status', 'In Progress')->count(),
+                ];
+            })
+            ->sortByDesc('reports_count')
+            ->take(5)
+            ->values();
+
         return response()->json([
             'overview' => [
                 'total_reports' => (clone $baseQuery)->count(),
@@ -109,11 +172,14 @@ class DashboardController extends Controller
                 'pending' => (clone $baseQuery)->where('status', 'Pending')->count(),
                 'in_progress' => (clone $baseQuery)->where('status', 'In Progress')->count(),
                 'resolved' => (clone $baseQuery)->where('status', 'Resolved')->count(),
+                'rejected' => (clone $baseQuery)->where('status', 'Rejected')->count(),
             ],
             'status_breakdown' => $statusBreakdown,
             'priority_breakdown' => $priorityBreakdown,
             'category_breakdown' => $categoryBreakdown,
+            'barangay_breakdown' => $barangayBreakdown,
             'location_breakdown' => $locationBreakdown,
+            'staff_performance' => $staffPerformance,
             'monthly_trend' => $monthlyTrend,
             'generated_at' => now()->toIso8601String(),
         ]);

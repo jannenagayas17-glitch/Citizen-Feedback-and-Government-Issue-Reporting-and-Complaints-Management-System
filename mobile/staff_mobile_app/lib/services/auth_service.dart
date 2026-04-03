@@ -5,6 +5,30 @@ import '../config/api_config.dart';
 import '../utils/token_storage.dart';
 
 class AuthService {
+  String _extractErrorMessage(
+    Map<String, dynamic> data,
+    String fallback,
+  ) {
+    final errors = data['errors'];
+    if (errors is Map<String, dynamic>) {
+      for (final value in errors.values) {
+        if (value is List && value.isNotEmpty) {
+          return value.first.toString();
+        }
+        if (value != null && value.toString().trim().isNotEmpty) {
+          return value.toString();
+        }
+      }
+    }
+
+    final message = data['message']?.toString().trim();
+    if (message != null && message.isNotEmpty) {
+      return message;
+    }
+
+    return fallback;
+  }
+
   Uri _buildUri(String endpoint) {
     return Uri.parse('${ApiConfig.baseUrl}$endpoint');
   }
@@ -54,10 +78,7 @@ class AuthService {
       return data;
     }
 
-    throw Exception(
-      data['message'] ??
-          (data['errors'] != null ? data['errors'].toString() : 'Login failed'),
-    );
+    throw Exception(_extractErrorMessage(data, 'Login failed'));
   }
 
   Future<Map<String, dynamic>> loginWithGoogle({
@@ -91,12 +112,7 @@ class AuthService {
       return data;
     }
 
-    throw Exception(
-      data['message'] ??
-          (data['errors'] != null
-              ? data['errors'].toString()
-              : 'Google login failed'),
-    );
+    throw Exception(_extractErrorMessage(data, 'Google login failed'));
   }
 
   Future<Map<String, dynamic>> register({
@@ -135,12 +151,7 @@ class AuthService {
       return data;
     }
 
-    throw Exception(
-      data['message'] ??
-          (data['errors'] != null
-              ? data['errors'].toString()
-              : 'Registration failed'),
-    );
+    throw Exception(_extractErrorMessage(data, 'Registration failed'));
   }
 
   Future<Map<String, dynamic>> requestGovernmentAccount({
@@ -148,9 +159,9 @@ class AuthService {
     required String email,
     String? mobileNumber,
     required String password,
+    required String passwordConfirmation,
     required String department,
     required String jobTitle,
-    required String accessCode,
   }) async {
     final response = await http.post(
       _buildUri('/auth/request-government-account'),
@@ -161,9 +172,9 @@ class AuthService {
         if (mobileNumber != null && mobileNumber.isNotEmpty)
           'mobile_number': mobileNumber,
         'password': password,
+        'password_confirmation': passwordConfirmation,
         'department': department,
         'job_title': jobTitle,
-        'access_code': accessCode,
       }),
     );
 
@@ -181,12 +192,7 @@ class AuthService {
       return data;
     }
 
-    throw Exception(
-      data['message'] ??
-          (data['errors'] != null
-              ? data['errors'].toString()
-              : 'Government account request failed'),
-    );
+    throw Exception(_extractErrorMessage(data, 'Government account request failed'));
   }
 
   Future<Map<String, dynamic>> forgotPassword({
@@ -266,7 +272,7 @@ class AuthService {
       }
     }
 
-    throw Exception(data['message']?.toString() ?? 'Failed to update profile');
+    throw Exception(_extractErrorMessage(data, 'Failed to update profile'));
   }
 
   Future<List<dynamic>> getAdminUsers() async {
@@ -282,12 +288,7 @@ class AuthService {
     }
 
     if (data is Map<String, dynamic>) {
-      throw Exception(
-        data['message']?.toString() ??
-            (data['errors'] != null
-                ? data['errors'].toString()
-                : 'Failed to fetch users'),
-      );
+      throw Exception(_extractErrorMessage(data, 'Failed to fetch users'));
     }
 
     throw Exception('Failed to fetch users');
@@ -307,12 +308,7 @@ class AuthService {
     }
 
     if (data is Map<String, dynamic>) {
-      throw Exception(
-        data['message']?.toString() ??
-            (data['errors'] != null
-                ? data['errors'].toString()
-                : 'Failed to fetch offices'),
-      );
+      throw Exception(_extractErrorMessage(data, 'Failed to fetch offices'));
     }
 
     throw Exception('Failed to fetch offices');
@@ -360,7 +356,7 @@ class AuthService {
       return data;
     }
 
-    throw Exception(data['message']?.toString() ?? 'Failed to verify account');
+    throw Exception(_extractErrorMessage(data, 'Failed to verify account'));
   }
 
   Future<Map<String, dynamic>> deactivateAccount(int id) async {
@@ -375,9 +371,7 @@ class AuthService {
       return data;
     }
 
-    throw Exception(
-      data['message']?.toString() ?? 'Failed to deactivate account',
-    );
+    throw Exception(_extractErrorMessage(data, 'Failed to deactivate account'));
   }
 
   Future<Map<String, dynamic>> reactivateAccount(int id) async {
@@ -392,9 +386,22 @@ class AuthService {
       return data;
     }
 
-    throw Exception(
-      data['message']?.toString() ?? 'Failed to reactivate account',
+    throw Exception(_extractErrorMessage(data, 'Failed to reactivate account'));
+  }
+
+  Future<Map<String, dynamic>> deleteAccount(int id) async {
+    final response = await http.delete(
+      _buildUri('/admin/delete-account/$id'),
+      headers: await _headers(authRequired: true),
     );
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+    if (response.statusCode == 200) {
+      return data;
+    }
+
+    throw Exception(_extractErrorMessage(data, 'Failed to delete account'));
   }
 
   Future<void> logout() async {

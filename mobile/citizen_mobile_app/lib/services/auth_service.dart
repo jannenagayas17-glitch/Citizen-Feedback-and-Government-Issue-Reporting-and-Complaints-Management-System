@@ -5,6 +5,30 @@ import '../config/api_config.dart';
 import '../utils/token_storage.dart';
 
 class AuthService {
+  String _extractErrorMessage(
+    Map<String, dynamic> data,
+    String fallback,
+  ) {
+    final errors = data['errors'];
+    if (errors is Map<String, dynamic>) {
+      for (final value in errors.values) {
+        if (value is List && value.isNotEmpty) {
+          return value.first.toString();
+        }
+        if (value != null && value.toString().trim().isNotEmpty) {
+          return value.toString();
+        }
+      }
+    }
+
+    final message = data['message']?.toString().trim();
+    if (message != null && message.isNotEmpty) {
+      return message;
+    }
+
+    return fallback;
+  }
+
   Uri _buildUri(String endpoint) {
     return Uri.parse('${ApiConfig.baseUrl}$endpoint');
   }
@@ -54,10 +78,7 @@ class AuthService {
       return data;
     }
 
-    throw Exception(
-      data['message'] ??
-          (data['errors'] != null ? data['errors'].toString() : 'Login failed'),
-    );
+    throw Exception(_extractErrorMessage(data, 'Login failed'));
   }
 
   Future<Map<String, dynamic>> loginWithGoogle({
@@ -92,12 +113,7 @@ class AuthService {
         return data;
       }
 
-      throw Exception(
-        data['message'] ??
-            (data['errors'] != null
-                ? data['errors'].toString()
-                : 'Google login failed'),
-      );
+      throw Exception(_extractErrorMessage(data, 'Google login failed'));
     } on http.ClientException {
       throw Exception(
         'Unable to reach the Google login server. Restart the backend and verify that browser API access is allowed.',
@@ -141,12 +157,7 @@ class AuthService {
       return data;
     }
 
-    throw Exception(
-      data['message'] ??
-          (data['errors'] != null
-              ? data['errors'].toString()
-              : 'Registration failed'),
-    );
+    throw Exception(_extractErrorMessage(data, 'Registration failed'));
   }
 
   Future<Map<String, dynamic>> requestGovernmentAccount({
@@ -272,7 +283,7 @@ class AuthService {
       }
     }
 
-    throw Exception(data['message']?.toString() ?? 'Failed to update profile');
+    throw Exception(_extractErrorMessage(data, 'Failed to update profile'));
   }
 
   Future<List<dynamic>> getAdminUsers() async {
@@ -288,12 +299,7 @@ class AuthService {
     }
 
     if (data is Map<String, dynamic>) {
-      throw Exception(
-        data['message']?.toString() ??
-            (data['errors'] != null
-                ? data['errors'].toString()
-                : 'Failed to fetch users'),
-      );
+      throw Exception(_extractErrorMessage(data, 'Failed to fetch users'));
     }
 
     throw Exception('Failed to fetch users');
@@ -313,12 +319,7 @@ class AuthService {
     }
 
     if (data is Map<String, dynamic>) {
-      throw Exception(
-        data['message']?.toString() ??
-            (data['errors'] != null
-                ? data['errors'].toString()
-                : 'Failed to fetch offices'),
-      );
+      throw Exception(_extractErrorMessage(data, 'Failed to fetch offices'));
     }
 
     throw Exception('Failed to fetch offices');
@@ -336,7 +337,7 @@ class AuthService {
       return data;
     }
 
-    throw Exception(data['message']?.toString() ?? 'Failed to verify account');
+    throw Exception(_extractErrorMessage(data, 'Failed to verify account'));
   }
 
   Future<Map<String, dynamic>> deactivateAccount(int id) async {
@@ -351,9 +352,7 @@ class AuthService {
       return data;
     }
 
-    throw Exception(
-      data['message']?.toString() ?? 'Failed to deactivate account',
-    );
+    throw Exception(_extractErrorMessage(data, 'Failed to deactivate account'));
   }
 
   Future<Map<String, dynamic>> reactivateAccount(int id) async {
@@ -368,9 +367,7 @@ class AuthService {
       return data;
     }
 
-    throw Exception(
-      data['message']?.toString() ?? 'Failed to reactivate account',
-    );
+    throw Exception(_extractErrorMessage(data, 'Failed to reactivate account'));
   }
 
   Future<void> logout() async {

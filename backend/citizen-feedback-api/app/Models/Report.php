@@ -59,4 +59,14 @@ class Report extends Model
     {
         return $this->hasMany(AdminResponse::class);
     }
+
+    public function feedbackEntries()
+    {
+        return $this->hasMany(CitizenFeedback::class);
+    }
+
+    public function escalation()
+    {
+        return $this->hasOne(ReportEscalation::class);
+    }
 }
