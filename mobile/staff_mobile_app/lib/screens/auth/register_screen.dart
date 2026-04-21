@@ -7,10 +7,7 @@ import '../../services/auth_service.dart';
 import '../../utils/app_routes.dart';
 
 class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({
-    super.key,
-    this.authService,
-  });
+  const RegisterScreen({super.key, this.authService});
 
   final AuthService? authService;
 
@@ -242,9 +239,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   void _showSnack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -296,8 +293,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 16,
+                ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(24),
                   child: BackdropFilter(
@@ -308,19 +307,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(24),
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.22),
+                          color: Colors.white.withValues(alpha: 0.22),
                         ),
                         gradient: LinearGradient(
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
-                            Colors.white.withOpacity(0.22),
-                            Colors.white.withOpacity(0.10),
+                            Colors.white.withValues(alpha: 0.22),
+                            Colors.white.withValues(alpha: 0.10),
                           ],
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.25),
+                            color: Colors.black.withValues(alpha: 0.25),
                             blurRadius: 24,
                             offset: const Offset(0, 12),
                           ),
@@ -335,7 +334,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               height: 88,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: Colors.white.withOpacity(0.16),
+                                color: Colors.white.withValues(alpha: 0.16),
                                 border: Border.all(
                                   color: const Color(0xFFD8B15A),
                                   width: 2,
@@ -367,7 +366,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             'Register for an official Tacloban City government office account',
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.78),
+                              color: Colors.white.withValues(alpha: 0.78),
                               fontSize: 16,
                               fontWeight: FontWeight.w400,
                             ),
@@ -378,16 +377,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               Expanded(
                                 child: Container(
                                   height: 1,
-                                  color: Colors.white.withOpacity(0.16),
+                                  color: Colors.white.withValues(alpha: 0.16),
                                 ),
                               ),
                               Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 12),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
                                 child: Text(
                                   'ACCOUNT INFO',
                                   style: TextStyle(
-                                    color: Colors.white.withOpacity(0.62),
+                                    color: Colors.white.withValues(alpha: 0.62),
                                     fontSize: 13,
                                     letterSpacing: 1.6,
                                   ),
@@ -396,7 +396,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               Expanded(
                                 child: Container(
                                   height: 1,
-                                  color: Colors.white.withOpacity(0.16),
+                                  color: Colors.white.withValues(alpha: 0.16),
                                 ),
                               ),
                             ],
@@ -413,17 +413,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             _buildDropdownField<String>(
                               value: _selectedOffice,
                               hint: 'Select office',
-                              items: _offices
-                                  .map((office) {
-                                    final record = office as Map<String, dynamic>;
-                                    final name =
-                                        (record['name'] ?? 'Unnamed office').toString();
-                                    return DropdownMenuItem(
-                                      value: name,
-                                      child: Text(name),
-                                    );
-                                  })
-                                  .toList(),
+                              items: _offices.map((office) {
+                                final record = office as Map<String, dynamic>;
+                                final name =
+                                    (record['name'] ?? 'Unnamed office')
+                                        .toString();
+                                return DropdownMenuItem(
+                                  value: name,
+                                  child: Text(name),
+                                );
+                              }).toList(),
                               onChanged: (value) {
                                 setState(() {
                                   _selectedOffice = value;
@@ -553,7 +552,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 _obscurePassword
                                     ? Icons.visibility_off_outlined
                                     : Icons.visibility_outlined,
-                                color: Colors.white.withOpacity(0.62),
+                                color: Colors.white.withValues(alpha: 0.62),
                                 size: 20,
                               ),
                             ),
@@ -586,7 +585,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 _obscureConfirmPassword
                                     ? Icons.visibility_off_outlined
                                     : Icons.visibility_outlined,
-                                color: Colors.white.withOpacity(0.62),
+                                color: Colors.white.withValues(alpha: 0.62),
                                 size: 20,
                               ),
                             ),
@@ -599,8 +598,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF2563EB),
                                 foregroundColor: Colors.white,
-                                disabledBackgroundColor:
-                                    const Color(0xFF2563EB).withOpacity(0.5),
+                                disabledBackgroundColor: const Color(
+                                  0xFF2563EB,
+                                ).withValues(alpha: 0.5),
                                 elevation: 0,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(10),
@@ -614,8 +614,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                         strokeWidth: 2.2,
                                         valueColor:
                                             AlwaysStoppedAnimation<Color>(
-                                          Colors.white,
-                                        ),
+                                              Colors.white,
+                                            ),
                                       ),
                                     )
                                   : const Text(
@@ -638,12 +638,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 );
                               },
                               style: TextButton.styleFrom(
-                                foregroundColor: Colors.white.withOpacity(0.84),
+                                foregroundColor: Colors.white.withValues(
+                                  alpha: 0.84,
+                                ),
                               ),
                               child: RichText(
                                 text: TextSpan(
                                   style: TextStyle(
-                                    color: Colors.white.withOpacity(0.72),
+                                    color: Colors.white.withValues(alpha: 0.72),
                                     fontSize: 15,
                                   ),
                                   children: const [
@@ -679,7 +681,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Text(
       text,
       style: TextStyle(
-        color: Colors.white.withOpacity(0.92),
+        color: Colors.white.withValues(alpha: 0.92),
         fontSize: 14,
         fontWeight: FontWeight.w500,
       ),
@@ -706,59 +708,41 @@ class _RegisterScreenState extends State<RegisterScreen> {
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         hintText: hintText,
-        hintStyle: TextStyle(
-          color: Colors.white.withOpacity(0.45),
-        ),
+        hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.45)),
         prefixIcon: Icon(
           prefixIcon,
-          color: Colors.white.withOpacity(0.65),
+          color: Colors.white.withValues(alpha: 0.65),
           size: 20,
         ),
         suffixIcon: suffixIcon,
         filled: true,
-        fillColor: Colors.white.withOpacity(0.12),
+        fillColor: Colors.white.withValues(alpha: 0.12),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 16,
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(
-            color: Colors.white.withOpacity(0.2),
-          ),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(
-            color: Colors.white.withOpacity(0.2),
-          ),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
         ),
         focusedBorder: const OutlineInputBorder(
           borderRadius: BorderRadius.all(Radius.circular(10)),
-          borderSide: BorderSide(
-            color: Color(0xFF3B82F6),
-            width: 1.3,
-          ),
+          borderSide: BorderSide(color: Color(0xFF3B82F6), width: 1.3),
         ),
         errorText: errorText,
         errorMaxLines: 2,
-        errorStyle: const TextStyle(
-          color: Color(0xFFFFB4B4),
-          fontSize: 12,
-        ),
+        errorStyle: const TextStyle(color: Color(0xFFFFB4B4), fontSize: 12),
         errorBorder: const OutlineInputBorder(
           borderRadius: BorderRadius.all(Radius.circular(10)),
-          borderSide: BorderSide(
-            color: Color(0xFFEF4444),
-            width: 1.2,
-          ),
+          borderSide: BorderSide(color: Color(0xFFEF4444), width: 1.2),
         ),
         focusedErrorBorder: const OutlineInputBorder(
           borderRadius: BorderRadius.all(Radius.circular(10)),
-          borderSide: BorderSide(
-            color: Color(0xFFEF4444),
-            width: 1.3,
-          ),
+          borderSide: BorderSide(color: Color(0xFFEF4444), width: 1.3),
         ),
       ),
     );
@@ -777,12 +761,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.12),
+            color: Colors.white.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: errorText != null
                   ? const Color(0xFFEF4444)
-                  : Colors.white.withOpacity(0.2),
+                  : Colors.white.withValues(alpha: 0.2),
             ),
           ),
           child: DropdownButtonHideUnderline(
@@ -792,21 +776,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
               dropdownColor: const Color(0xFF394355),
               icon: Icon(
                 Icons.keyboard_arrow_down_rounded,
-                color: Colors.white.withOpacity(0.8),
+                color: Colors.white.withValues(alpha: 0.8),
               ),
               hint: hint == null
                   ? null
                   : Text(
                       hint,
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.45),
+                        color: Colors.white.withValues(alpha: 0.45),
                         fontSize: 15,
                       ),
                     ),
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-              ),
+              style: const TextStyle(color: Colors.white, fontSize: 15),
               onChanged: onChanged,
               items: items,
             ),
@@ -816,10 +797,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           const SizedBox(height: 6),
           Text(
             errorText,
-            style: const TextStyle(
-              color: Color(0xFFFFB4B4),
-              fontSize: 12,
-            ),
+            style: const TextStyle(color: Color(0xFFFFB4B4), fontSize: 12),
           ),
         ],
       ],

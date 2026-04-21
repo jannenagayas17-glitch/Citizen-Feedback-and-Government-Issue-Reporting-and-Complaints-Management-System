@@ -132,6 +132,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/reports/export', [ReportController::class, 'exportAdminReports']);
         Route::post('/reports/{id}/status', [ReportController::class, 'updateStatus']);
         Route::get('/users', [AuthController::class, 'adminUsers']);
+        Route::post('/users', [AuthController::class, 'storeManagedAccount']);
+        Route::put('/users/{id}', [AuthController::class, 'updateManagedAccount']);
         Route::get('/offices', [OfficeController::class, 'index']);
         Route::post('/offices', [OfficeController::class, 'store']);
 

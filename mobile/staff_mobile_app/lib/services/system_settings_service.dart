@@ -6,7 +6,10 @@ class SystemSettingsService {
   final ApiClient _apiClient = ApiClient();
 
   Future<Map<String, dynamic>> getSettings() async {
-    final response = await _apiClient.get('/admin/settings', authRequired: true);
+    final response = await _apiClient.get(
+      '/admin/settings',
+      authRequired: true,
+    );
     final decoded = jsonDecode(response.body);
 
     if (response.statusCode == 200 && decoded is Map<String, dynamic>) {
@@ -27,7 +30,9 @@ class SystemSettingsService {
     throw Exception('Failed to fetch settings');
   }
 
-  Future<Map<String, dynamic>> updateSettings(Map<String, dynamic> settings) async {
+  Future<Map<String, dynamic>> updateSettings(
+    Map<String, dynamic> settings,
+  ) async {
     final response = await _apiClient.put(
       '/admin/settings',
       authRequired: true,

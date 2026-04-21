@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../screens/admin/admin_home_screen.dart';
 import '../screens/auth/forgot_password_screen.dart';
-import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
 import '../screens/super_admin/super_admin_dashboard.dart';
+import 'session_gate.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -16,7 +16,7 @@ class AppRoutes {
 
   static Map<String, WidgetBuilder> get routes {
     return {
-      login: (context) => const LoginScreen(),
+      login: (context) => const SessionGate(),
       register: (context) => const RegisterScreen(),
       forgotPassword: (context) => const ForgotPasswordScreen(),
       adminHome: (context) => const AdminHomeScreen(),

@@ -27,9 +27,8 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
   int _selectedFilter = 0;
   int _currentIndex = 0;
   String _searchQuery = '';
-  late Future<Map<String, dynamic>> _dashboardFuture;
-  late Future<List<dynamic>> _reportsFuture;
-  late Future<Map<String, dynamic>> _userFuture;
+  late Future<Map<String, dynamic>> _payloadFuture;
+  Map<String, dynamic>? _cachedPayload;
 
   @override
   void initState() {
@@ -38,35 +37,36 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
   }
 
   void _loadData() {
-    _dashboardFuture = _dashboardService.getDashboardStats();
-    _reportsFuture = _reportService.getReports();
-    _userFuture = _authService.getCurrentUser();
+    _payloadFuture = _loadPayload();
+  }
+
+  Future<Map<String, dynamic>> _loadPayload() async {
+    final values = await Future.wait<dynamic>([
+      _dashboardService.getDashboardStats(),
+      _reportService.getReports(),
+      _authService.getCurrentUser(),
+    ]);
+    final payload = {
+      'dashboard': values[0] as Map<String, dynamic>,
+      'reports': values[1] as List<dynamic>,
+      'user': values[2] as Map<String, dynamic>,
+    };
+    _cachedPayload = payload;
+    return payload;
   }
 
   Future<void> _refresh() async {
-    final dashboardFuture = _dashboardService.getDashboardStats();
-    final reportsFuture = _reportService.getReports();
-    final userFuture = _authService.getCurrentUser();
-
+    final future = _loadPayload();
     setState(() {
-      _dashboardFuture = dashboardFuture;
-      _reportsFuture = reportsFuture;
-      _userFuture = userFuture;
+      _payloadFuture = future;
     });
-
-    await Future.wait([
-      dashboardFuture,
-      reportsFuture,
-      userFuture,
-    ]);
+    await future;
   }
 
   Future<void> _openSubmitReport() async {
     final created = await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const SubmitComplaintScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const SubmitComplaintScreen()),
     );
 
     if (!mounted) return;
@@ -81,12 +81,13 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => const MyComplaintsScreen(),
+        builder: (_) => MyComplaintsScreen(
+          initialReports: (_cachedPayload?['reports'] as List<dynamic>?) ?? [],
+        ),
       ),
     );
     if (!mounted) return;
     setState(() => _currentIndex = 0);
-    await _refresh();
   }
 
   Future<void> _openNotifications(List<dynamic> reports) async {
@@ -98,19 +99,15 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
     );
     if (!mounted) return;
     setState(() => _currentIndex = 0);
-    await _refresh();
   }
 
   Future<void> _openProfile(Map<String, dynamic> user) async {
     await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => CitizenProfileScreen(user: user),
-      ),
+      MaterialPageRoute(builder: (_) => CitizenProfileScreen(user: user)),
     );
     if (!mounted) return;
     setState(() => _currentIndex = 0);
-    await _refresh();
   }
 
   @override
@@ -122,22 +119,19 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
   @override
   Widget build(BuildContext context) {
     const primaryBlue = Color(0xFF2563EB);
+    final colors = _CitizenHomeColors.of(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0C1727),
+      backgroundColor: colors.background,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          const DecoratedBox(
+          DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFF0C1727),
-                  Color(0xFF1E293B),
-                  Color(0xFF463327),
-                ],
+                colors: colors.gradient,
               ),
             ),
           ),
@@ -145,98 +139,98 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
             child: RefreshIndicator(
               onRefresh: _refresh,
               child: FutureBuilder<Map<String, dynamic>>(
-            future: Future.wait<dynamic>([
-              _dashboardFuture,
-              _reportsFuture,
-              _userFuture,
-            ]).then(
-              (values) => {
-                'dashboard': values[0] as Map<String, dynamic>,
-                'reports': values[1] as List<dynamic>,
-                'user': values[2] as Map<String, dynamic>,
-              },
-            ),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const Center(child: CircularProgressIndicator());
-              }
+                future: _payloadFuture,
+                initialData: _cachedPayload,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done &&
+                      !snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
 
-              if (snapshot.hasError) {
-                return ListView(
-                  padding: const EdgeInsets.all(24),
-                  children: [
-                    Text(
-                      snapshot.error.toString().replaceFirst('Exception: ', ''),
-                    ),
-                  ],
-                );
-              }
-
-              final payload = snapshot.data ?? const <String, dynamic>{};
-              final dashboard =
-                  payload['dashboard'] as Map<String, dynamic>? ?? const {};
-              final reports = payload['reports'] as List<dynamic>? ?? const [];
-              final user = payload['user'] as Map<String, dynamic>? ?? const {};
-              final filteredReports = _applySearch(_applyFilter(reports));
-
-              return ListView(
-                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
-                children: [
-                  _buildHeader(user, reports),
-                  const SizedBox(height: 14),
-                  _buildGlassShell(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  if (snapshot.hasError && !snapshot.hasData) {
+                    return ListView(
+                      padding: const EdgeInsets.all(24),
                       children: [
-                        _buildSearchBar(reports.length),
-                        const SizedBox(height: 14),
-                        _buildStatsRow(dashboard),
-                        const SizedBox(height: 12),
-                        _buildReportCard(),
-                        const SizedBox(height: 10),
-                        _buildNoticeCard(),
-                        const SizedBox(height: 12),
-                        _buildFilterChips(reports),
-                        const SizedBox(height: 16),
-                        _buildRecentHeader(filteredReports.length),
-                        const SizedBox(height: 10),
-                        if (filteredReports.isEmpty)
-                          _buildEmptyState()
-                        else
-                          ...filteredReports.map(
-                            (report) => Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
-                              child: _IssueCard(
-                                report: report as Map<String, dynamic>,
-                                onTap: () {
-                                  final id = report['id'];
-                                  final reportId = id is int ? id : int.tryParse('$id');
-                                  if (reportId == null) return;
-
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => ComplaintDetailScreen(
-                                        reportId: reportId,
-                                      ),
-                                    ),
-                                  ).then((_) async {
-                                    if (!mounted) return;
-                                    setState(() => _currentIndex = 0);
-                                    await _refresh();
-                                  });
-                                },
-                              ),
-                            ),
+                        Text(
+                          snapshot.error.toString().replaceFirst(
+                            'Exception: ',
+                            '',
                           ),
+                        ),
                       ],
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
+                    );
+                  }
+
+                  final payload = snapshot.data ?? const <String, dynamic>{};
+                  final dashboard =
+                      payload['dashboard'] as Map<String, dynamic>? ?? const {};
+                  final reports =
+                      payload['reports'] as List<dynamic>? ?? const [];
+                  final user =
+                      payload['user'] as Map<String, dynamic>? ?? const {};
+                  final filteredReports = _applySearch(_applyFilter(reports));
+
+                  return ListView(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
+                    children: [
+                      _buildHeader(user, reports),
+                      const SizedBox(height: 14),
+                      _buildGlassShell(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildSearchBar(reports.length),
+                            const SizedBox(height: 14),
+                            _buildStatsRow(dashboard),
+                            const SizedBox(height: 12),
+                            _buildReportCard(),
+                            const SizedBox(height: 10),
+                            _buildNoticeCard(),
+                            const SizedBox(height: 12),
+                            _buildFilterChips(reports),
+                            const SizedBox(height: 16),
+                            _buildRecentHeader(filteredReports.length),
+                            const SizedBox(height: 10),
+                            if (filteredReports.isEmpty)
+                              _buildEmptyState()
+                            else
+                              ...filteredReports.map(
+                                (report) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 10),
+                                  child: _IssueCard(
+                                    report: report as Map<String, dynamic>,
+                                    onTap: () {
+                                      final id = report['id'];
+                                      final reportId = id is int
+                                          ? id
+                                          : int.tryParse('$id');
+                                      if (reportId == null) return;
+
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => ComplaintDetailScreen(
+                                            reportId: reportId,
+                                          ),
+                                        ),
+                                      ).then((_) async {
+                                        if (!mounted) return;
+                                        setState(() => _currentIndex = 0);
+                                        await _refresh();
+                                      });
+                                    },
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         ],
@@ -285,7 +279,8 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
     final selected = _filterOptions[index].toLowerCase();
     return reports.where((item) {
       final report = item as Map<String, dynamic>;
-      final category = (report['category'] as Map<String, dynamic>?)?['name']
+      final category =
+          (report['category'] as Map<String, dynamic>?)?['name']
               ?.toString()
               .toLowerCase() ??
           '';
@@ -294,19 +289,19 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
   }
 
   List<String> get _filterOptions => const [
-        'All Issues',
-        'Roads',
-        'Water',
-        'Electric',
-      ];
+    'All Issues',
+    'Roads',
+    'Water',
+    'Electric',
+  ];
 
   Widget _buildHeader(Map<String, dynamic> user, List<dynamic> reports) {
     final name = (user['name'] ?? 'Citizen').toString().trim();
     final firstName = name.isEmpty ? 'Citizen' : name.split(' ').first;
     final activeNotifications = reports
         .where(
-          (item) => ((item as Map<String, dynamic>)['status'] ?? 'New')
-                  .toString() !=
+          (item) =>
+              ((item as Map<String, dynamic>)['status'] ?? 'New').toString() !=
               'Resolved',
         )
         .length;
@@ -319,11 +314,8 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
             height: 68,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.white.withOpacity(0.14),
-              border: Border.all(
-                color: const Color(0xFFD8B15A),
-                width: 2,
-              ),
+              color: Colors.white.withValues(alpha: 0.14),
+              border: Border.all(color: const Color(0xFFD8B15A), width: 2),
             ),
             child: Padding(
               padding: const EdgeInsets.all(5),
@@ -343,7 +335,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
                 Text(
                   'Good day',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.72),
+                    color: Colors.white.withValues(alpha: 0.72),
                     fontSize: 12,
                   ),
                 ),
@@ -360,7 +352,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
                 Text(
                   'Tacloban City Government Offices',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.82),
+                    color: Colors.white.withValues(alpha: 0.82),
                     fontSize: 12,
                   ),
                 ),
@@ -371,15 +363,22 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
           Column(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(.12),
+                  color: Colors.white.withValues(alpha: .12),
                   borderRadius: BorderRadius.circular(18),
                 ),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.location_on_outlined, color: Colors.white, size: 14),
+                    Icon(
+                      Icons.location_on_outlined,
+                      color: Colors.white,
+                      size: 14,
+                    ),
                     SizedBox(width: 4),
                     Text(
                       'Tacloban',
@@ -398,7 +397,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
                       width: 34,
                       height: 34,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(.16),
+                        color: Colors.white.withValues(alpha: .16),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
@@ -421,7 +420,9 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
                           ),
                           alignment: Alignment.center,
                           child: Text(
-                            activeNotifications > 9 ? '9+' : '$activeNotifications',
+                            activeNotifications > 9
+                                ? '9+'
+                                : '$activeNotifications',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 7,
@@ -445,13 +446,17 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 14),
       height: 50,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.12),
+        color: Colors.white.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withOpacity(0.16)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
       ),
       child: Row(
         children: [
-          Icon(Icons.search, color: Colors.white.withOpacity(0.72), size: 20),
+          Icon(
+            Icons.search,
+            color: Colors.white.withValues(alpha: 0.72),
+            size: 20,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: TextField(
@@ -465,7 +470,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
                     ? 'No submitted issues yet'
                     : 'Search by title or location',
                 hintStyle: TextStyle(
-                  color: Colors.white.withOpacity(0.45),
+                  color: Colors.white.withValues(alpha: 0.45),
                   fontSize: 13,
                 ),
               ),
@@ -480,7 +485,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
               },
               child: Icon(
                 Icons.close,
-                color: Colors.white.withOpacity(0.72),
+                color: Colors.white.withValues(alpha: 0.72),
                 size: 18,
               ),
             ),
@@ -545,11 +550,11 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: primaryBlue.withOpacity(0.92),
+          color: primaryBlue.withValues(alpha: 0.92),
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: primaryBlue.withOpacity(0.28),
+              color: primaryBlue.withValues(alpha: 0.28),
               blurRadius: 18,
               offset: const Offset(0, 10),
             ),
@@ -576,12 +581,9 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
                     ),
                   ),
                   SizedBox(height: 2),
-                    Text(
+                  Text(
                     'Submit a new issue directly to the live system',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 11,
-                    ),
+                    style: TextStyle(color: Colors.white70, fontSize: 11),
                   ),
                 ],
               ),
@@ -620,10 +622,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
                 SizedBox(height: 2),
                 Text(
                   'New reports submitted from this form are stored in the backend database immediately.',
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    color: Color(0xFF8D6E00),
-                  ),
+                  style: TextStyle(fontSize: 10.5, color: Color(0xFF8D6E00)),
                 ),
               ],
             ),
@@ -639,7 +638,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: _filterOptions.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
           final selected = _selectedFilter == index;
           final count = _filterReportsForIndex(reports, index).length;
@@ -652,18 +651,20 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
               decoration: BoxDecoration(
                 color: selected
                     ? const Color(0xFF2563EB)
-                    : Colors.white.withOpacity(0.10),
+                    : Colors.white.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(
                   color: selected
                       ? const Color(0xFF2563EB)
-                      : Colors.white.withOpacity(0.14),
+                      : Colors.white.withValues(alpha: 0.14),
                 ),
               ),
               child: Text(
                 '${_filterOptions[index]}${index == 0 ? '' : ' ($count)'}',
                 style: TextStyle(
-                  color: selected ? Colors.white : Colors.white.withOpacity(0.78),
+                  color: selected
+                      ? Colors.white
+                      : Colors.white.withValues(alpha: 0.78),
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
@@ -689,7 +690,10 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
         const Spacer(),
         Text(
           '$count reports',
-          style: TextStyle(color: Colors.white.withOpacity(0.56), fontSize: 11),
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.56),
+            fontSize: 11,
+          ),
         ),
       ],
     );
@@ -700,16 +704,16 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Column(
         children: [
           Icon(
             Icons.inbox_outlined,
             size: 36,
-            color: Colors.white.withOpacity(0.7),
+            color: Colors.white.withValues(alpha: 0.7),
           ),
           const SizedBox(height: 10),
           const Text(
@@ -724,7 +728,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
           Text(
             'Tap "Report an Issue" to create your first real report and save it to the database.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white.withOpacity(0.68)),
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.68)),
           ),
         ],
       ),
@@ -732,10 +736,11 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
   }
 
   Widget _buildBottomNav(Color primaryBlue) {
+    final colors = _CitizenHomeColors.of(context);
     return BottomAppBar(
       shape: const CircularNotchedRectangle(),
       notchMargin: 8,
-      color: const Color(0xFF1B2334),
+      color: colors.nav,
       child: SizedBox(
         height: 68,
         child: Row(
@@ -763,7 +768,9 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
               selected: _currentIndex == 3,
               onTap: () {
                 setState(() => _currentIndex = 3);
-                _reportsFuture.then(_openNotifications);
+                _openNotifications(
+                  (_cachedPayload?['reports'] as List<dynamic>?) ?? [],
+                );
               },
             ),
             _NavItem(
@@ -772,7 +779,10 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
               selected: _currentIndex == 4,
               onTap: () {
                 setState(() => _currentIndex = 4);
-                _userFuture.then(_openProfile);
+                final user =
+                    (_cachedPayload?['user'] as Map<String, dynamic>?) ??
+                    const <String, dynamic>{};
+                _openProfile(user);
               },
             ),
           ],
@@ -782,6 +792,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
   }
 
   Widget _buildGlassShell({required Widget child}) {
+    final colors = _CitizenHomeColors.of(context);
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
       child: BackdropFilter(
@@ -790,18 +801,15 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withOpacity(0.18)),
+            border: Border.all(color: colors.border),
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [
-                Colors.white.withOpacity(0.18),
-                Colors.white.withOpacity(0.08),
-              ],
+              colors: colors.glassGradient,
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.18),
+                color: Colors.black.withValues(alpha: 0.18),
                 blurRadius: 20,
                 offset: const Offset(0, 10),
               ),
@@ -810,6 +818,50 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
           child: child,
         ),
       ),
+    );
+  }
+}
+
+class _CitizenHomeColors {
+  const _CitizenHomeColors({
+    required this.background,
+    required this.gradient,
+    required this.nav,
+    required this.border,
+    required this.glassGradient,
+  });
+
+  final Color background;
+  final List<Color> gradient;
+  final Color nav;
+  final Color border;
+  final List<Color> glassGradient;
+
+  static _CitizenHomeColors of(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (isDark) {
+      return _CitizenHomeColors(
+        background: const Color(0xFF0C1727),
+        gradient: const [
+          Color(0xFF0C1727),
+          Color(0xFF1E293B),
+          Color(0xFF463327),
+        ],
+        nav: const Color(0xFF1B2334),
+        border: Colors.white.withValues(alpha: 0.18),
+        glassGradient: [
+          Colors.white.withValues(alpha: 0.18),
+          Colors.white.withValues(alpha: 0.08),
+        ],
+      );
+    }
+
+    return _CitizenHomeColors(
+      background: const Color(0xFFF5F8FC),
+      gradient: const [Color(0xFFF5F8FC), Color(0xFFE8F1FC), Color(0xFFD7E8FB)],
+      nav: Colors.white,
+      border: const Color(0xFFD2E0F2),
+      glassGradient: const [Color(0xFF28405F), Color(0xFF1E344F)],
     );
   }
 }
@@ -833,9 +885,9 @@ class _StatCard extends StatelessWidget {
       constraints: const BoxConstraints(minHeight: 82),
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.12),
+        color: Colors.white.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -856,7 +908,7 @@ class _StatCard extends StatelessWidget {
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 10,
-              color: Colors.white.withOpacity(0.72),
+              color: Colors.white.withValues(alpha: 0.72),
               height: 1.2,
             ),
           ),
@@ -867,10 +919,7 @@ class _StatCard extends StatelessWidget {
 }
 
 class _IssueCard extends StatelessWidget {
-  const _IssueCard({
-    required this.report,
-    required this.onTap,
-  });
+  const _IssueCard({required this.report, required this.onTap});
 
   final Map<String, dynamic> report;
   final VoidCallback onTap;
@@ -928,9 +977,9 @@ class _IssueCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.10),
+          color: Colors.white.withValues(alpha: 0.10),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withOpacity(0.14)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -939,14 +988,10 @@ class _IssueCard extends StatelessWidget {
               width: 34,
               height: 34,
               decoration: BoxDecoration(
-                color: color.withOpacity(.12),
+                color: color.withValues(alpha: .12),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(
-                _categoryIcon(categoryName),
-                color: color,
-                size: 18,
-              ),
+              child: Icon(_categoryIcon(categoryName), color: color, size: 18),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -968,7 +1013,7 @@ class _IssueCard extends StatelessWidget {
                   Text(
                     location,
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.62),
+                      color: Colors.white.withValues(alpha: 0.62),
                       fontSize: 10.5,
                     ),
                   ),
@@ -977,7 +1022,7 @@ class _IssueCard extends StatelessWidget {
                     children: [
                       _smallTag(
                         priority,
-                        bg: color.withOpacity(.12),
+                        bg: color.withValues(alpha: .12),
                         textColor: color,
                       ),
                       const SizedBox(width: 8),
@@ -986,7 +1031,7 @@ class _IssueCard extends StatelessWidget {
                           categoryName,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.58),
+                            color: Colors.white.withValues(alpha: 0.58),
                             fontSize: 10.5,
                           ),
                         ),
@@ -1002,14 +1047,14 @@ class _IssueCard extends StatelessWidget {
               children: [
                 _smallTag(
                   status,
-                  bg: statusColor.withOpacity(.15),
+                  bg: statusColor.withValues(alpha: .15),
                   textColor: statusColor,
                 ),
                 const SizedBox(height: 28),
                 Text(
                   date.isEmpty ? '' : date.substring(0, 10),
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.56),
+                    color: Colors.white.withValues(alpha: 0.56),
                     fontSize: 10,
                   ),
                 ),
@@ -1021,11 +1066,7 @@ class _IssueCard extends StatelessWidget {
     );
   }
 
-  Widget _smallTag(
-    String text, {
-    required Color bg,
-    required Color textColor,
-  }) {
+  Widget _smallTag(String text, {required Color bg, required Color textColor}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -1060,6 +1101,9 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const active = Color(0xFF2563EB);
+    final inactive = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white.withValues(alpha: 0.6)
+        : const Color(0xFF64748B);
 
     return InkWell(
       onTap: onTap,
@@ -1069,17 +1113,13 @@ class _NavItem extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              icon,
-              size: 22,
-              color: selected ? active : Colors.white.withOpacity(0.6),
-            ),
+            Icon(icon, size: 22, color: selected ? active : inactive),
             const SizedBox(height: 2),
             Text(
               label,
               style: TextStyle(
                 fontSize: 10,
-                color: selected ? active : Colors.white.withOpacity(0.6),
+                color: selected ? active : inactive,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
               ),
             ),

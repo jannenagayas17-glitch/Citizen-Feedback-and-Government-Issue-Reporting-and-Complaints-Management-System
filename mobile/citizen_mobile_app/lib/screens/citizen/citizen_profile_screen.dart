@@ -3,11 +3,18 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../services/auth_service.dart';
+import '../../services/citizen_data_cache.dart';
 import '../../services/citizen_avatar_service.dart';
 import '../../utils/app_routes.dart';
+import '../../utils/app_theme_controller.dart';
 import '../../widgets/citizen_avatar.dart';
+import '../../widgets/citizen_bottom_nav.dart';
+import '../../widgets/theme_mode_toggle.dart';
+import 'citizen_home_screen.dart';
+import 'citizen_notifications_screen.dart';
 import 'my_complaints_screen.dart';
 import 'send_feedback_screen.dart';
+import 'submit_complaint_screen.dart';
 
 class _CitizenProfileValidators {
   static final RegExp emojiRegex = RegExp(
@@ -66,10 +73,7 @@ class _CitizenProfileValidators {
 }
 
 class CitizenProfileScreen extends StatefulWidget {
-  const CitizenProfileScreen({
-    super.key,
-    required this.user,
-  });
+  const CitizenProfileScreen({super.key, required this.user});
 
   final Map<String, dynamic> user;
 
@@ -106,11 +110,7 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.toString().replaceFirst('Exception: ', ''),
-          ),
-        ),
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
       );
     } finally {
       if (mounted) {
@@ -147,8 +147,11 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
       if (!mounted) return;
 
       setState(() {
-        _user = Map<String, dynamic>.from(response['user'] as Map<String, dynamic>);
+        _user = Map<String, dynamic>.from(
+          response['user'] as Map<String, dynamic>,
+        );
       });
+      CitizenDataCache.updateUser(_user);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Profile updated successfully.')),
@@ -186,15 +189,52 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
 
       if (!mounted) return;
       setState(() => _isSavingAvatar = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile photo updated.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Profile photo updated.')));
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSavingAvatar = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
       );
+    }
+  }
+
+  Future<void> _openHome() async {
+    await Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const CitizenHomeScreen()),
+    );
+  }
+
+  Future<void> _openReports() async {
+    await Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const MyComplaintsScreen()),
+    );
+  }
+
+  Future<void> _openAlerts() async {
+    await Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const CitizenNotificationsScreen()),
+    );
+  }
+
+  Future<void> _openSubmit() async {
+    final created = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SubmitComplaintScreen()),
+    );
+
+    if (!mounted) return;
+    if (created != null) {
+      final refreshedUser = await _authService.getCurrentUser();
+      if (!mounted) return;
+      setState(() {
+        _user = Map<String, dynamic>.from(refreshedUser);
+      });
     }
   }
 
@@ -205,118 +245,191 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
     final mobile = (_user['mobile_number'] ?? 'No mobile number').toString();
     final role = (_user['role'] ?? 'citizen').toString();
     final bottomSafeArea = MediaQuery.of(context).padding.bottom;
+    final themeController = AppThemeScope.of(context);
+    final isDark = Theme.of(context).colorScheme.brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0C1727),
+      backgroundColor: isDark ? const Color(0xFF0C1727) : const Color(0xFFF6F8FC),
       appBar: AppBar(
         title: const Text('Profile'),
-        backgroundColor: const Color(0xFF0C1727),
-        foregroundColor: Colors.white,
-      ),
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0C1727),
-              Color(0xFF1E293B),
-              Color(0xFF463327),
-            ],
-          ),
-        ),
-        child: ListView(
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: EdgeInsets.fromLTRB(16, 16, 16, bottomSafeArea + 24),
-        children: [
-          _buildHeroCard(name, email, role),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: _ProfileStatCard(
-                  icon: Icons.badge_outlined,
-                  label: 'Role',
-                  value: _prettyRole(role),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _ProfileStatCard(
-                  icon: Icons.call_outlined,
-                  label: 'Mobile',
-                  value: mobile == 'No mobile number' ? 'Not set' : mobile,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _buildActionCard(
-            child: Column(
-              children: [
-                _ActionTile(
-                  icon: Icons.edit_outlined,
-                  title: 'Edit profile',
-                  subtitle: 'Update your name, email, and mobile number',
-                  trailing: _isSavingProfile
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.chevron_right, color: Colors.white),
-                  onTap: _isSavingProfile ? null : _openEditProfile,
-                ),
-                Divider(height: 1, color: Colors.white.withOpacity(0.10)),
-                _ActionTile(
-                  icon: Icons.description_outlined,
-                  title: 'My reports',
-                  subtitle: 'View all your submitted complaints',
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const MyComplaintsScreen(),
-                      ),
-                    );
-                  },
-                ),
-                Divider(height: 1, color: Colors.white.withOpacity(0.10)),
-                _ActionTile(
-                  icon: Icons.rate_review_outlined,
-                  title: 'Send feedback',
-                  subtitle: 'Share suggestions, complaints, or praise',
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const SendFeedbackScreen(),
-                      ),
-                    );
-                  },
-                ),
-                Divider(height: 1, color: Colors.white.withOpacity(0.10)),
-                _ActionTile(
-                  icon: Icons.logout,
-                  title: 'Logout',
-                  subtitle: 'Sign out of this citizen account',
-                  iconColor: const Color(0xFFFF7B7B),
-                  titleColor: const Color(0xFFFF7B7B),
-                  trailing: _isLoggingOut
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.chevron_right, color: Colors.white),
-                  onTap: _isLoggingOut ? null : _logout,
-                ),
-              ],
-            ),
+        backgroundColor: isDark ? const Color(0xFF0C1727) : const Color(0xFFF6F8FC),
+        foregroundColor: isDark ? Colors.white : const Color(0xFF12213A),
+        actions: const [
+          Padding(
+            padding: EdgeInsets.only(right: 12),
+            child: ThemeModeToggle(compact: true),
           ),
         ],
       ),
+      body: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: isDark
+                ? const [
+                    Color(0xFF0C1727),
+                    Color(0xFF1E293B),
+                    Color(0xFF463327),
+                  ]
+                : const [
+                    Color(0xFFF8FBFF),
+                    Color(0xFFEFF5FF),
+                    Color(0xFFFFFBF5),
+                  ],
+          ),
+        ),
+        child: ListView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: EdgeInsets.fromLTRB(16, 18, 16, bottomSafeArea + 28),
+          children: [
+            _buildHeroCard(name, email, role),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Expanded(
+                  child: _ProfileStatCard(
+                    icon: Icons.badge_outlined,
+                    label: 'Role',
+                    value: _prettyRole(role),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _ProfileStatCard(
+                    icon: Icons.call_outlined,
+                    label: 'Mobile',
+                    value: mobile == 'No mobile number' ? 'Not set' : mobile,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            _buildActionCard(
+              child: Column(
+                children: [
+                  _ActionTile(
+                    icon: Icons.edit_outlined,
+                    title: 'Edit profile',
+                    subtitle: 'Update your name, email, and mobile number',
+                    trailing: _isSavingProfile
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : null,
+                    onTap: _isSavingProfile ? null : _openEditProfile,
+                  ),
+                  Divider(
+                    height: 1,
+                    color: Colors.white.withValues(alpha: 0.10),
+                  ),
+                  AnimatedBuilder(
+                    animation: themeController,
+                    builder: (context, _) {
+                      final isDarkMode = themeController.isDarkMode;
+                      return _ActionTile(
+                        icon: isDarkMode
+                            ? Icons.dark_mode_outlined
+                            : Icons.light_mode_outlined,
+                        title: 'Appearance',
+                        subtitle: isDarkMode
+                            ? 'Dark mode is active'
+                            : 'Light mode is active',
+                        trailing: Switch.adaptive(
+                          value: isDarkMode,
+                          activeThumbColor: const Color(0xFF93C5FD),
+                          activeTrackColor: const Color(
+                            0xFF2563EB,
+                          ).withValues(alpha: 0.50),
+                          inactiveThumbColor: const Color(0xFFFBBF24),
+                          inactiveTrackColor: const Color(
+                            0xFFFFF7ED,
+                          ).withValues(alpha: 0.42),
+                          onChanged: themeController.setDarkMode,
+                        ),
+                        onTap: () => themeController.setDarkMode(!isDarkMode),
+                      );
+                    },
+                  ),
+                  Divider(
+                    height: 1,
+                    color: Colors.white.withValues(alpha: 0.10),
+                  ),
+                  _ActionTile(
+                    icon: Icons.description_outlined,
+                    title: 'My reports',
+                    subtitle: 'View all your submitted complaints',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const MyComplaintsScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  Divider(
+                    height: 1,
+                    color: Colors.white.withValues(alpha: 0.10),
+                  ),
+                  _ActionTile(
+                    icon: Icons.rate_review_outlined,
+                    title: 'Send feedback',
+                    subtitle: 'Share suggestions, complaints, or praise',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const SendFeedbackScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  Divider(
+                    height: 1,
+                    color: Colors.white.withValues(alpha: 0.10),
+                  ),
+                  _ActionTile(
+                    icon: Icons.logout,
+                    title: 'Logout',
+                    subtitle: 'Sign out of this citizen account',
+                    iconColor: const Color(0xFFFF7B7B),
+                    titleColor: const Color(0xFFFF7B7B),
+                    trailing: _isLoggingOut
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : null,
+                    onTap: _isLoggingOut ? null : _logout,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
+      bottomNavigationBar: CitizenBottomNav(
+        currentIndex: 4,
+        onHomeTap: _openHome,
+        onReportsTap: _openReports,
+        onAlertsTap: _openAlerts,
+        onProfileTap: () {},
+      ),
+      floatingActionButton: SizedBox(
+        width: 62,
+        height: 62,
+        child: FloatingActionButton(
+          shape: const CircleBorder(),
+          backgroundColor: const Color(0xFF3B82F6),
+          onPressed: _openSubmit,
+          child: const Icon(Icons.add, color: Colors.white, size: 28),
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
     );
   }
 
@@ -325,19 +438,31 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
     return role
         .replaceAll('_', ' ')
         .split(' ')
-        .map((part) => part.isEmpty
-            ? part
-            : '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}')
+        .map(
+          (part) => part.isEmpty
+              ? part
+              : '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}',
+        )
         .join(' ');
   }
 
   Widget _buildHeroCard(String name, String email, String role) {
+    final isDark = Theme.of(context).colorScheme.brightness == Brightness.dark;
+    final titleColor = isDark ? Colors.white : const Color(0xFF12213A);
+    final bodyColor = isDark
+        ? Colors.white.withValues(alpha: 0.72)
+        : const Color(0xFF64748B);
+
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: isDark ? Colors.white.withValues(alpha: 0.10) : Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.14)
+              : const Color(0xFFD8E3F7),
+        ),
       ),
       child: Column(
         children: [
@@ -347,7 +472,9 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
               CitizenAvatar(
                 name: name,
                 size: 76,
-                backgroundColor: const Color(0xFF2563EB).withOpacity(0.16),
+                backgroundColor: const Color(
+                  0xFF2563EB,
+                ).withValues(alpha: 0.16),
                 textColor: const Color(0xFF9DBEFF),
                 fontSize: 26,
               ),
@@ -390,25 +517,27 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
           Text(
             name,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 21,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
+              color: titleColor,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             email,
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white.withOpacity(0.72)),
+            style: TextStyle(color: bodyColor),
           ),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
             decoration: BoxDecoration(
-              color: const Color(0xFF2563EB).withOpacity(0.18),
+              color: const Color(0xFF2563EB).withValues(alpha: 0.18),
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: const Color(0xFF2563EB).withOpacity(0.30)),
+              border: Border.all(
+                color: const Color(0xFF2563EB).withValues(alpha: 0.30),
+              ),
             ),
             child: Text(
               _prettyRole(role),
@@ -424,16 +553,21 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
   }
 
   Widget _buildActionCard({required Widget child}) {
+    final isDark = Theme.of(context).colorScheme.brightness == Brightness.dark;
+
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: isDark ? Colors.white.withValues(alpha: 0.10) : Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.14)
+              : const Color(0xFFD8E3F7),
+        ),
       ),
       child: child,
     );
   }
-
 }
 
 class _EditCitizenProfileSheet extends StatefulWidget {
@@ -448,7 +582,8 @@ class _EditCitizenProfileSheet extends StatefulWidget {
   final String initialMobile;
 
   @override
-  State<_EditCitizenProfileSheet> createState() => _EditCitizenProfileSheetState();
+  State<_EditCitizenProfileSheet> createState() =>
+      _EditCitizenProfileSheetState();
 }
 
 class _EditCitizenProfileSheetState extends State<_EditCitizenProfileSheet> {
@@ -479,8 +614,12 @@ class _EditCitizenProfileSheetState extends State<_EditCitizenProfileSheet> {
   void _submit() {
     setState(() {
       _nameError = _CitizenProfileValidators.validateName(_nameController.text);
-      _emailError = _CitizenProfileValidators.validateEmail(_emailController.text);
-      _mobileError = _CitizenProfileValidators.validateMobile(_mobileController.text);
+      _emailError = _CitizenProfileValidators.validateEmail(
+        _emailController.text,
+      );
+      _mobileError = _CitizenProfileValidators.validateMobile(
+        _mobileController.text,
+      );
     });
 
     if (_nameError != null || _emailError != null || _mobileError != null) {
@@ -500,13 +639,18 @@ class _EditCitizenProfileSheetState extends State<_EditCitizenProfileSheet> {
     final bottomSafeArea = MediaQuery.of(context).padding.bottom;
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, 16, 16, bottomInset + bottomSafeArea + 16),
+      padding: EdgeInsets.fromLTRB(
+        16,
+        16,
+        16,
+        bottomInset + bottomSafeArea + 16,
+      ),
       child: Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           color: const Color(0xFF121B31),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white.withOpacity(0.14)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -528,7 +672,9 @@ class _EditCitizenProfileSheetState extends State<_EditCitizenProfileSheet> {
               style: const TextStyle(color: Colors.white),
               cursorColor: Colors.white,
               inputFormatters: [
-                FilteringTextInputFormatter.deny(_CitizenProfileValidators.emojiRegex),
+                FilteringTextInputFormatter.deny(
+                  _CitizenProfileValidators.emojiRegex,
+                ),
               ],
               onChanged: (_) {
                 if (_nameError != null) {
@@ -549,7 +695,9 @@ class _EditCitizenProfileSheetState extends State<_EditCitizenProfileSheet> {
               style: const TextStyle(color: Colors.white),
               cursorColor: Colors.white,
               inputFormatters: [
-                FilteringTextInputFormatter.deny(_CitizenProfileValidators.emojiRegex),
+                FilteringTextInputFormatter.deny(
+                  _CitizenProfileValidators.emojiRegex,
+                ),
               ],
               onChanged: (_) {
                 if (_emailError != null) {
@@ -612,7 +760,7 @@ class _EditCitizenProfileSheetState extends State<_EditCitizenProfileSheet> {
     return Text(
       text,
       style: TextStyle(
-        color: Colors.white.withOpacity(0.92),
+        color: Colors.white.withValues(alpha: 0.92),
         fontSize: 14,
         fontWeight: FontWeight.w600,
       ),
@@ -625,16 +773,16 @@ class _EditCitizenProfileSheetState extends State<_EditCitizenProfileSheet> {
   }) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: TextStyle(color: Colors.white.withOpacity(0.45)),
+      hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.45)),
       filled: true,
-      fillColor: Colors.white.withOpacity(0.10),
+      fillColor: Colors.white.withValues(alpha: 0.10),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.white.withOpacity(0.16)),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.16)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.white.withOpacity(0.16)),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.16)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
@@ -642,10 +790,7 @@ class _EditCitizenProfileSheetState extends State<_EditCitizenProfileSheet> {
       ),
       errorText: errorText,
       errorMaxLines: 2,
-      errorStyle: const TextStyle(
-        color: Color(0xFFFFB4B4),
-        fontSize: 12,
-      ),
+      errorStyle: const TextStyle(color: Color(0xFFFFB4B4), fontSize: 12),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
         borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.2),
@@ -671,12 +816,18 @@ class _ProfileStatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).colorScheme.brightness == Brightness.dark;
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: isDark ? Colors.white.withValues(alpha: 0.10) : Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.14)
+              : const Color(0xFFD8E3F7),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -686,7 +837,9 @@ class _ProfileStatCard extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.62),
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.62)
+                  : const Color(0xFF64748B),
               fontSize: 12,
             ),
           ),
@@ -695,8 +848,8 @@ class _ProfileStatCard extends StatelessWidget {
             value,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: isDark ? Colors.white : const Color(0xFF12213A),
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -712,8 +865,8 @@ class _ActionTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
-    this.iconColor = Colors.white,
-    this.titleColor = Colors.white,
+    this.iconColor,
+    this.titleColor,
     this.trailing,
   });
 
@@ -721,27 +874,35 @@ class _ActionTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final VoidCallback? onTap;
-  final Color iconColor;
-  final Color titleColor;
+  final Color? iconColor;
+  final Color? titleColor;
   final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).colorScheme.brightness == Brightness.dark;
+    final defaultTitleColor = isDark ? Colors.white : const Color(0xFF12213A);
+    final mutedColor = isDark
+        ? Colors.white.withValues(alpha: 0.72)
+        : const Color(0xFF64748B);
+    final chevronColor = isDark ? Colors.white : const Color(0xFF64748B);
+
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      leading: Icon(icon, color: iconColor),
+      leading: Icon(icon, color: iconColor ?? defaultTitleColor),
       title: Text(
         title,
         style: TextStyle(
-          color: titleColor,
+          color: titleColor ?? defaultTitleColor,
           fontWeight: FontWeight.w700,
         ),
       ),
       subtitle: Text(
         subtitle,
-        style: TextStyle(color: Colors.white.withOpacity(0.72)),
+        style: TextStyle(color: mutedColor),
       ),
-      trailing: trailing ?? const Icon(Icons.chevron_right, color: Colors.white),
+      trailing:
+          trailing ?? Icon(Icons.chevron_right, color: chevronColor),
       onTap: onTap,
     );
   }

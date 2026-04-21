@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/citizen_feedback_service.dart';
-import '../../services/report_service.dart';
+import '../../services/citizen_data_cache.dart';
+import '../../utils/citizen_theme_colors.dart';
 
 class SendFeedbackScreen extends StatefulWidget {
   const SendFeedbackScreen({super.key});
@@ -17,7 +18,6 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
     unicode: true,
   );
 
-  final ReportService _reportService = ReportService();
   final CitizenFeedbackService _feedbackService = CitizenFeedbackService();
   final TextEditingController _messageController = TextEditingController();
 
@@ -35,7 +35,7 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
   @override
   void initState() {
     super.initState();
-    _officesFuture = _reportService.getOffices();
+    _officesFuture = CitizenDataCache.getOffices();
     _historyFuture = _feedbackService.getFeedbackEntries();
   }
 
@@ -49,7 +49,9 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
     final message = _messageController.text.trim();
 
     setState(() {
-      _officeError = _selectedOfficeId == null ? 'Please select a department.' : null;
+      _officeError = _selectedOfficeId == null
+          ? 'Please select a department.'
+          : null;
       _messageError = null;
 
       if (message.isEmpty) {
@@ -100,10 +102,10 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF101826),
+      backgroundColor: citizenScaffoldColor(context),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF101826),
-        foregroundColor: Colors.white,
+        backgroundColor: citizenScaffoldColor(context),
+        foregroundColor: citizenTitleColor(context),
         elevation: 0,
         titleSpacing: 0,
         title: const Text('Send Feedback'),
@@ -112,7 +114,11 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
         future: _officesFuture,
         builder: (context, officeSnapshot) {
           if (officeSnapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
+            return Center(
+              child: CircularProgressIndicator(
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            );
           }
 
           if (officeSnapshot.hasError) {
@@ -120,9 +126,12 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
-                  officeSnapshot.error.toString().replaceFirst('Exception: ', ''),
+                  officeSnapshot.error.toString().replaceFirst(
+                    'Exception: ',
+                    '',
+                  ),
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(color: citizenTitleColor(context)),
                 ),
               ),
             );
@@ -170,14 +179,15 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              Divider(color: Colors.white.withOpacity(0.08)),
+              Divider(color: citizenBorderColor(context)),
               const SizedBox(height: 14),
               _buildSectionLabel('Previous Feedback'),
               const SizedBox(height: 12),
               FutureBuilder<List<Map<String, dynamic>>>(
                 future: _historyFuture,
                 builder: (context, snapshot) {
-                  final entries = snapshot.data ?? const <Map<String, dynamic>>[];
+                  final entries =
+                      snapshot.data ?? const <Map<String, dynamic>>[];
                   if (entries.isEmpty) {
                     return _buildEmptyHistoryCard();
                   }
@@ -203,20 +213,24 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
   }
 
   Widget _buildInfoBanner() {
+    final isDark = citizenIsDark(context);
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF13284E),
+        color: isDark ? const Color(0xFF13284E) : const Color(0xFFEFF6FF),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF285BB4)),
+        border: Border.all(
+          color: isDark ? const Color(0xFF285BB4) : const Color(0xFFBFDBFE),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Your voice matters!',
             style: TextStyle(
-              color: Colors.white,
+              color: citizenTitleColor(context),
               fontSize: 18,
               fontWeight: FontWeight.w700,
             ),
@@ -225,7 +239,7 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
           Text(
             'Help us improve city services by sharing suggestions, complaints, or praise.',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.76),
+              color: citizenBodyColor(context),
               fontSize: 13,
               height: 1.4,
             ),
@@ -239,9 +253,9 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A2233),
+        color: citizenCardColor(context),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: citizenBorderColor(context)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -279,25 +293,32 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
           _buildSectionLabel('Regarding'),
           const SizedBox(height: 8),
           DropdownButtonFormField<int>(
-            value: _selectedOfficeId,
+            initialValue: _selectedOfficeId,
             isExpanded: true,
-            dropdownColor: const Color(0xFF253248),
-            style: const TextStyle(color: Colors.white),
-            iconEnabledColor: Colors.white70,
+            dropdownColor: citizenDropdownColor(context),
+            style: TextStyle(color: citizenTitleColor(context)),
+            iconEnabledColor: citizenBodyColor(context),
             decoration: _buildInputDecoration(
               'Select department',
               errorText: _officeError,
             ),
-            items: offices.map((item) {
-              final office = item as Map<String, dynamic>;
-              final rawId = office['id'];
-              final officeId = rawId is int ? rawId : int.tryParse('$rawId');
-              if (officeId == null) return null;
-              return DropdownMenuItem<int>(
-                value: officeId,
-                child: Text((office['name'] ?? 'Unnamed office').toString()),
-              );
-            }).whereType<DropdownMenuItem<int>>().toList(),
+            items: offices
+                .map((item) {
+                  final office = item as Map<String, dynamic>;
+                  final rawId = office['id'];
+                  final officeId = rawId is int
+                      ? rawId
+                      : int.tryParse('$rawId');
+                  if (officeId == null) return null;
+                  return DropdownMenuItem<int>(
+                    value: officeId,
+                    child: Text(
+                      (office['name'] ?? 'Unnamed office').toString(),
+                    ),
+                  );
+                })
+                .whereType<DropdownMenuItem<int>>()
+                .toList(),
             onChanged: (value) => setState(() => _selectedOfficeId = value),
           ),
           const SizedBox(height: 16),
@@ -307,7 +328,7 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
             controller: _messageController,
             minLines: 5,
             maxLines: 6,
-            style: const TextStyle(color: Colors.white),
+            style: TextStyle(color: citizenTitleColor(context)),
             inputFormatters: [FilteringTextInputFormatter.deny(_emojiRegex)],
             decoration: _buildInputDecoration(
               'Write your feedback here...',
@@ -325,6 +346,7 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
     required Color accent,
   }) {
     final isSelected = _feedbackType == label;
+    final isDark = citizenIsDark(context);
 
     return InkWell(
       onTap: () => setState(() => _feedbackType = label),
@@ -332,23 +354,35 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
       child: Container(
         height: 40,
         decoration: BoxDecoration(
-          color: isSelected ? accent.withOpacity(0.18) : const Color(0xFF1D2536),
+          color: isSelected
+              ? accent.withValues(alpha: 0.18)
+              : citizenInputColor(context),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? accent : Colors.white.withOpacity(0.08),
+            color: isSelected ? accent : citizenBorderColor(context),
           ),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 14, color: isSelected ? accent : Colors.white70),
+            Icon(
+              icon,
+              size: 14,
+              color: isSelected
+                  ? accent
+                  : isDark
+                  ? Colors.white70
+                  : const Color(0xFF64748B),
+            ),
             const SizedBox(width: 5),
             Flexible(
               child: Text(
                 label,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.white70,
+                  color: isSelected
+                      ? (isDark ? Colors.white : const Color(0xFF12213A))
+                      : citizenBodyColor(context),
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
@@ -361,6 +395,8 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
   }
 
   Widget _buildRatingRow() {
+    final isDark = citizenIsDark(context);
+
     return Row(
       children: List.generate(5, (index) {
         final star = index + 1;
@@ -373,7 +409,11 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
             child: Icon(
               Icons.star_rounded,
               size: 40,
-              color: isSelected ? const Color(0xFFF7C948) : const Color(0xFF5A4F22),
+              color: isSelected
+                  ? const Color(0xFFF7C948)
+                  : isDark
+                  ? const Color(0xFF5A4F22)
+                  : const Color(0xFFE2E8F0),
             ),
           ),
         );
@@ -392,22 +432,25 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
         ? (report['title'] ?? '').toString().trim()
         : '';
     final message = (entry['message'] ?? '').toString();
-    final submittedAt = DateTime.tryParse((entry['created_at'] ?? '').toString());
+    final submittedAt = DateTime.tryParse(
+      (entry['created_at'] ?? '').toString(),
+    );
+    final isDark = citizenIsDark(context);
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A2233),
+        color: citizenCardColor(context),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: citizenBorderColor(context)),
       ),
       child: Row(
         children: [
           Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: const Color(0xFF20314D),
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF20314D) : const Color(0xFFFFF7ED),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
@@ -425,8 +468,8 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
                   message,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: citizenTitleColor(context),
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -436,7 +479,7 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.62),
+                    color: citizenBodyColor(context),
                     fontSize: 12,
                   ),
                 ),
@@ -452,13 +495,13 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A2233),
+        color: citizenCardColor(context),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: citizenBorderColor(context)),
       ),
       child: Text(
         'No feedback sent yet.',
-        style: TextStyle(color: Colors.white.withOpacity(0.72)),
+        style: TextStyle(color: citizenBodyColor(context)),
       ),
     );
   }
@@ -470,7 +513,7 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
         fontSize: 12,
         fontWeight: FontWeight.w600,
         letterSpacing: 1.1,
-        color: Colors.white.withOpacity(0.72),
+        color: citizenBodyColor(context),
       ),
     );
   }
@@ -479,21 +522,21 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
     return InputDecoration(
       hintText: hint,
       filled: true,
-      fillColor: const Color(0xFF1D2536),
+      fillColor: citizenInputColor(context),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+        borderSide: BorderSide(color: citizenBorderColor(context)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+        borderSide: BorderSide(color: citizenBorderColor(context)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
         borderSide: const BorderSide(color: Color(0xFF4B82F7), width: 1.2),
       ),
-      hintStyle: TextStyle(color: Colors.white.withOpacity(0.38)),
+      hintStyle: TextStyle(color: citizenMutedColor(context)),
       errorText: errorText,
       errorMaxLines: 2,
     );

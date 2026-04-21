@@ -68,7 +68,7 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
           content: Text(
             'This will remove elevated access and sign the account out of active sessions. You can still reactivate access later if needed.',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.78),
+              color: Colors.white.withValues(alpha: 0.78),
               height: 1.4,
             ),
           ),
@@ -77,7 +77,7 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
               onPressed: () => Navigator.pop(dialogContext, false),
               child: Text(
                 'Cancel',
-                style: TextStyle(color: Colors.white.withOpacity(0.82)),
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.82)),
               ),
             ),
             FilledButton(
@@ -121,7 +121,7 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
           content: Text(
             'This will restore account access so the user can sign in again.',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.78),
+              color: Colors.white.withValues(alpha: 0.78),
               height: 1.4,
             ),
           ),
@@ -130,7 +130,7 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
               onPressed: () => Navigator.pop(dialogContext, false),
               child: Text(
                 'Cancel',
-                style: TextStyle(color: Colors.white.withOpacity(0.82)),
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.82)),
               ),
             ),
             FilledButton(
@@ -167,18 +167,14 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
         backgroundColor: const Color(0xFF0C1727),
         foregroundColor: Colors.white,
         elevation: 0,
-          title: const Text('Account Directory'),
+        title: const Text('Account Directory'),
       ),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0C1727),
-              Color(0xFF1A2940),
-              Color(0xFF463327),
-            ],
+            colors: [Color(0xFF0C1727), Color(0xFF1A2940), Color(0xFF463327)],
           ),
         ),
         child: RefreshIndicator(
@@ -197,9 +193,10 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
                   children: [
                     _GlassMessageCard(
                       title: 'Unable to load users',
-                      message: snapshot.error
-                          .toString()
-                          .replaceFirst('Exception: ', ''),
+                      message: snapshot.error.toString().replaceFirst(
+                        'Exception: ',
+                        '',
+                      ),
                     ),
                   ],
                 );
@@ -294,8 +291,9 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
                         email: (user['email'] ?? '').toString(),
                         role: role,
                         isActive: isActive,
-                        onVerify:
-                            isPending ? () => _verify(user['id'] as int) : null,
+                        onVerify: isPending
+                            ? () => _verify(user['id'] as int)
+                            : null,
                         onDeactivate: canDeactivate
                             ? () => _deactivate(user['id'] as int)
                             : null,
@@ -352,11 +350,7 @@ class _UsersHeroCard extends StatelessWidget {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF2563EB),
-            Color(0xFF1D4ED8),
-            Color(0xFF0F172A),
-          ],
+          colors: [Color(0xFF2563EB), Color(0xFF1D4ED8), Color(0xFF0F172A)],
         ),
       ),
       child: Column(
@@ -369,11 +363,8 @@ class _UsersHeroCard extends StatelessWidget {
                 height: 56,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.14),
-                  border: Border.all(
-                    color: const Color(0xFFD8B15A),
-                    width: 2,
-                  ),
+                  color: Colors.white.withValues(alpha: 0.14),
+                  border: Border.all(color: const Color(0xFFD8B15A), width: 2),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(6),
@@ -402,7 +393,7 @@ class _UsersHeroCard extends StatelessWidget {
           Text(
             'Review pending government accounts, verify trusted staff, and keep privileged access tightly controlled.',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.84),
+              color: Colors.white.withValues(alpha: 0.84),
               height: 1.4,
             ),
           ),
@@ -433,9 +424,9 @@ class _SummaryCard extends StatelessWidget {
       width: width,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Row(
         children: [
@@ -443,7 +434,7 @@ class _SummaryCard extends StatelessWidget {
             width: 46,
             height: 46,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.16),
+              color: color.withValues(alpha: 0.16),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(icon, color: color),
@@ -456,7 +447,7 @@ class _SummaryCard extends StatelessWidget {
                 Text(
                   label,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.72),
+                    color: Colors.white.withValues(alpha: 0.72),
                     fontWeight: FontWeight.w600,
                     fontSize: 12,
                   ),
@@ -480,10 +471,7 @@ class _SummaryCard extends StatelessWidget {
 }
 
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({
-    required this.title,
-    required this.subtitle,
-  });
+  const _SectionTitle({required this.title, required this.subtitle});
 
   final String title;
   final String subtitle;
@@ -505,7 +493,7 @@ class _SectionTitle extends StatelessWidget {
         Text(
           subtitle,
           style: TextStyle(
-            color: Colors.white.withOpacity(0.70),
+            color: Colors.white.withValues(alpha: 0.70),
             height: 1.4,
           ),
         ),
@@ -572,9 +560,9 @@ class _UserCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -586,7 +574,7 @@ class _UserCard extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.16),
+                  color: color.withValues(alpha: 0.16),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Icon(Icons.person_outline, color: color),
@@ -607,7 +595,9 @@ class _UserCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       email,
-                      style: TextStyle(color: Colors.white.withOpacity(0.72)),
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.72),
+                      ),
                     ),
                   ],
                 ),
@@ -625,7 +615,9 @@ class _UserCard extends StatelessWidget {
               ),
             ],
           ),
-          if (onVerify != null || onDeactivate != null || onReactivate != null) ...[
+          if (onVerify != null ||
+              onDeactivate != null ||
+              onReactivate != null) ...[
             const SizedBox(height: 16),
             Row(
               children: [
@@ -646,7 +638,9 @@ class _UserCard extends StatelessWidget {
                   ),
                 if (onVerify != null && onDeactivate != null)
                   const SizedBox(width: 10),
-                if (onVerify != null && onDeactivate == null && onReactivate != null)
+                if (onVerify != null &&
+                    onDeactivate == null &&
+                    onReactivate != null)
                   const SizedBox(width: 10),
                 if (onDeactivate != null)
                   Expanded(
@@ -654,7 +648,9 @@ class _UserCard extends StatelessWidget {
                       onPressed: onDeactivate,
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.white,
-                        side: BorderSide(color: Colors.white.withOpacity(0.20)),
+                        side: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.20),
+                        ),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
@@ -690,10 +686,7 @@ class _UserCard extends StatelessWidget {
 }
 
 class _RoleChip extends StatelessWidget {
-  const _RoleChip({
-    required this.label,
-    required this.color,
-  });
+  const _RoleChip({required this.label, required this.color});
 
   final String label;
   final Color color;
@@ -703,7 +696,7 @@ class _RoleChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.16),
+        color: color.withValues(alpha: 0.16),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
@@ -719,10 +712,7 @@ class _RoleChip extends StatelessWidget {
 }
 
 class _GlassMessageCard extends StatelessWidget {
-  const _GlassMessageCard({
-    required this.title,
-    required this.message,
-  });
+  const _GlassMessageCard({required this.title, required this.message});
 
   final String title;
   final String message;
@@ -732,9 +722,9 @@ class _GlassMessageCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -751,7 +741,7 @@ class _GlassMessageCard extends StatelessWidget {
           Text(
             message,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.72),
+              color: Colors.white.withValues(alpha: 0.72),
               height: 1.4,
             ),
           ),

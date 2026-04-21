@@ -14,10 +14,14 @@ class EscalationService {
     if (escalationStatus != null && escalationStatus.isNotEmpty) {
       query.add('escalation_status=${Uri.encodeComponent(escalationStatus)}');
     }
-    if (barangay != null && barangay.isNotEmpty && barangay != 'All Barangays') {
+    if (barangay != null &&
+        barangay.isNotEmpty &&
+        barangay != 'All Barangays') {
       query.add('barangay=${Uri.encodeComponent(barangay)}');
     }
-    if (priority != null && priority.isNotEmpty && priority != 'All Priorities') {
+    if (priority != null &&
+        priority.isNotEmpty &&
+        priority != 'All Priorities') {
       query.add('priority=${Uri.encodeComponent(priority)}');
     }
     final suffix = query.isEmpty ? '' : '?${query.join('&')}';

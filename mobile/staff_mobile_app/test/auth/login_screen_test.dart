@@ -13,11 +13,7 @@ void main() {
   });
 
   Future<void> pumpLoginScreen(WidgetTester tester) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: LoginScreen(),
-      ),
-    );
+    await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
     await tester.pumpAndSettle();
   }
 

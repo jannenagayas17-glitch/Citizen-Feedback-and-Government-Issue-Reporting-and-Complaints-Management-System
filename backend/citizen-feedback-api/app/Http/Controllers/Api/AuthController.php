@@ -25,7 +25,7 @@ class AuthController extends Controller
     {
         $request->validate([
             'name' => ['required', 'string', 'max:255', 'regex:' . self::FULL_NAME_REGEX, 'not_regex:' . self::EMOJI_REGEX],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email', 'not_regex:' . self::EMOJI_REGEX],
+            'email' => ['required', 'string', 'email', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/', 'max:255', 'unique:users,email', 'not_regex:' . self::EMOJI_REGEX],
             'mobile_number' => ['nullable', 'regex:/^\d{11}$/'],
             'password' => ['required', 'string', 'min:8', 'confirmed', 'not_regex:' . self::EMOJI_REGEX],
         ], $this->validationMessages());
@@ -50,7 +50,7 @@ class AuthController extends Controller
     {
         $request->validate([
             'name' => ['required', 'string', 'max:255', 'regex:' . self::FULL_NAME_REGEX, 'not_regex:' . self::EMOJI_REGEX],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email', 'not_regex:' . self::EMOJI_REGEX],
+            'email' => ['required', 'string', 'email', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/', 'max:255', 'unique:users,email', 'not_regex:' . self::EMOJI_REGEX],
             'mobile_number' => ['required', 'regex:/^\d{11}$/'],
             'password' => ['required', 'string', 'min:8', 'confirmed', 'not_regex:' . self::EMOJI_REGEX],
             'department' => ['required', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX, 'exists:offices,name'],
@@ -87,7 +87,7 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         $request->validate([
-            'email' => ['required', 'email', 'not_regex:' . self::EMOJI_REGEX],
+            'email' => ['required', 'email', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/', 'not_regex:' . self::EMOJI_REGEX],
             'password' => ['required', 'not_regex:' . self::EMOJI_REGEX],
         ], $this->validationMessages());
 
@@ -242,9 +242,15 @@ class AuthController extends Controller
     {
         $user = $request->user();
 
+        if (($user->role ?? null) === 'super_admin') {
+            throw ValidationException::withMessages([
+                'user' => ['The protected super admin account cannot be edited from the portal.'],
+            ]);
+        }
+
         $request->validate([
             'name' => ['required', 'string', 'max:255', 'regex:' . self::FULL_NAME_REGEX, 'not_regex:' . self::EMOJI_REGEX],
-            'email' => ['required', 'email', 'max:255', 'unique:users,email,' . $user->id, 'not_regex:' . self::EMOJI_REGEX],
+            'email' => ['required', 'email', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/', 'max:255', 'unique:users,email,' . $user->id, 'not_regex:' . self::EMOJI_REGEX],
             'mobile_number' => ['nullable', 'regex:/^\d{11}$/'],
         ], $this->validationMessages());
 
@@ -286,15 +292,141 @@ class AuthController extends Controller
 
     public function adminUsers(Request $request)
     {
-        $this->ensureElevatedRole($request);
+        $this->ensureSuperAdmin($request);
+
+        $query = User::withTrashed()
+            ->whereIn('role', ['super_admin', 'admin', 'pending_admin', 'citizen']);
 
         return response()->json(
-            User::query()
-                ->whereIn('role', ['super_admin', 'admin', 'pending_admin'])
+            $query
                 ->orderByRaw("case when role = 'super_admin' then 0 when role = 'admin' then 1 when role = 'pending_admin' then 2 else 3 end")
                 ->orderBy('name')
                 ->get()
         );
+    }
+
+    public function storeManagedAccount(Request $request)
+    {
+        $this->ensureSuperAdmin($request);
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255', 'regex:' . self::FULL_NAME_REGEX, 'not_regex:' . self::EMOJI_REGEX],
+            'email' => ['required', 'string', 'email', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/', 'max:255', 'unique:users,email', 'not_regex:' . self::EMOJI_REGEX],
+            'mobile_number' => ['nullable', 'regex:/^\d{11}$/'],
+            'password' => ['required', 'string', 'min:8', 'confirmed', 'not_regex:' . self::EMOJI_REGEX],
+            'role' => ['required', 'in:pending_admin,admin,citizen'],
+            'department' => ['nullable', 'required_if:role,pending_admin,admin', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX, 'exists:offices,name'],
+            'job_title' => ['nullable', 'required_if:role,pending_admin,admin', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
+        ], $this->validationMessages());
+
+        $role = $validated['role'];
+        $department = null;
+        $jobTitle = null;
+
+        if (in_array($role, ['pending_admin', 'admin'], true)) {
+            $office = Office::query()
+                ->where('name', trim((string) $validated['department']))
+                ->where('is_active', true)
+                ->first();
+
+            if (! $office) {
+                throw ValidationException::withMessages([
+                    'department' => ['Please select an active government office.'],
+                ]);
+            }
+
+            $department = $office->name;
+            $jobTitle = trim((string) $validated['job_title']);
+        }
+
+        $user = User::create([
+            'name' => trim((string) $validated['name']),
+            'email' => trim((string) $validated['email']),
+            'mobile_number' => $validated['mobile_number'] ?? null,
+            'password' => Hash::make($validated['password']),
+            'role' => $role,
+            'department' => $department,
+            'job_title' => $jobTitle,
+            'is_active' => true,
+        ]);
+
+        return response()->json([
+            'message' => $role === 'citizen'
+                ? 'Citizen account created successfully.'
+                : 'Pending admin account created successfully.',
+            'user' => $user,
+        ], 201);
+    }
+
+    public function updateManagedAccount(Request $request, $id)
+    {
+        $this->ensureSuperAdmin($request);
+
+        $actor = $request->user();
+        $user = User::withTrashed()->findOrFail($id);
+
+        if ($user->id === $actor->id) {
+            throw ValidationException::withMessages([
+                'user' => ['You cannot edit your own account from Account Management.'],
+            ]);
+        }
+
+        if ($user->role === 'super_admin') {
+            throw ValidationException::withMessages([
+                'user' => ['Super admin accounts cannot be edited here.'],
+            ]);
+        }
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255', 'regex:' . self::FULL_NAME_REGEX, 'not_regex:' . self::EMOJI_REGEX],
+            'email' => ['required', 'string', 'email', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/', 'max:255', 'unique:users,email,' . $user->id, 'not_regex:' . self::EMOJI_REGEX],
+            'mobile_number' => ['nullable', 'regex:/^\d{11}$/'],
+            'role' => ['required', 'in:pending_admin,admin,citizen'],
+            'department' => ['nullable', 'required_if:role,pending_admin,admin', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX, 'exists:offices,name'],
+            'job_title' => ['nullable', 'required_if:role,pending_admin,admin', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
+            'password' => ['nullable', 'string', 'min:8', 'confirmed', 'not_regex:' . self::EMOJI_REGEX],
+        ], $this->validationMessages());
+
+        $role = $validated['role'];
+        $department = null;
+        $jobTitle = null;
+
+        if (in_array($role, ['pending_admin', 'admin'], true)) {
+            $office = Office::query()
+                ->where('name', trim((string) $validated['department']))
+                ->where('is_active', true)
+                ->first();
+
+            if (! $office) {
+                throw ValidationException::withMessages([
+                    'department' => ['Please select an active government office.'],
+                ]);
+            }
+
+            $department = $office->name;
+            $jobTitle = trim((string) $validated['job_title']);
+        }
+
+        $user->fill([
+            'name' => trim((string) $validated['name']),
+            'email' => trim((string) $validated['email']),
+            'mobile_number' => $validated['mobile_number'] ?? null,
+            'role' => $role,
+            'department' => $department,
+            'job_title' => $jobTitle,
+        ]);
+
+        if (! empty($validated['password'])) {
+            $user->password = Hash::make($validated['password']);
+            $user->tokens()->delete();
+        }
+
+        $user->save();
+
+        return response()->json([
+            'message' => 'Account updated successfully.',
+            'user' => $user,
+        ]);
     }
 
     public function verifyAccount(Request $request, $id)
@@ -307,13 +439,17 @@ class AuthController extends Controller
             ]);
         }
 
-        $user = User::findOrFail($id);
+        $user = User::withTrashed()->findOrFail($id);
         if ($user->role !== 'pending_admin') {
             throw ValidationException::withMessages([
                 'user' => ['Only pending admin accounts can be verified.'],
             ]);
         }
         $user->role = 'admin';
+        if ($user->trashed()) {
+            $user->restore();
+        }
+
         $user->is_active = true;
         $user->save();
 
@@ -325,10 +461,10 @@ class AuthController extends Controller
 
     public function deactivateAccount(Request $request, $id)
     {
-        $this->ensureElevatedRole($request);
+        $this->ensureSuperAdmin($request);
 
         $actor = $request->user();
-        $user = User::findOrFail($id);
+        $user = User::withTrashed()->findOrFail($id);
 
         if ($user->role === 'super_admin') {
             throw ValidationException::withMessages([
@@ -339,12 +475,6 @@ class AuthController extends Controller
         if ($user->id === $actor->id) {
             throw ValidationException::withMessages([
                 'user' => ['You cannot deactivate your own account.'],
-            ]);
-        }
-
-        if ($actor->role === 'admin' && $user->role !== 'citizen') {
-            throw ValidationException::withMessages([
-                'user' => ['Admins can only deactivate citizen accounts.'],
             ]);
         }
 
@@ -363,7 +493,7 @@ class AuthController extends Controller
         $this->ensureElevatedRole($request);
 
         $actor = $request->user();
-        $user = User::findOrFail($id);
+        $user = User::withTrashed()->findOrFail($id);
 
         if ($user->role === 'super_admin') {
             throw ValidationException::withMessages([
@@ -375,6 +505,10 @@ class AuthController extends Controller
             throw ValidationException::withMessages([
                 'user' => ['Only super admins can reactivate accounts.'],
             ]);
+        }
+
+        if ($user->trashed()) {
+            $user->restore();
         }
 
         $user->is_active = true;
@@ -391,7 +525,7 @@ class AuthController extends Controller
         $this->ensureElevatedRole($request);
 
         $actor = $request->user();
-        $user = User::findOrFail($id);
+        $user = User::withTrashed()->findOrFail($id);
 
         if (($actor->role ?? null) !== 'super_admin') {
             throw ValidationException::withMessages([
@@ -412,10 +546,21 @@ class AuthController extends Controller
         }
 
         $user->tokens()->delete();
+
+        if ($user->trashed()) {
+            $user->forceDelete();
+
+            return response()->json([
+                'message' => 'Account permanently deleted successfully',
+            ]);
+        }
+
+        $user->is_active = false;
+        $user->save();
         $user->delete();
 
         return response()->json([
-            'message' => 'Account deleted successfully',
+            'message' => 'Account archived successfully',
         ]);
     }
 
@@ -423,6 +568,13 @@ class AuthController extends Controller
     {
         if (! in_array($request->user()->role, ['admin', 'super_admin'], true)) {
             abort(403, 'Unauthorized action.');
+        }
+    }
+
+    private function ensureSuperAdmin(Request $request): void
+    {
+        if (($request->user()->role ?? null) !== 'super_admin') {
+            abort(403, 'Only super admins can manage accounts.');
         }
     }
 

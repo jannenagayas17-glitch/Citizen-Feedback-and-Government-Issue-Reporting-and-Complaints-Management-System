@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
 import '../../services/report_service.dart';
+import '../../utils/admin_theme.dart';
 import '../../utils/file_download.dart';
+import '../../utils/tacloban_barangays.dart';
 
 class AnalyticsReportsScreen extends StatefulWidget {
   const AnalyticsReportsScreen({super.key, this.embedded = false});
@@ -31,22 +33,31 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
     super.initState();
     final now = DateTime.now();
     _range = DateTimeRange(
-      start: DateTime(now.year, now.month, now.day).subtract(const Duration(days: 29)),
+      start: DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).subtract(const Duration(days: 29)),
       end: DateTime(now.year, now.month, now.day),
     );
     _payloadFuture = _load();
   }
 
   Future<_Payload> _load() async {
+    final user = await _authService.getCurrentUser();
+    final isSuperAdmin = _isSuperAdmin(user);
     final results = await Future.wait<dynamic>([
-      _authService.getCurrentUser(),
       _reportService.getAdminReports(),
-      _authService.getOffices(includeInactive: true),
+      _authService.getOffices(includeInactive: isSuperAdmin),
+      _reportService.getCategories(),
     ]);
     return _Payload(
-      user: results[0] as Map<String, dynamic>,
-      reports: (results[1] as List).whereType<Map<String, dynamic>>().toList(),
-      offices: (results[2] as List).whereType<Map<String, dynamic>>().toList(),
+      user: Map<String, dynamic>.from(user),
+      reports: (results[0] as List).whereType<Map<String, dynamic>>().toList(),
+      offices: (results[1] as List).whereType<Map<String, dynamic>>().toList(),
+      categories: (results[2] as List)
+          .whereType<Map<String, dynamic>>()
+          .toList(),
     );
   }
 
@@ -60,7 +71,11 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
     setState(() => _exporting = true);
     try {
       final file = await _reportService.exportAdminReports();
-      await downloadFile(bytes: file.bytes, fileName: file.fileName, mimeType: file.mimeType);
+      await downloadFile(
+        bytes: file.bytes,
+        fileName: file.fileName,
+        mimeType: file.mimeType,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Exported ${file.fileName} successfully.')),
@@ -75,17 +90,124 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
     }
   }
 
-  bool _isSuperAdmin(Map<String, dynamic> user) => (user['role'] ?? '').toString() == 'super_admin';
+  bool _isSuperAdmin(Map<String, dynamic> user) =>
+      (user['role'] ?? '').toString() == 'super_admin';
 
-  String _officeName(Map<String, dynamic> report) => ((report['office'] as Map<String, dynamic>?)?['name'] ?? '').toString().trim();
-  String _categoryName(Map<String, dynamic> report) => (((report['category'] as Map<String, dynamic>?)?['name'] ?? 'Other').toString().trim().isEmpty) ? 'Other' : ((report['category'] as Map<String, dynamic>?)?['name'] ?? 'Other').toString().trim();
-  String _barangayName(Map<String, dynamic> report) => (report['barangay'] ?? '').toString().trim();
-  String _status(Map<String, dynamic> report) => (report['status'] ?? 'New').toString();
-  DateTime? _createdAt(Map<String, dynamic> report) => DateTime.tryParse((report['created_at'] ?? '').toString())?.toLocal();
+  String _departmentLabel(Map<String, dynamic> user) {
+    final office = user['office'];
+    if (office is Map<String, dynamic>) {
+      final name = (office['name'] ?? '').toString().trim();
+      if (name.isNotEmpty) return name;
+    }
 
-  List<String> _options(List<String> raw, String allLabel) {
-    final items = raw.where((e) => e.trim().isNotEmpty).toSet().toList()..sort();
+    return (user['department'] ?? '').toString().trim();
+  }
+
+  String _officeName(Map<String, dynamic> report) =>
+      ((report['office'] as Map<String, dynamic>?)?['name'] ?? '')
+          .toString()
+          .trim();
+  String _categoryName(Map<String, dynamic> report) {
+    final categoryName = (report['category_name'] ?? '').toString().trim();
+    if (categoryName.isNotEmpty) return categoryName;
+
+    final category = report['category'];
+    if (category is Map<String, dynamic>) {
+      final name = (category['name'] ?? '').toString().trim();
+      if (name.isNotEmpty) return name;
+    }
+
+    return 'Other';
+  }
+
+  String _barangayName(Map<String, dynamic> report) =>
+      (report['barangay'] ?? '').toString().trim();
+  String _status(Map<String, dynamic> report) =>
+      (report['status'] ?? 'New').toString();
+  DateTime? _createdAt(Map<String, dynamic> report) =>
+      DateTime.tryParse((report['created_at'] ?? '').toString())?.toLocal();
+
+  List<String> _options(
+    Iterable<String> raw,
+    String allLabel, {
+    int Function(String, String)? compare,
+  }) {
+    final values = <String, String>{};
+    for (final item in raw) {
+      final value = item.trim();
+      if (value.isEmpty) continue;
+      values.putIfAbsent(value.toLowerCase(), () => value);
+    }
+
+    final items = values.values.toList()
+      ..sort(compare ?? (a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     return [allLabel, ...items];
+  }
+
+  List<String> _departmentOptions(_Payload payload) {
+    if (!_isSuperAdmin(payload.user)) {
+      final department = _departmentLabel(payload.user);
+      return department.isEmpty ? ['Assigned Department'] : [department];
+    }
+
+    return _options([
+      ...payload.offices.map((office) => (office['name'] ?? '').toString()),
+      ...payload.reports.map(_officeName),
+    ], 'All Departments');
+  }
+
+  List<String> _barangayOptions(_Payload payload) {
+    return _options(
+      [...taclobanBarangays, ...payload.reports.map(_barangayName)],
+      'All Barangays',
+      compare: _compareBarangays,
+    );
+  }
+
+  List<String> _categoryOptions(_Payload payload) {
+    return _options([
+      ...payload.categories.map(
+        (category) => (category['name'] ?? '').toString(),
+      ),
+      ...payload.reports.map(_categoryName),
+    ], 'All Categories');
+  }
+
+  int _compareBarangays(String a, String b) {
+    final aNumber = _barangayNumber(a);
+    final bNumber = _barangayNumber(b);
+    if (aNumber != null && bNumber != null && aNumber != bNumber) {
+      return aNumber.compareTo(bNumber);
+    }
+    if (aNumber != null && bNumber == null) return -1;
+    if (aNumber == null && bNumber != null) return 1;
+    return a.toLowerCase().compareTo(b.toLowerCase());
+  }
+
+  double? _barangayNumber(String value) {
+    final match = RegExp(
+      r'^barangay\s+(\d+)(?:-([a-z]))?',
+      caseSensitive: false,
+    ).firstMatch(value.trim());
+    if (match == null) return null;
+    final number = double.tryParse(match.group(1)!);
+    if (number == null) return null;
+    final suffix = match.group(2);
+    if (suffix == null) return number;
+    return number + ((suffix.toLowerCase().codeUnitAt(0) - 96) / 10);
+  }
+
+  bool _matchesBarangay(String reportBarangay, String selectedBarangay) {
+    if (reportBarangay.trim().toLowerCase() ==
+        selectedBarangay.trim().toLowerCase()) {
+      return true;
+    }
+
+    final reportNumber = _barangayNumber(reportBarangay);
+    final selectedNumber = _barangayNumber(selectedBarangay);
+    return reportNumber != null &&
+        selectedNumber != null &&
+        reportNumber == selectedNumber;
   }
 
   List<Map<String, dynamic>> _filtered(_Payload payload) {
@@ -96,22 +218,42 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
     _Payload payload,
     DateTimeRange range,
   ) {
+    final isSuperAdmin = _isSuperAdmin(payload.user);
+    final assignedDepartment = _departmentLabel(payload.user);
     return payload.reports.where((report) {
+      if (!isSuperAdmin &&
+          assignedDepartment.isNotEmpty &&
+          _officeName(report) != assignedDepartment) {
+        return false;
+      }
       final created = _createdAt(report);
       if (created == null) return false;
       final date = DateTime(created.year, created.month, created.day);
-      final start = DateTime(range.start.year, range.start.month, range.start.day);
+      final start = DateTime(
+        range.start.year,
+        range.start.month,
+        range.start.day,
+      );
       final end = DateTime(range.end.year, range.end.month, range.end.day);
       if (date.isBefore(start) || date.isAfter(end)) return false;
-      if (_department != 'All Departments' && _officeName(report) != _department) return false;
-      if (_barangay != 'All Barangays' && _barangayName(report) != _barangay) return false;
-      if (_category != 'All Categories' && _categoryName(report) != _category) return false;
+      if (_department != 'All Departments' &&
+          _officeName(report) != _department) {
+        return false;
+      }
+      if (_barangay != 'All Barangays' &&
+          !_matchesBarangay(_barangayName(report), _barangay)) {
+        return false;
+      }
+      if (_category != 'All Categories' && _categoryName(report) != _category) {
+        return false;
+      }
       return true;
     }).toList();
   }
 
   Map<String, int> _counts(List<Map<String, dynamic>> reports) {
-    int countStatus(String value) => reports.where((r) => _status(r) == value).length;
+    int countStatus(String value) =>
+        reports.where((r) => _status(r) == value).length;
     return {
       'total': reports.length,
       'pending': countStatus('Pending'),
@@ -121,14 +263,18 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
     };
   }
 
-  List<MapEntry<String, int>> _grouped(List<Map<String, dynamic>> reports, String Function(Map<String, dynamic>) keyOf) {
+  List<MapEntry<String, int>> _grouped(
+    List<Map<String, dynamic>> reports,
+    String Function(Map<String, dynamic>) keyOf,
+  ) {
     final map = <String, int>{};
     for (final report in reports) {
       final key = keyOf(report);
       if (key.isEmpty) continue;
       map[key] = (map[key] ?? 0) + 1;
     }
-    final items = map.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final items = map.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
     return items;
   }
 
@@ -147,21 +293,25 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
     for (var i = 0; i < segments; i++) {
       final start = _range.start.add(Duration(days: bucketSize * i));
       if (start.isAfter(_range.end)) break;
-      final end = start.add(Duration(days: bucketSize - 1)).isAfter(_range.end) ? _range.end : start.add(Duration(days: bucketSize - 1));
+      final end = start.add(Duration(days: bucketSize - 1)).isAfter(_range.end)
+          ? _range.end
+          : start.add(Duration(days: bucketSize - 1));
       final items = reports.where((r) {
         final created = _createdAt(r);
         if (created == null) return false;
         final day = DateTime(created.year, created.month, created.day);
         return !day.isBefore(start) && !day.isAfter(end);
       }).toList();
-      out.add(_Bucket(
-        label: '${start.month}/${start.day}',
-        total: items.length,
-        pending: items.where((r) => _status(r) == 'Pending').length,
-        progress: items.where((r) => _status(r) == 'In Progress').length,
-        resolved: items.where((r) => _status(r) == 'Resolved').length,
-        rejected: items.where((r) => _status(r) == 'Rejected').length,
-      ));
+      out.add(
+        _Bucket(
+          label: '${start.month}/${start.day}',
+          total: items.length,
+          pending: items.where((r) => _status(r) == 'Pending').length,
+          progress: items.where((r) => _status(r) == 'In Progress').length,
+          resolved: items.where((r) => _status(r) == 'Resolved').length,
+          rejected: items.where((r) => _status(r) == 'Rejected').length,
+        ),
+      );
     }
     return out;
   }
@@ -172,28 +322,102 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
       firstDate: DateTime(2024),
       lastDate: DateTime.now().add(const Duration(days: 365)),
       initialDateRange: _range,
+      builder: (context, child) {
+        final colors = AdminThemeColors.of(context);
+        final size = MediaQuery.of(context).size;
+        final dialogWidth = math.min(760.0, size.width - 48);
+        final dialogHeight = math.min(620.0, size.height - 48);
+
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+              primary: const Color(0xFF2557D6),
+              secondary: const Color(0xFF38BDF8),
+              surface: colors.panel,
+              onSurface: colors.text,
+            ),
+            dialogTheme: DialogThemeData(backgroundColor: colors.panel),
+            datePickerTheme: DatePickerThemeData(
+              backgroundColor: colors.panel,
+              surfaceTintColor: Colors.transparent,
+              headerBackgroundColor: colors.panel,
+              headerForegroundColor: colors.text,
+              rangeSelectionBackgroundColor: const Color(
+                0xFF2557D6,
+              ).withValues(alpha: 0.16),
+              rangeSelectionOverlayColor: WidgetStateProperty.all(
+                const Color(0xFF2557D6).withValues(alpha: 0.10),
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+            ),
+          ),
+          child: Center(
+            child: Container(
+              width: dialogWidth,
+              height: dialogHeight,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(color: colors.border),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.28),
+                    blurRadius: 34,
+                    offset: const Offset(0, 18),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(28),
+                child: Material(
+                  color: colors.panel,
+                  child: child ?? const SizedBox.shrink(),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
     if (picked != null) setState(() => _range = picked);
   }
 
   @override
   Widget build(BuildContext context) {
+    final themeColors = AdminThemeColors.of(context);
     final bottom = MediaQuery.of(context).padding.bottom;
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0E1B),
+      backgroundColor: themeColors.background,
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _refresh,
           child: FutureBuilder<_Payload>(
             future: _payloadFuture,
             builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
-              if (snapshot.hasError) return ListView(padding: const EdgeInsets.all(20), children: [_panel(Text(snapshot.error.toString(), style: const TextStyle(color: Colors.white)))]);
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return ListView(
+                  padding: const EdgeInsets.all(20),
+                  children: [
+                    _panel(
+                      Text(
+                        snapshot.error.toString(),
+                        style: TextStyle(color: themeColors.text),
+                      ),
+                    ),
+                  ],
+                );
+              }
               final payload = snapshot.data!;
-              final departments = _options(payload.offices.map((o) => (o['name'] ?? '').toString()).toList(), 'All Departments');
-              final barangays = _options(payload.reports.map(_barangayName).toList(), 'All Barangays');
-              final categories = _options(payload.reports.map(_categoryName).toList(), 'All Categories');
-              if (!departments.contains(_department)) _department = departments.first;
+              final departments = _departmentOptions(payload);
+              final barangays = _barangayOptions(payload);
+              final categories = _categoryOptions(payload);
+              if (!departments.contains(_department)) {
+                _department = departments.first;
+              }
               if (!barangays.contains(_barangay)) _barangay = barangays.first;
               if (!categories.contains(_category)) _category = categories.first;
               final reports = _filtered(payload);
@@ -203,10 +427,21 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                 start: _range.start.subtract(Duration(days: spanDays)),
                 end: _range.start.subtract(const Duration(days: 1)),
               );
-              final previousCounts = _counts(_filteredForRange(payload, previousRange));
-              final categoryBreakdown = _grouped(reports, _categoryName).take(6).toList();
-              final barangayBreakdown = _grouped(reports, _barangayName).take(6).toList();
-              final resolutionRate = counts['total'] == 0 ? 0 : (((counts['resolved'] ?? 0) / (counts['total'] ?? 1)) * 100).round();
+              final previousCounts = _counts(
+                _filteredForRange(payload, previousRange),
+              );
+              final categoryBreakdown = _grouped(
+                reports,
+                _categoryName,
+              ).take(6).toList();
+              final barangayBreakdown = _grouped(
+                reports,
+                _barangayName,
+              ).take(6).toList();
+              final resolutionRate = counts['total'] == 0
+                  ? 0
+                  : (((counts['resolved'] ?? 0) / (counts['total'] ?? 1)) * 100)
+                        .round();
               final screenWidth = MediaQuery.of(context).size.width;
               final isWide = screenWidth >= 1180;
               final useWideFilters = screenWidth >= 1380;
@@ -218,63 +453,68 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                 String hint, {
                 IconData? icon,
               }) => Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      color: _colorFor(key).withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: _colorFor(key).withValues(alpha: 0.18),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: _colorFor(key).withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: _colorFor(key).withValues(alpha: 0.18),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                '${counts[key] ?? 0}',
-                                style: TextStyle(
-                                  color: _colorFor(key),
-                                  fontSize: 21,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
+                        Expanded(
+                          child: Text(
+                            '${counts[key] ?? 0}',
+                            style: TextStyle(
+                              color: _colorFor(key),
+                              fontSize: 21,
+                              fontWeight: FontWeight.w800,
                             ),
-                            if (icon != null)
-                              Icon(icon, color: _colorFor(key), size: 18),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          label,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
                           ),
                         ),
-                        const SizedBox(height: 6),
-                        Text(
-                          hint,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.60),
-                            fontSize: 12,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          '${_deltaPercent(counts[key] ?? 0, previousCounts[key] ?? 0) >= 0 ? '+' : ''}${_deltaPercent(counts[key] ?? 0, previousCounts[key] ?? 0)}% from last period',
-                          style: TextStyle(
-                            color: _deltaPercent(counts[key] ?? 0, previousCounts[key] ?? 0) >= 0
-                                ? const Color(0xFF7FE2B5)
-                                : const Color(0xFFF38A8A),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+                        if (icon != null)
+                          Icon(icon, color: _colorFor(key), size: 18),
                       ],
                     ),
-                  );
+                    const SizedBox(height: 8),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: themeColors.text,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      hint,
+                      style: TextStyle(
+                        color: themeColors.mutedText,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      '${_deltaPercent(counts[key] ?? 0, previousCounts[key] ?? 0) >= 0 ? '+' : ''}${_deltaPercent(counts[key] ?? 0, previousCounts[key] ?? 0)}% from last period',
+                      style: TextStyle(
+                        color:
+                            _deltaPercent(
+                                  counts[key] ?? 0,
+                                  previousCounts[key] ?? 0,
+                                ) >=
+                                0
+                            ? const Color(0xFF7FE2B5)
+                            : const Color(0xFFF38A8A),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              );
 
               Widget summaryCard(
                 String label,
@@ -299,10 +539,10 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
+                            Text(
                               'Analytics',
                               style: TextStyle(
-                                color: Colors.white,
+                                color: themeColors.text,
                                 fontSize: 22,
                                 fontWeight: FontWeight.w800,
                               ),
@@ -312,9 +552,7 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                               superAdmin
                                   ? 'View and manage all issue reports from across the city.'
                                   : 'Live analytics from your assigned office.',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.58),
-                              ),
+                              style: TextStyle(color: themeColors.mutedText),
                             ),
                           ],
                         ),
@@ -343,7 +581,9 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                                   ),
                                 )
                               : const Icon(Icons.download_rounded, size: 16),
-                          label: Text(_exporting ? 'Exporting...' : 'Export CSV'),
+                          label: Text(
+                            _exporting ? 'Exporting...' : 'Export Excel',
+                          ),
                         ),
                       ],
                     ],
@@ -383,10 +623,7 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                                 ),
                               ),
                               const SizedBox(width: 12),
-                              Expanded(
-                                flex: 5,
-                                child: _rangeButton(),
-                              ),
+                              Expanded(flex: 5, child: _rangeButton()),
                             ],
                           )
                         else
@@ -412,10 +649,7 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                                 (v) => setState(() => _category = v!),
                                 width: 240,
                               ),
-                              SizedBox(
-                                width: 280,
-                                child: _rangeButton(),
-                              ),
+                              SizedBox(width: 280, child: _rangeButton()),
                             ],
                           ),
                         const SizedBox(height: 16),
@@ -501,38 +735,57 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                   ),
                   const SizedBox(height: 18),
                   if (isWide)
-                    Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Expanded(flex: 8, child: Column(children: [
-                        _metricPanel(
-                          'Reports Overview',
-                          _trendBuckets(_buckets(reports)),
-                          trailing: 'Last 30 Days',
-                        ),
-                        const SizedBox(height: 16),
-                        _metricPanel(
-                          'Report Resolution Rate',
-                          _resolutionPanel(resolutionRate, categoryBreakdown),
-                        ),
-                      ])),
-                      const SizedBox(width: 16),
-                      Expanded(flex: 5, child: Column(children: [
-                        _metricPanel(
-                          'Reports by Category',
-                          _bars(
-                            categoryBreakdown,
-                            const Color(0xFF6678FF),
-                            usePalette: true,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: 8,
+                          child: Column(
+                            children: [
+                              _metricPanel(
+                                'Reports Overview',
+                                _trendBuckets(_buckets(reports)),
+                                trailing: 'Last 30 Days',
+                              ),
+                              const SizedBox(height: 16),
+                              _metricPanel(
+                                'Report Resolution Rate',
+                                _resolutionPanel(
+                                  resolutionRate,
+                                  categoryBreakdown,
+                                ),
+                              ),
+                            ],
                           ),
-                          trailing: 'All Time',
                         ),
-                        const SizedBox(height: 16),
-                        _metricPanel(
-                          'Issues by Barangay',
-                          _bars(barangayBreakdown, const Color(0xFF557DFF)),
-                          trailing: 'Last 30 Days',
+                        const SizedBox(width: 16),
+                        Expanded(
+                          flex: 5,
+                          child: Column(
+                            children: [
+                              _metricPanel(
+                                'Reports by Category',
+                                _bars(
+                                  categoryBreakdown,
+                                  const Color(0xFF6678FF),
+                                  usePalette: true,
+                                ),
+                                trailing: 'All Time',
+                              ),
+                              const SizedBox(height: 16),
+                              _metricPanel(
+                                'Issues by Barangay',
+                                _bars(
+                                  barangayBreakdown,
+                                  const Color(0xFF557DFF),
+                                ),
+                                trailing: 'Last 30 Days',
+                              ),
+                            ],
+                          ),
                         ),
-                      ])),
-                    ])
+                      ],
+                    )
                   else ...[
                     _metricPanel(
                       'Reports Overview',
@@ -580,7 +833,9 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                                 ),
                               )
                             : const Icon(Icons.download_rounded, size: 16),
-                        label: Text(_exporting ? 'Exporting...' : 'Export CSV'),
+                        label: Text(
+                          _exporting ? 'Exporting...' : 'Export Excel',
+                        ),
                       ),
                     ),
                   ],
@@ -594,170 +849,244 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
   }
 
   Widget _topBar(Map<String, dynamic> user, bool superAdmin) {
+    final colors = AdminThemeColors.of(context);
     final name = (user['name'] ?? 'Admin').toString();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF111426),
+        gradient: LinearGradient(colors: colors.topBarGradient),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
       ),
-      child: Row(children: [
-        Container(width: 32, height: 32, decoration: BoxDecoration(color: const Color(0xFF4C6FFF), borderRadius: BorderRadius.circular(10)), child: Icon(superAdmin ? Icons.star_rounded : Icons.chevron_right_rounded, color: Colors.white, size: 18)),
-        const SizedBox(width: 12),
-        const Text('CityTrack PH', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18)),
-        if (superAdmin) ...[
-          const SizedBox(width: 14),
-          Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7), decoration: BoxDecoration(color: const Color(0xFF2C2018), borderRadius: BorderRadius.circular(999), border: Border.all(color: const Color(0xFF6F4D2C))), child: const Text('SUPER ADMIN', style: TextStyle(color: Color(0xFFF0A43B), fontWeight: FontWeight.w800))),
-        ] else ...[
-          const SizedBox(width: 10),
-          Text(
-            'Admin Portal',
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: const Color(0xFF4C6FFF),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              superAdmin ? Icons.star_rounded : Icons.chevron_right_rounded,
+              color: Colors.white,
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Text(
+            'CityTrack PH',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.34),
-              fontSize: 12,
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 18,
+            ),
+          ),
+          if (superAdmin) ...[
+            const SizedBox(width: 14),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2C2018),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: const Color(0xFF6F4D2C)),
+              ),
+              child: const Text(
+                'SUPER ADMIN',
+                style: TextStyle(
+                  color: Color(0xFFF0A43B),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ] else ...[
+            const SizedBox(width: 10),
+            Text(
+              'Admin Portal',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.34),
+                fontSize: 12,
+              ),
+            ),
+          ],
+          const Spacer(),
+          CircleAvatar(
+            radius: 12,
+            backgroundColor: superAdmin
+                ? const Color(0xFF6B5CF6)
+                : const Color(0xFF4C6FFF),
+            child: Text(
+              name.isEmpty ? 'A' : name.substring(0, 1).toUpperCase(),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            name,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
-        const Spacer(),
-        CircleAvatar(radius: 12, backgroundColor: superAdmin ? const Color(0xFF6B5CF6) : const Color(0xFF4C6FFF), child: Text(name.isEmpty ? 'A' : name.substring(0, 1).toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800))),
-        const SizedBox(width: 8),
-        Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-      ]),
+      ),
     );
   }
 
   Widget _panel(Widget child) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: const Color(0xFF111426),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-        ),
-        child: child,
-      );
+    width: double.infinity,
+    padding: const EdgeInsets.all(18),
+    decoration: BoxDecoration(
+      color: AdminThemeColors.of(context).panel,
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: AdminThemeColors.of(context).border),
+    ),
+    child: child,
+  );
 
   Widget _rangeButton() => OutlinedButton(
-        onPressed: _pickRange,
-        style: OutlinedButton.styleFrom(
-          backgroundColor: const Color(0xFF181C2E),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    onPressed: _pickRange,
+    style: OutlinedButton.styleFrom(
+      backgroundColor: AdminThemeColors.of(context).input,
+      side: BorderSide(color: AdminThemeColors.of(context).border),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            '${_range.start.month}/${_range.start.day}/${_range.start.year}   \u2192   ${_range.end.month}/${_range.end.day}/${_range.end.year}',
+            style: TextStyle(color: AdminThemeColors.of(context).text),
+          ),
         ),
-        child: Row(
+        Icon(
+          Icons.calendar_month_rounded,
+          color: AdminThemeColors.of(context).mutedText,
+          size: 18,
+        ),
+      ],
+    ),
+  );
+
+  Widget _metricPanel(String title, Widget child, {String? trailing}) => _panel(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
             Expanded(
               child: Text(
-                '${_range.start.month}/${_range.start.day}/${_range.start.year}   \u2192   ${_range.end.month}/${_range.end.day}/${_range.end.year}',
-                style: const TextStyle(color: Colors.white),
+                title,
+                style: TextStyle(
+                  color: AdminThemeColors.of(context).text,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
-            const Icon(Icons.calendar_month_rounded, color: Colors.white70, size: 18),
-          ],
-        ),
-      );
-
-  Widget _metricPanel(String title, Widget child, {String? trailing}) => _panel(
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
+            if (trailing != null)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: AdminThemeColors.of(context).input,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: AdminThemeColors.of(context).border,
                   ),
                 ),
-                if (trailing != null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 7,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF171B2B),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.06),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      trailing,
+                      style: TextStyle(
+                        color: AdminThemeColors.of(context).text,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          trailing,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.82),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Icon(
-                          Icons.keyboard_arrow_down_rounded,
-                          color: Colors.white.withValues(alpha: 0.72),
-                          size: 16,
-                        ),
-                      ],
+                    const SizedBox(width: 8),
+                    Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: AdminThemeColors.of(context).mutedText,
+                      size: 16,
                     ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            child,
+                  ],
+                ),
+              ),
           ],
         ),
-      );
+        const SizedBox(height: 16),
+        child,
+      ],
+    ),
+  );
 
-  Widget _dropdown(String value, List<String> items, ValueChanged<String?> onChanged, {double? width}) => SizedBox(
-        width: width,
-        child: DropdownButtonFormField<String>(
-          value: items.contains(value) ? value : items.first,
-          isExpanded: true,
-          dropdownColor: const Color(0xFF181C2E),
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: const Color(0xFF181C2E),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(
-                color: Colors.white.withValues(alpha: 0.08),
-              ),
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(
-                color: Colors.white.withValues(alpha: 0.08),
-              ),
-            ),
-          ),
-          style: const TextStyle(color: Colors.white),
-          iconEnabledColor: Colors.white70,
-          selectedItemBuilder: (context) => items
-              .map(
-                (e) => Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    e,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                ),
-              )
-              .toList(),
-          items: items.map((e) => DropdownMenuItem(value: e, child: Text(e, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white)))).toList(),
-          onChanged: onChanged,
+  Widget _dropdown(
+    String value,
+    List<String> items,
+    ValueChanged<String?> onChanged, {
+    double? width,
+  }) => SizedBox(
+    width: width,
+    child: DropdownButtonFormField<String>(
+      initialValue: items.contains(value) ? value : items.first,
+      isExpanded: true,
+      dropdownColor: AdminThemeColors.of(context).panel,
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: AdminThemeColors.of(context).input,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 14,
         ),
-      );
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: AdminThemeColors.of(context).border),
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: AdminThemeColors.of(context).border),
+        ),
+      ),
+      style: TextStyle(color: AdminThemeColors.of(context).text),
+      iconEnabledColor: AdminThemeColors.of(context).mutedText,
+      selectedItemBuilder: (context) => items
+          .map(
+            (e) => Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                e,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: AdminThemeColors.of(context).text),
+              ),
+            ),
+          )
+          .toList(),
+      items: items
+          .map(
+            (e) => DropdownMenuItem(
+              value: e,
+              child: Text(
+                e,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: AdminThemeColors.of(context).text),
+              ),
+            ),
+          )
+          .toList(),
+      onChanged: onChanged,
+    ),
+  );
 
   Widget _bars(
     List<MapEntry<String, int>> entries,
@@ -767,10 +1096,14 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
     if (entries.isEmpty) {
       return Text(
         'No data for the selected filters.',
-        style: TextStyle(color: Colors.white.withValues(alpha: 0.62)),
+        style: TextStyle(color: AdminThemeColors.of(context).mutedText),
       );
     }
-    final maxValue = entries.fold<int>(1, (max, item) => math.max(max, item.value));
+    final colors = AdminThemeColors.of(context);
+    final maxValue = entries.fold<int>(
+      1,
+      (max, item) => math.max(max, item.value),
+    );
     return Column(
       children: entries.take(6).toList().asMap().entries.map((wrapped) {
         final index = wrapped.key;
@@ -783,12 +1116,15 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
               Container(
                 width: 8,
                 height: 8,
-                decoration: BoxDecoration(color: rowColor, shape: BoxShape.circle),
+                decoration: BoxDecoration(
+                  color: rowColor,
+                  shape: BoxShape.circle,
+                ),
               ),
               const SizedBox(width: 10),
               SizedBox(
                 width: 120,
-                child: Text(entry.key, style: const TextStyle(color: Colors.white)),
+                child: Text(entry.key, style: TextStyle(color: colors.text)),
               ),
               Expanded(
                 child: Stack(
@@ -797,7 +1133,7 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                     Container(
                       height: 18,
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.05),
+                        color: colors.border,
                         borderRadius: BorderRadius.circular(999),
                       ),
                     ),
@@ -822,8 +1158,8 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
               const SizedBox(width: 12),
               Text(
                 '${entry.value}',
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: colors.text,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -838,17 +1174,20 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
     if (buckets.isEmpty) {
       return Text(
         'No trend data is available for the selected range.',
-        style: TextStyle(color: Colors.white.withValues(alpha: 0.62)),
+        style: TextStyle(color: AdminThemeColors.of(context).mutedText),
       );
     }
+    final colors = AdminThemeColors.of(context);
     final maxValue = buckets
-        .map((bucket) => [
-              bucket.total,
-              bucket.pending,
-              bucket.progress,
-              bucket.resolved,
-              bucket.rejected,
-            ].reduce(math.max))
+        .map(
+          (bucket) => [
+            bucket.total,
+            bucket.pending,
+            bucket.progress,
+            bucket.resolved,
+            bucket.rejected,
+          ].reduce(math.max),
+        )
         .fold<int>(1, math.max);
     final ySteps = <int>[
       maxValue,
@@ -859,17 +1198,19 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
 
     return Column(
       children: [
-        Row(children: const [
-          _TrendLegend('Total', Color(0xFF557DFF)),
-          SizedBox(width: 12),
-          _TrendLegend('Pending', Color(0xFFF4B04F)),
-          SizedBox(width: 12),
-          _TrendLegend('In Progress', Color(0xFFD19A43)),
-          SizedBox(width: 12),
-          _TrendLegend('Resolved', Color(0xFF76D0B6)),
-          SizedBox(width: 12),
-          _TrendLegend('Rejected', Color(0xFFE16A74)),
-        ]),
+        Row(
+          children: const [
+            _TrendLegend('Total', Color(0xFF557DFF)),
+            SizedBox(width: 12),
+            _TrendLegend('Pending', Color(0xFFF4B04F)),
+            SizedBox(width: 12),
+            _TrendLegend('In Progress', Color(0xFFD19A43)),
+            SizedBox(width: 12),
+            _TrendLegend('Resolved', Color(0xFF76D0B6)),
+            SizedBox(width: 12),
+            _TrendLegend('Rejected', Color(0xFFE16A74)),
+          ],
+        ),
         const SizedBox(height: 16),
         SizedBox(
           height: 250,
@@ -886,7 +1227,7 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                         (value) => Text(
                           '$value',
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.46),
+                            color: colors.mutedText,
                             fontSize: 11,
                           ),
                         ),
@@ -903,6 +1244,7 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                         painter: _TrendChartPainter(
                           buckets: buckets,
                           maxValue: maxValue.toDouble(),
+                          gridColor: colors.border,
                         ),
                         child: const SizedBox.expand(),
                       ),
@@ -916,7 +1258,7 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                                 bucket.label,
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.56),
+                                  color: colors.mutedText,
                                   fontSize: 11,
                                 ),
                               ),
@@ -934,47 +1276,91 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
     );
   }
 
-  Widget _resolutionPanel(int rate, List<MapEntry<String, int>> categories) => Row(children: [
-    SizedBox(
-      width: 150,
-      height: 150,
-      child: Stack(alignment: Alignment.center, children: [
+  Widget _resolutionPanel(int rate, List<MapEntry<String, int>> categories) {
+    final colors = AdminThemeColors.of(context);
+    return Row(
+      children: [
         SizedBox(
           width: 150,
           height: 150,
-          child: CircularProgressIndicator(
-            value: rate / 100,
-            strokeWidth: 12,
-            backgroundColor: Colors.white.withValues(alpha: 0.08),
-            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF6678FF)),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(
+                width: 150,
+                height: 150,
+                child: CircularProgressIndicator(
+                  value: rate / 100,
+                  strokeWidth: 12,
+                  backgroundColor: colors.border,
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    Color(0xFF6678FF),
+                  ),
+                ),
+              ),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '$rate%',
+                    style: TextStyle(
+                      color: colors.text,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  Text(
+                    'Resolution Rate',
+                    style: TextStyle(color: colors.mutedText, fontSize: 12),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
-        Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('$rate%', style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w800)),
-          Text(
-            'Resolution Rate',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.58),
-              fontSize: 12,
-            ),
+        const SizedBox(width: 18),
+        Expanded(
+          child: Column(
+            children: categories.take(5).toList().asMap().entries.map((entry) {
+              final color = _palette(entry.key);
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        entry.value.key,
+                        style: TextStyle(
+                          color: colors.text,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '${entry.value.value}',
+                      style: TextStyle(
+                        color: colors.text,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
           ),
-        ]),
-      ]),
-    ),
-    const SizedBox(width: 18),
-    Expanded(child: Column(children: categories.take(5).toList().asMap().entries.map((entry) {
-      final color = _palette(entry.key);
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Row(children: [
-          Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-          const SizedBox(width: 10),
-          Expanded(child: Text(entry.value.key, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600))),
-          Text('${entry.value.value}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-        ]),
-      );
-    }).toList())),
-  ]);
+        ),
+      ],
+    );
+  }
 
   Color _colorFor(String key) {
     switch (key) {
@@ -992,20 +1378,39 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
   }
 
   Color _palette(int index) {
-    const colors = [Color(0xFF557DFF), Color(0xFFF2B45A), Color(0xFF8FD6B6), Color(0xFF7AB6FF), Color(0xFFE16A74)];
+    const colors = [
+      Color(0xFF557DFF),
+      Color(0xFFF2B45A),
+      Color(0xFF8FD6B6),
+      Color(0xFF7AB6FF),
+      Color(0xFFE16A74),
+    ];
     return colors[index % colors.length];
   }
 }
 
 class _Payload {
-  const _Payload({required this.user, required this.reports, required this.offices});
+  const _Payload({
+    required this.user,
+    required this.reports,
+    required this.offices,
+    required this.categories,
+  });
   final Map<String, dynamic> user;
   final List<Map<String, dynamic>> reports;
   final List<Map<String, dynamic>> offices;
+  final List<Map<String, dynamic>> categories;
 }
 
 class _Bucket {
-  const _Bucket({required this.label, required this.total, required this.pending, required this.progress, required this.resolved, required this.rejected});
+  const _Bucket({
+    required this.label,
+    required this.total,
+    required this.pending,
+    required this.progress,
+    required this.resolved,
+    required this.rejected,
+  });
   final String label;
   final int total;
   final int pending;
@@ -1019,27 +1424,36 @@ class _TrendLegend extends StatelessWidget {
   final String label;
   final Color color;
   @override
-  Widget build(BuildContext context) => Row(mainAxisSize: MainAxisSize.min, children: [
-    Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-    const SizedBox(width: 6),
-    Text(
-      label,
-      style: TextStyle(
-        color: Colors.white.withValues(alpha: 0.68),
-        fontSize: 11,
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        width: 8,
+        height: 8,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
       ),
-    ),
-  ]);
+      const SizedBox(width: 6),
+      Text(
+        label,
+        style: TextStyle(
+          color: AdminThemeColors.of(context).mutedText,
+          fontSize: 11,
+        ),
+      ),
+    ],
+  );
 }
 
 class _TrendChartPainter extends CustomPainter {
   const _TrendChartPainter({
     required this.buckets,
     required this.maxValue,
+    required this.gridColor,
   });
 
   final List<_Bucket> buckets;
   final double maxValue;
+  final Color gridColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1051,7 +1465,7 @@ class _TrendChartPainter extends CustomPainter {
       Color(0xFFE16A74),
     ];
     final gridPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.07)
+      ..color = gridColor
       ..strokeWidth = 1;
 
     for (var i = 0; i < 4; i++) {
@@ -1060,11 +1474,13 @@ class _TrendChartPainter extends CustomPainter {
     }
 
     for (var i = 0; i < buckets.length; i++) {
-      final x = buckets.length == 1 ? 0.0 : size.width * (i / (buckets.length - 1));
+      final x = buckets.length == 1
+          ? 0.0
+          : size.width * (i / (buckets.length - 1));
       canvas.drawLine(
         Offset(x, 0),
         Offset(x, size.height),
-        gridPaint..color = Colors.white.withValues(alpha: 0.03),
+        gridPaint..color = gridColor.withValues(alpha: 0.65),
       );
     }
 
@@ -1087,7 +1503,9 @@ class _TrendChartPainter extends CustomPainter {
         ..style = PaintingStyle.stroke;
 
       for (var i = 0; i < values.length; i++) {
-        final x = values.length == 1 ? size.width / 2 : size.width * (i / (values.length - 1));
+        final x = values.length == 1
+            ? size.width / 2
+            : size.width * (i / (values.length - 1));
         final normalized = maxValue <= 0 ? 0.0 : values[i] / maxValue;
         final y = size.height - (normalized * (size.height - 10)) - 5;
         if (i == 0) {
@@ -1099,7 +1517,9 @@ class _TrendChartPainter extends CustomPainter {
       canvas.drawPath(path, linePaint);
 
       for (var i = 0; i < values.length; i++) {
-        final x = values.length == 1 ? size.width / 2 : size.width * (i / (values.length - 1));
+        final x = values.length == 1
+            ? size.width / 2
+            : size.width * (i / (values.length - 1));
         final normalized = maxValue <= 0 ? 0.0 : values[i] / maxValue;
         final y = size.height - (normalized * (size.height - 10)) - 5;
         canvas.drawCircle(Offset(x, y), 3.5, dotPaint);
@@ -1109,6 +1529,8 @@ class _TrendChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _TrendChartPainter oldDelegate) {
-    return oldDelegate.buckets != buckets || oldDelegate.maxValue != maxValue;
+    return oldDelegate.buckets != buckets ||
+        oldDelegate.maxValue != maxValue ||
+        oldDelegate.gridColor != gridColor;
   }
 }

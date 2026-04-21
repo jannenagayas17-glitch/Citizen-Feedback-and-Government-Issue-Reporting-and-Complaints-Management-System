@@ -8,10 +8,7 @@ import '../../services/report_feedback_service.dart';
 import '../../services/report_service.dart';
 
 class ComplaintDetailScreen extends StatefulWidget {
-  const ComplaintDetailScreen({
-    super.key,
-    required this.reportId,
-  });
+  const ComplaintDetailScreen({super.key, required this.reportId});
 
   final int reportId;
 
@@ -33,8 +30,9 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
 
   Future<Map<String, dynamic>> _loadDetail() async {
     final detail = await _reportService.getReportDetail(widget.reportId);
-    final savedRating =
-        await ReportFeedbackService.getRatingForReport(widget.reportId);
+    final savedRating = await ReportFeedbackService.getRatingForReport(
+      widget.reportId,
+    );
     if (mounted) {
       setState(() {
         _selectedRating = savedRating;
@@ -69,11 +67,7 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0C1727),
-              Color(0xFF1E293B),
-              Color(0xFF463327),
-            ],
+            colors: [Color(0xFF0C1727), Color(0xFF1E293B), Color(0xFF463327)],
           ),
         ),
         child: RefreshIndicator(
@@ -100,13 +94,14 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
               final report = snapshot.data ?? const <String, dynamic>{};
               final statusHistories =
                   (report['status_histories'] as List<dynamic>? ??
-                      report['statusHistories'] as List<dynamic>? ??
-                      const []);
+                  report['statusHistories'] as List<dynamic>? ??
+                  const []);
               final adminResponses =
                   (report['admin_responses'] as List<dynamic>? ??
-                      report['adminResponses'] as List<dynamic>? ??
-                      const []);
-              final attachments = (report['images'] as List<dynamic>? ?? const []);
+                  report['adminResponses'] as List<dynamic>? ??
+                  const []);
+              final attachments =
+                  (report['images'] as List<dynamic>? ?? const []);
               final categoryName =
                   ((report['category'] as Map<String, dynamic>?)?['name'] ??
                           'Uncategorized')
@@ -118,18 +113,21 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
               final rawStatus = (report['status'] ?? 'New').toString();
               final status = _normalizedStatus(rawStatus);
               final submittedBy =
-                  ((report['user'] as Map<String, dynamic>?)?['name'] ?? 'Unknown')
+                  ((report['user'] as Map<String, dynamic>?)?['name'] ??
+                          'Unknown')
                       .toString();
               final location = (report['location'] ?? 'No location').toString();
               final barangay = (report['barangay'] ?? '').toString();
               final createdAt = (report['created_at'] ?? '').toString();
               final latitude = (report['latitude'] ?? '').toString();
               final longitude = (report['longitude'] ?? '').toString();
-              final trackingId =
-                  ReportFeedbackService.buildTrackingId(widget.reportId);
+              final trackingId = ReportFeedbackService.buildTrackingId(
+                widget.reportId,
+              );
 
               return ListView(
-                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
                 padding: EdgeInsets.fromLTRB(16, 16, 16, bottomSafeArea + 24),
                 children: [
                   _buildGlassSection(
@@ -181,9 +179,10 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                         if (latitude.isNotEmpty || longitude.isNotEmpty)
                           _DetailRow(
                             label: 'GPS tag',
-                            value: [latitude, longitude]
-                                .where((value) => value.isNotEmpty)
-                                .join(', '),
+                            value: [
+                              latitude,
+                              longitude,
+                            ].where((value) => value.isNotEmpty).join(', '),
                           ),
                       ],
                     ),
@@ -221,8 +220,11 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          (report['description'] ?? 'No description').toString(),
-                          style: TextStyle(color: Colors.white.withOpacity(0.78)),
+                          (report['description'] ?? 'No description')
+                              .toString(),
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.78),
+                          ),
                         ),
                       ],
                     ),
@@ -244,8 +246,9 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                         if (attachments.isEmpty)
                           Text(
                             'No attachments uploaded for this report.',
-                            style:
-                                TextStyle(color: Colors.white.withOpacity(0.72)),
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.72),
+                            ),
                           )
                         else
                           Wrap(
@@ -254,22 +257,26 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                             children: attachments.map((item) {
                               final attachment = item as Map<String, dynamic>;
                               final mediaType =
-                                  (attachment['media_type'] ?? 'image').toString();
+                                  (attachment['media_type'] ?? 'image')
+                                      .toString();
                               final attachmentUrl = _buildImageUrl(
                                 (attachment['image_path'] ?? '').toString(),
                               );
 
                               if (mediaType == 'video') {
                                 return _VideoAttachmentCard(
-                                  fileName: (attachment['original_name'] ?? 'video')
-                                      .toString(),
+                                  fileName:
+                                      (attachment['original_name'] ?? 'video')
+                                          .toString(),
                                   onOpen: attachmentUrl == null
                                       ? null
                                       : () => _openAttachment(attachmentUrl),
                                 );
                               }
 
-                              return _ImageAttachmentCard(imageUrl: attachmentUrl);
+                              return _ImageAttachmentCard(
+                                imageUrl: attachmentUrl,
+                              );
                             }).toList(),
                           ),
                       ],
@@ -294,21 +301,23 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                               ? 'Rate the service you received from 1 to 5 stars.'
                               : 'Rating will unlock once the complaint reaches Resolved.',
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.72),
+                            color: Colors.white.withValues(alpha: 0.72),
                           ),
                         ),
                         const SizedBox(height: 14),
                         Row(
                           children: List.generate(5, (index) {
                             final value = index + 1;
-                            final filled =
-                                (_selectedRating ?? 0) >= value;
+                            final filled = (_selectedRating ?? 0) >= value;
                             return IconButton(
-                              onPressed: status == 'Resolved' && !_isSavingRating
+                              onPressed:
+                                  status == 'Resolved' && !_isSavingRating
                                   ? () => _saveRating(value)
                                   : null,
                               icon: Icon(
-                                filled ? Icons.star_rounded : Icons.star_outline_rounded,
+                                filled
+                                    ? Icons.star_rounded
+                                    : Icons.star_outline_rounded,
                                 color: filled
                                     ? const Color(0xFFFBBF24)
                                     : Colors.white54,
@@ -334,22 +343,23 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                   if (statusHistories.isEmpty)
                     _buildEmptyMessage('No status updates yet.')
                   else
-                    ...statusHistories.map(
-                      (item) {
-                        final oldStatus =
-                            _normalizedStatus((item['old_status'] ?? 'Submitted').toString());
-                        final newStatus =
-                            _normalizedStatus((item['new_status'] ?? 'Submitted').toString());
+                    ...statusHistories.map((item) {
+                      final oldStatus = _normalizedStatus(
+                        (item['old_status'] ?? 'Submitted').toString(),
+                      );
+                      final newStatus = _normalizedStatus(
+                        (item['new_status'] ?? 'Submitted').toString(),
+                      );
 
-                        return _TimelineCard(
-                          title: '$oldStatus -> $newStatus',
-                          subtitle: ((item['user'] as Map<String, dynamic>?)?['name'] ??
-                                  'System')
-                              .toString(),
-                          details: (item['remarks'] ?? 'No remarks').toString(),
-                        );
-                      },
-                    ),
+                      return _TimelineCard(
+                        title: '$oldStatus -> $newStatus',
+                        subtitle:
+                            ((item['user'] as Map<String, dynamic>?)?['name'] ??
+                                    'System')
+                                .toString(),
+                        details: (item['remarks'] ?? 'No remarks').toString(),
+                      );
+                    }),
                   const SizedBox(height: 24),
                   _buildSectionTitle('Office responses'),
                   const SizedBox(height: 8),
@@ -359,7 +369,8 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                     ...adminResponses.map(
                       (item) => _TimelineCard(
                         title:
-                            ((item['user'] as Map<String, dynamic>?)?['name'] ?? 'Admin')
+                            ((item['user'] as Map<String, dynamic>?)?['name'] ??
+                                    'Admin')
                                 .toString(),
                         subtitle: 'Official update',
                         details: (item['response'] ?? '').toString(),
@@ -375,12 +386,7 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
   }
 
   List<Widget> _buildStepItems(String status) {
-    const steps = [
-      'Submitted',
-      'Under Review',
-      'In Progress',
-      'Resolved',
-    ];
+    const steps = ['Submitted', 'Under Review', 'In Progress', 'Resolved'];
     final currentIndex = steps.indexOf(status);
 
     return List<Widget>.generate(steps.length, (index) {
@@ -464,8 +470,9 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
     }
 
     final baseUri = Uri.parse(ApiConfig.baseUrl);
-    var normalizedPath =
-        trimmed.startsWith('/') ? trimmed.substring(1) : trimmed;
+    var normalizedPath = trimmed.startsWith('/')
+        ? trimmed.substring(1)
+        : trimmed;
     if (normalizedPath.startsWith('public/')) {
       normalizedPath = normalizedPath.substring('public/'.length);
     }
@@ -496,9 +503,9 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
   }
 
   void _showSnack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Widget _buildGlassSection({required Widget child}) {
@@ -510,13 +517,13 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white.withOpacity(0.16)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                Colors.white.withOpacity(0.18),
-                Colors.white.withOpacity(0.08),
+                Colors.white.withValues(alpha: 0.18),
+                Colors.white.withValues(alpha: 0.08),
               ],
             ),
           ),
@@ -542,13 +549,13 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
+        color: Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Text(
         message,
-        style: TextStyle(color: Colors.white.withOpacity(0.72)),
+        style: TextStyle(color: Colors.white.withValues(alpha: 0.72)),
       ),
     );
   }
@@ -605,8 +612,8 @@ class _FlowProgressItem extends StatelessWidget {
     final color = completed
         ? const Color(0xFF22C55E)
         : active
-            ? const Color(0xFF38BDF8)
-            : Colors.white24;
+        ? const Color(0xFF38BDF8)
+        : Colors.white24;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -616,7 +623,7 @@ class _FlowProgressItem extends StatelessWidget {
           height: 28,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: color.withOpacity(0.16),
+            color: color.withValues(alpha: 0.16),
             border: Border.all(color: color),
           ),
           alignment: Alignment.center,
@@ -642,7 +649,7 @@ class _FlowProgressItem extends StatelessWidget {
               Text(
                 description,
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.72),
+                  color: Colors.white.withValues(alpha: 0.72),
                   height: 1.3,
                 ),
               ),
@@ -655,10 +662,7 @@ class _FlowProgressItem extends StatelessWidget {
 }
 
 class _DetailRow extends StatelessWidget {
-  const _DetailRow({
-    required this.label,
-    required this.value,
-  });
+  const _DetailRow({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -683,7 +687,7 @@ class _DetailRow extends StatelessWidget {
           Expanded(
             child: Text(
               value,
-              style: TextStyle(color: Colors.white.withOpacity(0.78)),
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.78)),
             ),
           ),
         ],
@@ -709,9 +713,9 @@ class _TimelineCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -726,12 +730,12 @@ class _TimelineCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             subtitle,
-            style: TextStyle(color: Colors.white.withOpacity(0.62)),
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.62)),
           ),
           const SizedBox(height: 8),
           Text(
             details,
-            style: TextStyle(color: Colors.white.withOpacity(0.78)),
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.78)),
           ),
         ],
       ),
@@ -755,9 +759,9 @@ class _InfoBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.14),
+        color: color.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.34)),
+        border: Border.all(color: color.withValues(alpha: 0.34)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -779,9 +783,7 @@ class _InfoBadge extends StatelessWidget {
 }
 
 class _ImageAttachmentCard extends StatelessWidget {
-  const _ImageAttachmentCard({
-    required this.imageUrl,
-  });
+  const _ImageAttachmentCard({required this.imageUrl});
 
   final String? imageUrl;
 
@@ -792,14 +794,12 @@ class _ImageAttachmentCard extends StatelessWidget {
       child: Container(
         width: 180,
         height: 148,
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         child: imageUrl == null
             ? Center(
                 child: Text(
                   'Invalid image path',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.72),
-                  ),
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.72)),
                 ),
               )
             : Image.network(
@@ -815,7 +815,7 @@ class _ImageAttachmentCard extends StatelessWidget {
                     ),
                   );
                 },
-                errorBuilder: (_, __, ___) {
+                errorBuilder: (_, _, _) {
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(12),
@@ -823,7 +823,7 @@ class _ImageAttachmentCard extends StatelessWidget {
                         'Unable to load image',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.72),
+                          color: Colors.white.withValues(alpha: 0.72),
                         ),
                       ),
                     ),
@@ -836,10 +836,7 @@ class _ImageAttachmentCard extends StatelessWidget {
 }
 
 class _VideoAttachmentCard extends StatelessWidget {
-  const _VideoAttachmentCard({
-    required this.fileName,
-    required this.onOpen,
-  });
+  const _VideoAttachmentCard({required this.fileName, required this.onOpen});
 
   final String fileName;
   final VoidCallback? onOpen;
@@ -852,8 +849,8 @@ class _VideoAttachmentCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
-        color: Colors.white.withOpacity(0.10),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        color: Colors.white.withValues(alpha: 0.10),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

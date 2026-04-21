@@ -59,10 +59,7 @@ class _SplashScreenState extends State<SplashScreen> {
           Positioned.fill(
             child: Opacity(
               opacity: 0.12,
-              child: Image.asset(
-                'assets/images/logo.png',
-                fit: BoxFit.cover,
-              ),
+              child: Image.asset('assets/images/logo.png', fit: BoxFit.cover),
             ),
           ),
           SafeArea(
@@ -80,19 +77,19 @@ class _SplashScreenState extends State<SplashScreen> {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(34),
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.18),
+                          color: Colors.white.withValues(alpha: 0.18),
                         ),
                         gradient: LinearGradient(
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
-                            Colors.white.withOpacity(0.22),
-                            Colors.white.withOpacity(0.10),
+                            Colors.white.withValues(alpha: 0.22),
+                            Colors.white.withValues(alpha: 0.10),
                           ],
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.24),
+                            color: Colors.black.withValues(alpha: 0.24),
                             blurRadius: 28,
                             offset: const Offset(0, 16),
                           ),
@@ -112,7 +109,9 @@ class _SplashScreenState extends State<SplashScreen> {
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFFD8B15A).withOpacity(0.18),
+                                  color: const Color(
+                                    0xFFD8B15A,
+                                  ).withValues(alpha: 0.18),
                                   blurRadius: 20,
                                   spreadRadius: 2,
                                 ),
@@ -144,7 +143,7 @@ class _SplashScreenState extends State<SplashScreen> {
                             'Citizen Feedback & Reports System',
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.78),
+                              color: Colors.white.withValues(alpha: 0.78),
                               fontSize: 15,
                               fontWeight: FontWeight.w500,
                             ),
@@ -156,16 +155,16 @@ class _SplashScreenState extends State<SplashScreen> {
                               vertical: 11,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.10),
+                              color: Colors.white.withValues(alpha: 0.10),
                               borderRadius: BorderRadius.circular(999),
                               border: Border.all(
-                                color: Colors.white.withOpacity(0.14),
+                                color: Colors.white.withValues(alpha: 0.14),
                               ),
                             ),
                             child: Text(
                               'Preparing secure access',
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.72),
+                                color: Colors.white.withValues(alpha: 0.72),
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -205,7 +204,7 @@ class Dot extends StatelessWidget {
       width: 10,
       height: 10,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.9),
+        color: Colors.white.withValues(alpha: 0.9),
         shape: BoxShape.circle,
       ),
     );

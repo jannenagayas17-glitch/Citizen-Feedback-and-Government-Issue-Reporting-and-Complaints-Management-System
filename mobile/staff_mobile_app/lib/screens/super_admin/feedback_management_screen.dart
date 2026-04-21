@@ -3,13 +3,12 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../services/feedback_service.dart';
+import '../../utils/admin_theme.dart';
 import '../../utils/file_download.dart';
+import '../../utils/tacloban_barangays.dart';
 
 class FeedbackManagementScreen extends StatefulWidget {
-  const FeedbackManagementScreen({
-    super.key,
-    this.embedded = false,
-  });
+  const FeedbackManagementScreen({super.key, this.embedded = false});
 
   final bool embedded;
 
@@ -29,10 +28,10 @@ class _FeedbackBucket {
   });
 
   const _FeedbackBucket.empty()
-      : positive = 0,
-        neutral = 0,
-        negative = 0,
-        dissatisfied = 0;
+    : positive = 0,
+      neutral = 0,
+      negative = 0,
+      dissatisfied = 0;
 
   final int positive;
   final int neutral;
@@ -144,7 +143,6 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
       final file = await _feedbackService.exportFeedback(
         days: _rangeDays[_selectedRange],
         type: _selectedType,
-        barangay: _selectedBarangay,
       );
       await downloadFile(
         bytes: file.bytes,
@@ -169,6 +167,7 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     final body = FutureBuilder<List<Map<String, dynamic>>>(
       future: _feedbackFuture,
       builder: (context, snapshot) {
@@ -184,8 +183,7 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
         }
 
         final entries = snapshot.data ?? const <Map<String, dynamic>>[];
-        final currentRangeEntries = _filterByCurrentRange(entries);
-        final barangays = _barangayOptions(currentRangeEntries);
+        final barangays = _barangayOptions(entries);
         final effectiveBarangay = barangays.contains(_selectedBarangay)
             ? _selectedBarangay
             : 'All Barangays';
@@ -210,7 +208,10 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
         final startIndex = filteredEntries.isEmpty
             ? 0
             : (currentPage - 1) * _pageSize;
-        final endIndex = math.min(startIndex + _pageSize, filteredEntries.length);
+        final endIndex = math.min(
+          startIndex + _pageSize,
+          filteredEntries.length,
+        );
         final pagedEntries = filteredEntries.sublist(startIndex, endIndex);
         final isWide = MediaQuery.of(context).size.width >= 1180;
 
@@ -227,14 +228,14 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           'Feedback',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: colors.text,
                             fontSize: 28,
                             fontWeight: FontWeight.w800,
                           ),
@@ -243,7 +244,7 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
                         Text(
                           'View and manage feedback submitted by citizens regarding their reports.',
                           style: TextStyle(
-                            color: Color(0xFFA8B0C6),
+                            color: colors.mutedText,
                             fontSize: 14,
                           ),
                         ),
@@ -273,10 +274,7 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
                                 color: Colors.white,
                               ),
                             )
-                          : const Icon(
-                              Icons.file_download_outlined,
-                              size: 18,
-                            ),
+                          : const Icon(Icons.file_download_outlined, size: 18),
                       label: Text(_exporting ? 'Exporting...' : 'Export CSV'),
                     ),
                 ],
@@ -327,7 +325,6 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
                             _page = 1;
                             _selectedBarangay = value;
                           });
-                          _refresh();
                         },
                       ),
                     ),
@@ -373,7 +370,6 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
                           _page = 1;
                           _selectedBarangay = value;
                         });
-                        _refresh();
                       },
                     ),
                     FilledButton.icon(
@@ -523,10 +519,10 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0C1220),
+      backgroundColor: colors.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0C1220),
-        foregroundColor: Colors.white,
+        backgroundColor: colors.background,
+        foregroundColor: colors.text,
         elevation: 0,
         title: const Text('Feedback'),
       ),
@@ -535,24 +531,63 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
   }
 
   List<String> _barangayOptions(List<Map<String, dynamic>> entries) {
-    final values = <String>{'All Barangays'};
+    final values = <String, String>{};
+    void addValue(String value) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return;
+      values.putIfAbsent(trimmed.toLowerCase(), () => trimmed);
+    }
+
+    for (final barangay in taclobanBarangays) {
+      addValue(barangay);
+    }
+
     for (final entry in entries) {
       final report = entry['report'];
       if (report is Map<String, dynamic>) {
-        final barangay = (report['barangay'] ?? '').toString().trim();
-        if (barangay.isNotEmpty) {
-          values.add(barangay);
-        }
+        addValue((report['barangay'] ?? '').toString());
       }
     }
 
-    final items = values.toList();
-    items.sort((a, b) {
-      if (a == 'All Barangays') return -1;
-      if (b == 'All Barangays') return 1;
-      return a.compareTo(b);
-    });
-    return items;
+    final items = values.values.toList()..sort(_compareBarangays);
+    return ['All Barangays', ...items];
+  }
+
+  int _compareBarangays(String a, String b) {
+    final aNumber = _barangayNumber(a);
+    final bNumber = _barangayNumber(b);
+    if (aNumber != null && bNumber != null && aNumber != bNumber) {
+      return aNumber.compareTo(bNumber);
+    }
+    if (aNumber != null && bNumber == null) return -1;
+    if (aNumber == null && bNumber != null) return 1;
+    return a.toLowerCase().compareTo(b.toLowerCase());
+  }
+
+  double? _barangayNumber(String value) {
+    final match = RegExp(
+      r'^barangay\s+(\d+)(?:-([a-z]))?',
+      caseSensitive: false,
+    ).firstMatch(value.trim());
+    if (match == null) return null;
+    final number = double.tryParse(match.group(1)!);
+    if (number == null) return null;
+    final suffix = match.group(2);
+    if (suffix == null) return number;
+    return number + ((suffix.toLowerCase().codeUnitAt(0) - 96) / 10);
+  }
+
+  bool _matchesBarangay(String reportBarangay, String selectedBarangay) {
+    if (reportBarangay.trim().toLowerCase() ==
+        selectedBarangay.trim().toLowerCase()) {
+      return true;
+    }
+
+    final reportNumber = _barangayNumber(reportBarangay);
+    final selectedNumber = _barangayNumber(selectedBarangay);
+    return reportNumber != null &&
+        selectedNumber != null &&
+        reportNumber == selectedNumber;
   }
 
   List<Map<String, dynamic>> _filterByCurrentRange(
@@ -565,8 +600,9 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
 
     final start = DateTime.now().subtract(Duration(days: days));
     return entries.where((entry) {
-      final createdAt =
-          DateTime.tryParse((entry['created_at'] ?? '').toString());
+      final createdAt = DateTime.tryParse(
+        (entry['created_at'] ?? '').toString(),
+      );
       return createdAt != null && !createdAt.isBefore(start);
     }).toList();
   }
@@ -584,13 +620,17 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
       if (report is! Map<String, dynamic>) {
         return false;
       }
-      return (report['barangay'] ?? '').toString().trim() == selectedBarangay;
+      return _matchesBarangay(
+        (report['barangay'] ?? '').toString(),
+        selectedBarangay,
+      );
     }).toList();
   }
 
   _FeedbackSummary _buildSummary(List<Map<String, dynamic>> entries) {
     final now = DateTime.now();
-    final currentDays = _rangeDays[_selectedRange] ?? _allTimeWindow(entries, now);
+    final currentDays =
+        _rangeDays[_selectedRange] ?? _allTimeWindow(entries, now);
     final currentStart = now.subtract(Duration(days: currentDays));
     final previousStart = currentStart.subtract(Duration(days: currentDays));
 
@@ -602,10 +642,15 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
     int previousNeutral = 0;
     int previousNegative = 0;
     int previousDissatisfied = 0;
-    final buckets = List.generate(currentDays, (_) => const _FeedbackBucket.empty());
+    final buckets = List.generate(
+      currentDays,
+      (_) => const _FeedbackBucket.empty(),
+    );
 
     for (final entry in entries) {
-      final createdAt = DateTime.tryParse((entry['created_at'] ?? '').toString());
+      final createdAt = DateTime.tryParse(
+        (entry['created_at'] ?? '').toString(),
+      );
       if (createdAt == null) {
         continue;
       }
@@ -684,7 +729,9 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
   int _allTimeWindow(List<Map<String, dynamic>> entries, DateTime now) {
     DateTime? oldest;
     for (final entry in entries) {
-      final createdAt = DateTime.tryParse((entry['created_at'] ?? '').toString());
+      final createdAt = DateTime.tryParse(
+        (entry['created_at'] ?? '').toString(),
+      );
       if (createdAt == null) {
         continue;
       }
@@ -714,30 +761,46 @@ class _FeedbackDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Container(
       width: double.infinity,
       constraints: const BoxConstraints(minHeight: 54),
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
-        color: const Color(0xFF121A2B),
+        color: colors.panel,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        border: Border.all(color: colors.border),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: value,
           isExpanded: true,
-          dropdownColor: const Color(0xFF1A2337),
-          style: const TextStyle(color: Colors.white),
-          iconEnabledColor: Colors.white70,
+          menuMaxHeight: 360,
+          dropdownColor: colors.panel,
+          style: TextStyle(color: colors.text),
+          iconEnabledColor: colors.mutedText,
+          selectedItemBuilder: (context) => items
+              .map(
+                (item) => Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    item,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: colors.text),
+                  ),
+                ),
+              )
+              .toList(),
           items: items
               .map(
                 (item) => DropdownMenuItem<String>(
                   value: item,
                   child: Text(
                     item,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(color: colors.text),
                   ),
                 ),
               )
@@ -770,6 +833,7 @@ class _FeedbackSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Container(
       constraints: const BoxConstraints(minHeight: 152),
       padding: const EdgeInsets.all(18),
@@ -807,8 +871,8 @@ class _FeedbackSummaryCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             label,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: colors.text,
               fontSize: 15,
               fontWeight: FontWeight.w600,
             ),
@@ -819,14 +883,11 @@ class _FeedbackSummaryCard extends StatelessWidget {
               children: [
                 TextSpan(
                   text: delta,
-                  style: TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: TextStyle(color: color, fontWeight: FontWeight.w700),
                 ),
                 TextSpan(
                   text: '  from last period',
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.64)),
+                  style: TextStyle(color: colors.mutedText),
                 ),
               ],
             ),
@@ -850,11 +911,12 @@ class _FeedbackOverviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF121A2B),
+        color: colors.panel,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        border: Border.all(color: colors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -863,11 +925,11 @@ class _FeedbackOverviewCard extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 18, 20, 10),
             child: Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Feedback Overview',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: colors.text,
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
                     ),
@@ -875,10 +937,7 @@ class _FeedbackOverviewCard extends StatelessWidget {
                 ),
                 Text(
                   selectedRange,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.58),
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: colors.mutedText, fontSize: 12),
                 ),
               ],
             ),
@@ -912,10 +971,7 @@ class _FeedbackOverviewCard extends StatelessWidget {
                 ),
                 Text(
                   '$totalEntries Reports',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.62),
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: colors.mutedText, fontSize: 12),
                 ),
               ],
             ),
@@ -933,22 +989,24 @@ class _FeedbackTrendChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return CustomPaint(
-      painter: _FeedbackTrendPainter(summary),
+      painter: _FeedbackTrendPainter(summary, gridColor: colors.border),
       child: Container(),
     );
   }
 }
 
 class _FeedbackTrendPainter extends CustomPainter {
-  const _FeedbackTrendPainter(this.summary);
+  const _FeedbackTrendPainter(this.summary, {required this.gridColor});
 
   final _FeedbackSummary summary;
+  final Color gridColor;
 
   @override
   void paint(Canvas canvas, Size size) {
     final gridPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.06)
+      ..color = gridColor
       ..strokeWidth = 1;
 
     for (var i = 0; i < 4; i++) {
@@ -970,12 +1028,7 @@ class _FeedbackTrendPainter extends CustomPainter {
     );
   }
 
-  void _drawSeries(
-    Canvas canvas,
-    Size size,
-    List<double> values,
-    Color color,
-  ) {
+  void _drawSeries(Canvas canvas, Size size, List<double> values, Color color) {
     if (values.isEmpty) {
       return;
     }
@@ -1018,15 +1071,12 @@ class _FeedbackTrendPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _FeedbackTrendPainter oldDelegate) {
-    return oldDelegate.summary != summary;
+    return oldDelegate.summary != summary || oldDelegate.gridColor != gridColor;
   }
 }
 
 class _FeedbackLegend extends StatelessWidget {
-  const _FeedbackLegend({
-    required this.label,
-    required this.color,
-  });
+  const _FeedbackLegend({required this.label, required this.color});
 
   final String label;
   final Color color;
@@ -1045,7 +1095,7 @@ class _FeedbackLegend extends StatelessWidget {
         Text(
           label,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.68),
+            color: AdminThemeColors.of(context).mutedText,
             fontSize: 12,
           ),
         ),
@@ -1075,11 +1125,12 @@ class _FeedbackTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF121A2B),
+        color: colors.panel,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        border: Border.all(color: colors.border),
       ),
       child: Column(
         children: [
@@ -1088,7 +1139,8 @@ class _FeedbackTable extends StatelessWidget {
               padding: EdgeInsets.all(34),
               child: _FeedbackEmptyState(
                 title: 'No feedback found yet',
-                message: 'Citizen feedback will appear here after residents submit ratings, suggestions, or complaints.',
+                message:
+                    'Citizen feedback will appear here after residents submit ratings, suggestions, or complaints.',
               ),
             )
           else ...[
@@ -1099,16 +1151,10 @@ class _FeedbackTable extends StatelessWidget {
                   Expanded(
                     child: Text(
                       'Showing ${((page - 1) * pageSize) + 1} to ${math.min(page * pageSize, totalEntries)} of $totalEntries entries',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.60),
-                        fontSize: 13,
-                      ),
+                      style: TextStyle(color: colors.mutedText, fontSize: 13),
                     ),
                   ),
-                  _PagerButton(
-                    label: 'Previous',
-                    onTap: onPrevious,
-                  ),
+                  _PagerButton(label: 'Previous', onTap: onPrevious),
                   const SizedBox(width: 10),
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -1116,25 +1162,20 @@ class _FeedbackTable extends StatelessWidget {
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF19223A),
+                      color: colors.activeNav,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.06),
-                      ),
+                      border: Border.all(color: colors.border),
                     ),
                     child: Text(
                       '$page',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: colors.activeText,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
                   const SizedBox(width: 10),
-                  _PagerButton(
-                    label: 'Next',
-                    onTap: onNext,
-                  ),
+                  _PagerButton(label: 'Next', onTap: onNext),
                 ],
               ),
             ),
@@ -1145,7 +1186,10 @@ class _FeedbackTable extends StatelessWidget {
                 child: Column(
                   children: [
                     const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 8,
+                      ),
                       child: Row(
                         children: [
                           _FeedbackTableLabel('ID', flex: 2),
@@ -1178,26 +1222,26 @@ class _FeedbackTableRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     final report = entry['report'] as Map<String, dynamic>?;
     final user = entry['user'] as Map<String, dynamic>?;
     final office = entry['office'] as Map<String, dynamic>?;
-    final title =
-        (report?['title'] ?? office?['name'] ?? 'General Feedback').toString();
+    final title = (report?['title'] ?? office?['name'] ?? 'General Feedback')
+        .toString();
     final barangay = (report?['barangay'] ?? '-').toString();
     final status = (report?['status'] ?? 'General').toString();
     final feedbackText = (entry['message'] ?? '').toString();
     final rating = int.tryParse('${entry['rating'] ?? 0}') ?? 0;
-    final date = DateTime.tryParse((entry['created_at'] ?? '').toString())
-        ?.toLocal();
+    final date = DateTime.tryParse(
+      (entry['created_at'] ?? '').toString(),
+    )?.toLocal();
     final reportTracking =
         (report?['tracking_number'] ?? report?['tracking_id'] ?? '').toString();
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
-        ),
+        border: Border(top: BorderSide(color: colors.border)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1208,10 +1252,7 @@ class _FeedbackTableRow extends StatelessWidget {
               reportTracking.isNotEmpty
                   ? reportTracking
                   : 'FDB-${(entry['id'] ?? '').toString().padLeft(4, '0')}',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-              ),
+              style: TextStyle(color: colors.text, fontWeight: FontWeight.w700),
             ),
           ),
           _FeedbackTableCell(
@@ -1223,18 +1264,15 @@ class _FeedbackTableRow extends StatelessWidget {
                   title,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: colors.text,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   (office?['name'] ?? 'Department').toString(),
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.52),
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: colors.mutedText, fontSize: 12),
                 ),
               ],
             ),
@@ -1246,7 +1284,7 @@ class _FeedbackTableRow extends StatelessWidget {
               children: [
                 Text(
                   (user?['name'] ?? 'Citizen').toString(),
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(color: colors.text),
                 ),
                 if ((user?['email'] ?? '').toString().isNotEmpty) ...[
                   const SizedBox(height: 4),
@@ -1254,10 +1292,7 @@ class _FeedbackTableRow extends StatelessWidget {
                     (user?['email'] ?? '').toString(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.44),
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: colors.mutedText, fontSize: 12),
                   ),
                 ],
               ],
@@ -1265,28 +1300,23 @@ class _FeedbackTableRow extends StatelessWidget {
           ),
           _FeedbackTableCell(
             flex: 2,
-            child: Text(
-              barangay,
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.76)),
-            ),
+            child: Text(barangay, style: TextStyle(color: colors.mutedText)),
           ),
-          _FeedbackTableCell(
-            flex: 2,
-            child: _MiniStatusChip(status: status),
-          ),
+          _FeedbackTableCell(flex: 2, child: _MiniStatusChip(status: status)),
           _FeedbackTableCell(
             flex: 5,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: const Color(0xFF1A2237),
+                color: colors.input,
                 borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: colors.border),
               ),
               child: Text(
                 feedbackText,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white),
+                style: TextStyle(color: colors.text),
               ),
             ),
           ),
@@ -1309,7 +1339,7 @@ class _FeedbackTableRow extends StatelessWidget {
             flex: 2,
             child: Text(
               _dateLabel(date),
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.66)),
+              style: TextStyle(color: colors.mutedText),
             ),
           ),
         ],
@@ -1338,12 +1368,13 @@ class _FeedbackTableLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Expanded(
       flex: flex,
       child: Text(
         text,
         style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.48),
+          color: colors.mutedText,
           fontSize: 12,
           fontWeight: FontWeight.w700,
         ),
@@ -1353,10 +1384,7 @@ class _FeedbackTableLabel extends StatelessWidget {
 }
 
 class _FeedbackTableCell extends StatelessWidget {
-  const _FeedbackTableCell({
-    required this.flex,
-    required this.child,
-  });
+  const _FeedbackTableCell({required this.flex, required this.child});
 
   final int flex;
   final Widget child;
@@ -1378,12 +1406,12 @@ class _MiniStatusChip extends StatelessWidget {
     final color = lower.contains('resolved')
         ? const Color(0xFF67D8A2)
         : lower.contains('progress')
-            ? const Color(0xFF5F92FF)
-            : lower.contains('pending')
-                ? const Color(0xFFE5B15F)
-                : lower.contains('reject')
-                    ? const Color(0xFFE57A7A)
-                    : const Color(0xFF8E96B2);
+        ? const Color(0xFF5F92FF)
+        : lower.contains('pending')
+        ? const Color(0xFFE5B15F)
+        : lower.contains('reject')
+        ? const Color(0xFFE57A7A)
+        : const Color(0xFF8E96B2);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1404,29 +1432,23 @@ class _MiniStatusChip extends StatelessWidget {
 }
 
 class _FeedbackEmptyState extends StatelessWidget {
-  const _FeedbackEmptyState({
-    required this.title,
-    required this.message,
-  });
+  const _FeedbackEmptyState({required this.title, required this.message});
 
   final String title;
   final String message;
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Column(
       children: [
-        const Icon(
-          Icons.forum_outlined,
-          size: 38,
-          color: Color(0xFF7184B7),
-        ),
+        const Icon(Icons.forum_outlined, size: 38, color: Color(0xFF7184B7)),
         const SizedBox(height: 12),
         Text(
           title,
           textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: colors.text,
             fontSize: 16,
             fontWeight: FontWeight.w700,
           ),
@@ -1435,7 +1457,7 @@ class _FeedbackEmptyState extends StatelessWidget {
         Text(
           message,
           textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.66)),
+          style: TextStyle(color: colors.mutedText),
         ),
       ],
     );
@@ -1443,34 +1465,30 @@ class _FeedbackEmptyState extends StatelessWidget {
 }
 
 class _PagerButton extends StatelessWidget {
-  const _PagerButton({
-    required this.label,
-    required this.onTap,
-  });
+  const _PagerButton({required this.label, required this.onTap});
 
   final String label;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(10),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: onTap == null
-              ? const Color(0xFF151D30)
-              : const Color(0xFF19223A),
+          color: onTap == null ? colors.panelAlt : colors.input,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+          border: Border.all(color: colors.border),
         ),
         child: Text(
           label,
           style: TextStyle(
             color: onTap == null
-                ? Colors.white.withValues(alpha: 0.28)
-                : Colors.white.withValues(alpha: 0.80),
+                ? colors.mutedText.withValues(alpha: 0.45)
+                : colors.text,
             fontSize: 12,
             fontWeight: FontWeight.w600,
           ),

@@ -28,9 +28,7 @@ class _FakeStaffAuthService extends AuthService {
     required String jobTitle,
   }) async {
     requestCalled = true;
-    return {
-      'message': 'Admin request submitted.',
-    };
+    return {'message': 'Admin request submitted.'};
   }
 }
 

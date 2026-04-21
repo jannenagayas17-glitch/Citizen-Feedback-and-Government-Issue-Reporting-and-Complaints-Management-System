@@ -92,8 +92,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               _openUsers();
             },
             manageUsersLabel: 'Account directory',
-            manageUsersSubtitle:
-                'Manage citizen and staff account access',
+            manageUsersSubtitle: 'Manage citizen and staff account access',
           ),
         ),
       );
@@ -118,7 +117,10 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         title: const Text('Admin Dashboard'),
         actions: [
           IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh)),
-          IconButton(onPressed: _openProfile, icon: const Icon(Icons.person_outline)),
+          IconButton(
+            onPressed: _openProfile,
+            icon: const Icon(Icons.person_outline),
+          ),
         ],
       ),
       body: Container(
@@ -126,11 +128,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0C1727),
-              Color(0xFF1A2940),
-              Color(0xFF463327),
-            ],
+            colors: [Color(0xFF0C1727), Color(0xFF1A2940), Color(0xFF463327)],
           ),
         ),
         child: RefreshIndicator(
@@ -149,9 +147,10 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                   children: [
                     _GlassMessageCard(
                       title: 'Unable to load dashboard',
-                      message: snapshot.error
-                          .toString()
-                          .replaceFirst('Exception: ', ''),
+                      message: snapshot.error.toString().replaceFirst(
+                        'Exception: ',
+                        '',
+                      ),
                     ),
                   ],
                 );
@@ -286,9 +285,10 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                               .toString();
 
                       return _ReportPreviewCard(
-                        title: (report['title'] ?? 'Untitled report').toString(),
-                        citizen:
-                            (user?['name'] ?? 'Citizen Reporter').toString(),
+                        title: (report['title'] ?? 'Untitled report')
+                            .toString(),
+                        citizen: (user?['name'] ?? 'Citizen Reporter')
+                            .toString(),
                         location: location,
                         category: category,
                         status: (report['status'] ?? 'Pending').toString(),
@@ -306,20 +306,14 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
 }
 
 class _AdminHomeData {
-  const _AdminHomeData({
-    required this.stats,
-    required this.reports,
-  });
+  const _AdminHomeData({required this.stats, required this.reports});
 
   final Map<String, dynamic> stats;
   final List<dynamic> reports;
 }
 
 class _AdminHeroCard extends StatelessWidget {
-  const _AdminHeroCard({
-    required this.totalReports,
-    required this.pending,
-  });
+  const _AdminHeroCard({required this.totalReports, required this.pending});
 
   final String totalReports;
   final String pending;
@@ -333,15 +327,11 @@ class _AdminHeroCard extends StatelessWidget {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF2563EB),
-            Color(0xFF1D4ED8),
-            Color(0xFF0F172A),
-          ],
+          colors: [Color(0xFF2563EB), Color(0xFF1D4ED8), Color(0xFF0F172A)],
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF2563EB).withOpacity(0.20),
+            color: const Color(0xFF2563EB).withValues(alpha: 0.20),
             blurRadius: 28,
             offset: const Offset(0, 14),
           ),
@@ -357,11 +347,8 @@ class _AdminHeroCard extends StatelessWidget {
                 height: 54,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.16),
-                  border: Border.all(
-                    color: const Color(0xFFD8B15A),
-                    width: 2,
-                  ),
+                  color: Colors.white.withValues(alpha: 0.16),
+                  border: Border.all(color: const Color(0xFFD8B15A), width: 2),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(6),
@@ -381,15 +368,15 @@ class _AdminHeroCard extends StatelessWidget {
                     Text(
                       'Engineering Operations',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                          ),
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       'Monitor report flow, assign follow-up, and keep response times visible.',
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.82),
+                        color: Colors.white.withValues(alpha: 0.82),
                         height: 1.35,
                       ),
                     ),
@@ -409,10 +396,7 @@ class _AdminHeroCard extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: _HeroMiniStat(
-                  label: 'Awaiting action',
-                  value: pending,
-                ),
+                child: _HeroMiniStat(label: 'Awaiting action', value: pending),
               ),
             ],
           ),
@@ -423,10 +407,7 @@ class _AdminHeroCard extends StatelessWidget {
 }
 
 class _HeroMiniStat extends StatelessWidget {
-  const _HeroMiniStat({
-    required this.label,
-    required this.value,
-  });
+  const _HeroMiniStat({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -436,7 +417,7 @@ class _HeroMiniStat extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.12),
+        color: Colors.white.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(18),
       ),
       child: Column(
@@ -445,7 +426,7 @@ class _HeroMiniStat extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.74),
+              color: Colors.white.withValues(alpha: 0.74),
               fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
@@ -486,9 +467,9 @@ class _MetricCard extends StatelessWidget {
       width: width,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Row(
         children: [
@@ -496,7 +477,7 @@ class _MetricCard extends StatelessWidget {
             width: 46,
             height: 46,
             decoration: BoxDecoration(
-              color: accent.withOpacity(0.16),
+              color: accent.withValues(alpha: 0.16),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(icon, color: accent),
@@ -509,7 +490,7 @@ class _MetricCard extends StatelessWidget {
                 Text(
                   label,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.72),
+                    color: Colors.white.withValues(alpha: 0.72),
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -533,10 +514,7 @@ class _MetricCard extends StatelessWidget {
 }
 
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({
-    required this.title,
-    required this.subtitle,
-  });
+  const _SectionTitle({required this.title, required this.subtitle});
 
   final String title;
   final String subtitle;
@@ -558,7 +536,7 @@ class _SectionTitle extends StatelessWidget {
         Text(
           subtitle,
           style: TextStyle(
-            color: Colors.white.withOpacity(0.70),
+            color: Colors.white.withValues(alpha: 0.70),
             height: 1.4,
           ),
         ),
@@ -594,9 +572,9 @@ class _ActionCard extends StatelessWidget {
       child: Ink(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.10),
+          color: Colors.white.withValues(alpha: 0.10),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white.withOpacity(0.14)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -607,7 +585,7 @@ class _ActionCard extends StatelessWidget {
                   width: 52,
                   height: 52,
                   decoration: BoxDecoration(
-                    color: iconBackground.withOpacity(0.18),
+                    color: iconBackground.withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Icon(icon, color: iconColor),
@@ -615,7 +593,7 @@ class _ActionCard extends StatelessWidget {
                 const Spacer(),
                 Icon(
                   Icons.arrow_forward_rounded,
-                  color: Colors.white.withOpacity(0.82),
+                  color: Colors.white.withValues(alpha: 0.82),
                 ),
               ],
             ),
@@ -632,7 +610,7 @@ class _ActionCard extends StatelessWidget {
             Text(
               subtitle,
               style: TextStyle(
-                color: Colors.white.withOpacity(0.72),
+                color: Colors.white.withValues(alpha: 0.72),
                 height: 1.4,
               ),
             ),
@@ -691,9 +669,9 @@ class _ReportPreviewCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: InkWell(
         onTap: onTap,
@@ -708,7 +686,7 @@ class _ReportPreviewCard extends StatelessWidget {
                   width: 46,
                   height: 46,
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.14),
+                    color: statusColor.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Icon(
@@ -733,7 +711,7 @@ class _ReportPreviewCard extends StatelessWidget {
                       Text(
                         citizen,
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.72),
+                          color: Colors.white.withValues(alpha: 0.72),
                         ),
                       ),
                     ],
@@ -759,10 +737,7 @@ class _ReportPreviewCard extends StatelessWidget {
 }
 
 class _StatusChip extends StatelessWidget {
-  const _StatusChip({
-    required this.label,
-    required this.color,
-  });
+  const _StatusChip({required this.label, required this.color});
 
   final String label;
   final Color color;
@@ -772,7 +747,7 @@ class _StatusChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.16),
+        color: color.withValues(alpha: 0.16),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
@@ -788,10 +763,7 @@ class _StatusChip extends StatelessWidget {
 }
 
 class _MetaChip extends StatelessWidget {
-  const _MetaChip({
-    required this.icon,
-    required this.label,
-  });
+  const _MetaChip({required this.icon, required this.label});
 
   final IconData icon;
   final String label;
@@ -801,7 +773,7 @@ class _MetaChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
+        color: Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
@@ -812,7 +784,7 @@ class _MetaChip extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.82),
+              color: Colors.white.withValues(alpha: 0.82),
               fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
@@ -824,10 +796,7 @@ class _MetaChip extends StatelessWidget {
 }
 
 class _GlassMessageCard extends StatelessWidget {
-  const _GlassMessageCard({
-    required this.title,
-    required this.message,
-  });
+  const _GlassMessageCard({required this.title, required this.message});
 
   final String title;
   final String message;
@@ -837,9 +806,9 @@ class _GlassMessageCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -856,7 +825,7 @@ class _GlassMessageCard extends StatelessWidget {
           Text(
             message,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.72),
+              color: Colors.white.withValues(alpha: 0.72),
               height: 1.4,
             ),
           ),

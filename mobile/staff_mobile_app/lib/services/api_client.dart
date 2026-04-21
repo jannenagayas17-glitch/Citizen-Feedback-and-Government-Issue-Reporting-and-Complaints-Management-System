@@ -24,7 +24,10 @@ class ApiClient {
     return Uri.parse('${ApiConfig.baseUrl}$endpoint');
   }
 
-  Future<http.Response> get(String endpoint, {bool authRequired = false}) async {
+  Future<http.Response> get(
+    String endpoint, {
+    bool authRequired = false,
+  }) async {
     return await http.get(
       buildUri(endpoint),
       headers: await getHeaders(authRequired: authRequired),

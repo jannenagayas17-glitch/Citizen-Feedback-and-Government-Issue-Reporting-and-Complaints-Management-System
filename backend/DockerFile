@@ -2,7 +2,7 @@ FROM php:8.2-cli
 
 WORKDIR /var/www
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     unzip \
     curl \
@@ -10,8 +10,19 @@ RUN apt-get update && apt-get install -y \
     libonig-dev \
     libxml2-dev \
     libsqlite3-dev \
-    default-mysql-client \
-    && docker-php-ext-install pdo pdo_mysql mbstring exif pcntl bcmath gd
+    mariadb-client \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN docker-php-ext-install \
+    pdo \
+    pdo_mysql \
+    pdo_sqlite \
+    sqlite3 \
+    mbstring \
+    exif \
+    pcntl \
+    bcmath \
+    gd
 
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 

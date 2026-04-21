@@ -1,12 +1,12 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../data/tacloban_barangays.dart';
+import '../../services/citizen_data_cache.dart';
 import '../../services/report_feedback_service.dart';
 import '../../services/report_service.dart';
+import '../../utils/citizen_theme_colors.dart';
 
 class SubmitComplaintScreen extends StatefulWidget {
   const SubmitComplaintScreen({super.key});
@@ -27,18 +27,16 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _locationController = TextEditingController();
   final TextEditingController _barangayController = TextEditingController();
-  final TextEditingController _latitudeController = TextEditingController();
-  final TextEditingController _longitudeController = TextEditingController();
 
   late Future<List<dynamic>> _categoriesFuture;
   late Future<List<dynamic>> _officesFuture;
+  late Future<List<dynamic>> _formOptionsFuture;
 
   int? _selectedCategoryId;
   int? _selectedOfficeId;
   String? _selectedOfficeNameValue;
   String? _selectedCustomIssueType;
   String _selectedPriority = 'Normal';
-  bool _showGpsFields = false;
   bool _isSubmitting = false;
   final List<_SelectedMediaItem> _selectedMedia = [];
 
@@ -46,8 +44,6 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   String? _officeError;
   String? _locationError;
   String? _barangayError;
-  String? _latitudeError;
-  String? _longitudeError;
   String? _descriptionError;
 
   static const List<String> _priorities = ['Low', 'Normal', 'High', 'Urgent'];
@@ -139,8 +135,12 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   @override
   void initState() {
     super.initState();
-    _categoriesFuture = _reportService.getCategories();
-    _officesFuture = _reportService.getOffices();
+    _categoriesFuture = CitizenDataCache.getCategories();
+    _officesFuture = CitizenDataCache.getOffices();
+    _formOptionsFuture = Future.wait<dynamic>([
+      _categoriesFuture,
+      _officesFuture,
+    ]);
   }
 
   bool _containsEmoji(String value) => _emojiRegex.hasMatch(value);
@@ -150,8 +150,6 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     _officeError = null;
     _locationError = null;
     _barangayError = null;
-    _latitudeError = null;
-    _longitudeError = null;
     _descriptionError = null;
   }
 
@@ -162,9 +160,9 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     setState(() {
       final remaining = 3 - _selectedMedia.length;
       _selectedMedia.addAll(
-        files.take(remaining).map(
-              (file) => _SelectedMediaItem(file: file, mediaType: 'image'),
-            ),
+        files
+            .take(remaining)
+            .map((file) => _SelectedMediaItem(file: file, mediaType: 'image')),
       );
     });
   }
@@ -186,7 +184,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   Future<void> _showMediaPickerOptions() async {
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF141C2B),
+      backgroundColor: citizenCardColor(context),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -198,10 +196,10 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Upload Evidence',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: citizenTitleColor(context),
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                   ),
@@ -210,7 +208,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                 Text(
                   'Choose image or video evidence for this report.',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.68),
+                    color: citizenBodyColor(context),
                     fontSize: 13,
                   ),
                 ),
@@ -246,7 +244,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     final selected = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF141C2B),
+      backgroundColor: citizenCardColor(context),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -279,12 +277,12 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                     TextField(
                       controller: searchController,
                       onChanged: filter,
-                      style: const TextStyle(color: Colors.white),
+                      style: TextStyle(color: citizenTitleColor(context)),
                       decoration: _inputDecoration(
                         'Search Tacloban barangay',
-                        prefixIcon: const Icon(
+                        prefixIcon: Icon(
                           Icons.search,
-                          color: Colors.white54,
+                          color: citizenMutedColor(context),
                         ),
                       ),
                     ),
@@ -297,23 +295,27 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                                 padding: const EdgeInsets.all(24),
                                 child: Text(
                                   'No Tacloban barangay matched your search.',
-                                  style: TextStyle(color: Colors.white.withOpacity(0.72)),
+                                  style: TextStyle(
+                                    color: citizenBodyColor(context),
+                                  ),
                                 ),
                               ),
                             )
                           : ListView.separated(
                               shrinkWrap: true,
                               itemCount: filtered.length,
-                              separatorBuilder: (_, __) => Divider(
+                              separatorBuilder: (_, _) => Divider(
                                 height: 1,
-                                color: Colors.white.withOpacity(0.08),
+                                color: citizenBorderColor(context),
                               ),
                               itemBuilder: (context, index) {
                                 final barangay = filtered[index];
                                 return ListTile(
                                   title: Text(
                                     barangay,
-                                    style: const TextStyle(color: Colors.white),
+                                    style: TextStyle(
+                                      color: citizenTitleColor(context),
+                                    ),
                                   ),
                                   onTap: () => Navigator.pop(context, barangay),
                                 );
@@ -346,15 +348,13 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
         ? '$selectedBarangay, Tacloban City'
         : '$landmark, $selectedBarangay, Tacloban City';
     final barangay = selectedBarangay;
-    final latitudeText = _latitudeController.text.trim();
-    final longitudeText = _longitudeController.text.trim();
-    final latitude = latitudeText.isEmpty ? null : double.tryParse(latitudeText);
-    final longitude = longitudeText.isEmpty ? null : double.tryParse(longitudeText);
 
     setState(() {
       _clearErrors();
 
-      if (_selectedOfficeId == null) _officeError = 'Please select a government office.';
+      if (_selectedOfficeId == null) {
+        _officeError = 'Please select a government office.';
+      }
       if (_hasDepartmentSpecificIssueTypes) {
         if ((_selectedCustomIssueType ?? '').trim().isEmpty) {
           _categoryError = 'Please select an issue type.';
@@ -370,12 +370,6 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
       if (landmark.isNotEmpty && _containsEmoji(landmark)) {
         _barangayError = 'Emoji characters are not allowed.';
       }
-      if (latitudeText.isNotEmpty && latitude == null) {
-        _latitudeError = 'Enter a valid latitude value.';
-      }
-      if (longitudeText.isNotEmpty && longitude == null) {
-        _longitudeError = 'Enter a valid longitude value.';
-      }
       if (description.isEmpty) {
         _descriptionError = 'Description is required.';
       } else if (_containsEmoji(description)) {
@@ -388,8 +382,6 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
       _officeError,
       _locationError,
       _barangayError,
-      _latitudeError,
-      _longitudeError,
       _descriptionError,
     ].any((item) => item != null)) {
       return;
@@ -412,7 +404,9 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
       final response = await _reportService.createReport(
         categoryId: _hasDepartmentSpecificIssueTypes
             ? null
-            : (selectedCategory == null ? _selectedCategoryId : _categoryIdOf(selectedCategory)),
+            : (selectedCategory == null
+                  ? _selectedCategoryId
+                  : _categoryIdOf(selectedCategory)),
         categoryName: selectedIssueTypeName,
         officeId: _selectedOfficeId,
         title: generatedTitle,
@@ -420,22 +414,30 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
         location: location,
         barangay: barangay,
         priority: _selectedPriority,
-        latitude: latitude,
-        longitude: longitude,
       );
 
       final report = response['report'] as Map<String, dynamic>?;
       final rawReportId = report?['id'];
-      final reportId = rawReportId is int ? rawReportId : int.tryParse('$rawReportId');
+      final reportId = rawReportId is int
+          ? rawReportId
+          : int.tryParse('$rawReportId');
 
       if (reportId != null && _selectedMedia.isNotEmpty) {
         for (final media in _selectedMedia) {
-          await _reportService.uploadMedia(reportId: reportId, mediaFile: media.file);
+          await _reportService.uploadMedia(
+            reportId: reportId,
+            mediaFile: media.file,
+          );
         }
       }
 
       await _showSubmissionResult(report);
       if (!mounted) return;
+      if (report != null) {
+        CitizenDataCache.prependReport(report);
+      } else {
+        CitizenDataCache.invalidateReports();
+      }
       Navigator.pop(context, report);
     } catch (e) {
       if (!mounted) return;
@@ -455,15 +457,18 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF172235),
-        title: const Text('Submission received', style: TextStyle(color: Colors.white)),
+        backgroundColor: citizenCardColor(context),
+        title: Text(
+          'Submission received',
+          style: TextStyle(color: citizenTitleColor(context)),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Your complaint has been sent successfully.',
-              style: TextStyle(color: Colors.white.withOpacity(0.82)),
+              style: TextStyle(color: citizenBodyColor(context)),
             ),
             const SizedBox(height: 12),
             Text(
@@ -487,7 +492,9 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   }
 
   void _showSnack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -495,8 +502,6 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     _descriptionController.dispose();
     _locationController.dispose();
     _barangayController.dispose();
-    _latitudeController.dispose();
-    _longitudeController.dispose();
     super.dispose();
   }
 
@@ -506,19 +511,40 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF101826),
+      backgroundColor: citizenScaffoldColor(context),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: const Color(0xFF101826),
-        foregroundColor: Colors.white,
+        backgroundColor: citizenScaffoldColor(context),
+        foregroundColor: citizenTitleColor(context),
         titleSpacing: 0,
         title: const Text('Submit Complaints'),
       ),
       body: FutureBuilder<List<dynamic>>(
-        future: Future.wait<dynamic>([_categoriesFuture, _officesFuture]),
+        future: _formOptionsFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
+            return ListView(
+              padding: EdgeInsets.fromLTRB(16, 12, 16, bottomInset + 24),
+              children: [
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+                  decoration: BoxDecoration(
+                    color: citizenCardColor(context),
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(color: citizenBorderColor(context)),
+                  ),
+                  child: Column(
+                    children: List.generate(
+                      6,
+                      (index) => Padding(
+                        padding: EdgeInsets.only(bottom: index == 5 ? 0 : 14),
+                        child: _loadingFieldPlaceholder(),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
           }
 
           if (snapshot.hasError) {
@@ -528,27 +554,31 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                 child: Text(
                   snapshot.error.toString().replaceFirst('Exception: ', ''),
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(color: citizenTitleColor(context)),
                 ),
               ),
             );
           }
 
           final values = snapshot.data ?? const <dynamic>[];
-          final categories = values.isNotEmpty ? values[0] as List<dynamic> : const [];
-          final offices = values.length > 1 ? values[1] as List<dynamic> : const [];
+          final categories = values.isNotEmpty
+              ? values[0] as List<dynamic>
+              : const [];
+          final offices = values.length > 1
+              ? values[1] as List<dynamic>
+              : const [];
 
           return ListView(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: EdgeInsets.fromLTRB(8, 8, 8, bottomInset + 18),
+            padding: EdgeInsets.fromLTRB(16, 12, 16, bottomInset + 24),
             children: [
               Container(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
                 decoration: BoxDecoration(
-                  border: Border(
-                    top: BorderSide(color: Colors.white.withOpacity(0.05)),
-                  ),
+                  color: citizenCardColor(context),
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: citizenBorderColor(context)),
                 ),
-                padding: const EdgeInsets.only(top: 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -566,8 +596,10 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                       controller: _descriptionController,
                       minLines: 4,
                       maxLines: 5,
-                      style: const TextStyle(color: Colors.white),
-                      inputFormatters: [FilteringTextInputFormatter.deny(_emojiRegex)],
+                      style: TextStyle(color: citizenTitleColor(context)),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.deny(_emojiRegex),
+                      ],
                       decoration: _inputDecoration(
                         'Describe the issue in detail...',
                         errorText: _descriptionError,
@@ -580,7 +612,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                       controller: _locationController,
                       readOnly: true,
                       onTap: _showBarangayPicker,
-                      style: const TextStyle(color: Colors.white),
+                      style: TextStyle(color: citizenTitleColor(context)),
                       decoration: _inputDecoration(
                         'Select a Tacloban City barangay',
                         errorText: _locationError,
@@ -589,9 +621,9 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                           color: Color(0xFFFF5A7A),
                           size: 16,
                         ),
-                        suffixIcon: const Icon(
+                        suffixIcon: Icon(
                           Icons.keyboard_arrow_down_rounded,
-                          color: Colors.white54,
+                          color: citizenMutedColor(context),
                         ),
                       ),
                     ),
@@ -599,62 +631,15 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                     TextField(
                       controller: _barangayController,
                       textInputAction: TextInputAction.next,
-                      style: const TextStyle(color: Colors.white),
-                      inputFormatters: [FilteringTextInputFormatter.deny(_emojiRegex)],
+                      style: TextStyle(color: citizenTitleColor(context)),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.deny(_emojiRegex),
+                      ],
                       decoration: _inputDecoration(
                         'Specific street, purok, or landmark (optional)',
                         errorText: _barangayError,
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    TextButton.icon(
-                      onPressed: () => setState(() => _showGpsFields = !_showGpsFields),
-                      style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFF8DA2C0),
-                        padding: EdgeInsets.zero,
-                      ),
-                      icon: Icon(
-                        _showGpsFields ? Icons.expand_less : Icons.add_location_alt_outlined,
-                        size: 18,
-                      ),
-                      label: Text(_showGpsFields ? 'Hide GPS coordinates' : 'Add GPS coordinates'),
-                    ),
-                    if (_showGpsFields) ...[
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _latitudeController,
-                              keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true,
-                                signed: true,
-                              ),
-                              style: const TextStyle(color: Colors.white),
-                              decoration: _inputDecoration(
-                                'Latitude',
-                                errorText: _latitudeError,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: TextField(
-                              controller: _longitudeController,
-                              keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true,
-                                signed: true,
-                              ),
-                              style: const TextStyle(color: Colors.white),
-                              decoration: _inputDecoration(
-                                'Longitude',
-                                errorText: _longitudeError,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
                     const SizedBox(height: 14),
                     _buildLabel('Priority'),
                     const SizedBox(height: 8),
@@ -672,7 +657,8 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                           _selectedMedia.length,
                           (index) => _SelectedMediaChip(
                             item: _selectedMedia[index],
-                            onRemove: () => setState(() => _selectedMedia.removeAt(index)),
+                            onRemove: () =>
+                                setState(() => _selectedMedia.removeAt(index)),
                           ),
                         ),
                       ),
@@ -726,8 +712,33 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
         fontSize: 12,
         fontWeight: FontWeight.w600,
         letterSpacing: 1.1,
-        color: Colors.white.withOpacity(0.72),
+        color: citizenBodyColor(context),
       ),
+    );
+  }
+
+  Widget _loadingFieldPlaceholder() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 104,
+          height: 12,
+          decoration: BoxDecoration(
+            color: citizenBorderColor(context),
+            borderRadius: BorderRadius.circular(999),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          height: 54,
+          decoration: BoxDecoration(
+            color: citizenInputColor(context),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: citizenBorderColor(context)),
+          ),
+        ),
+      ],
     );
   }
 
@@ -740,23 +751,23 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     return InputDecoration(
       hintText: hint,
       filled: true,
-      fillColor: const Color(0xFF1D2536),
+      fillColor: citizenInputColor(context),
       prefixIcon: prefixIcon,
       suffixIcon: suffixIcon,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+        borderSide: BorderSide(color: citizenBorderColor(context)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+        borderSide: BorderSide(color: citizenBorderColor(context)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
         borderSide: const BorderSide(color: Color(0xFF4B82F7), width: 1.2),
       ),
-      hintStyle: TextStyle(color: Colors.white.withOpacity(0.38)),
+      hintStyle: TextStyle(color: citizenMutedColor(context)),
       errorText: errorText,
       errorMaxLines: 2,
     );
@@ -765,7 +776,9 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   Map<String, dynamic>? _selectedCategory(List<dynamic> categories) {
     for (final item in categories) {
       final category = item as Map<String, dynamic>;
-      final id = category['id'] is int ? category['id'] as int : int.tryParse('${category['id']}');
+      final id = category['id'] is int
+          ? category['id'] as int
+          : int.tryParse('${category['id']}');
       if (id == _selectedCategoryId) return category;
     }
     return null;
@@ -776,7 +789,8 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     return rawId is int ? rawId : int.tryParse('$rawId');
   }
 
-  bool get _hasDepartmentSpecificIssueTypes => _departmentSpecificIssueTypes.isNotEmpty;
+  bool get _hasDepartmentSpecificIssueTypes =>
+      _departmentSpecificIssueTypes.isNotEmpty;
 
   List<String> get _departmentSpecificIssueTypes {
     final officeName = (_selectedOfficeNameValue ?? '').trim();
@@ -786,7 +800,9 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   Map<String, dynamic>? _selectedOffice(List<dynamic> offices) {
     for (final item in offices) {
       final office = item as Map<String, dynamic>;
-      final id = office['id'] is int ? office['id'] as int : int.tryParse('${office['id']}');
+      final id = office['id'] is int
+          ? office['id'] as int
+          : int.tryParse('${office['id']}');
       if (id == _selectedOfficeId) return office;
     }
     return null;
@@ -824,14 +840,17 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   Widget _buildCategoryDropdown(List<dynamic> categories) {
     if (_hasDepartmentSpecificIssueTypes) {
       return DropdownButtonFormField<String>(
-        value: _selectedCustomIssueType,
+        initialValue: _selectedCustomIssueType,
         isExpanded: true,
         menuMaxHeight: 320,
         borderRadius: BorderRadius.circular(16),
-        dropdownColor: const Color(0xFF1D2536),
-        style: const TextStyle(color: Colors.white),
-        iconEnabledColor: Colors.white,
-        decoration: _inputDecoration('Select issue type', errorText: _categoryError),
+        dropdownColor: citizenDropdownColor(context),
+        style: TextStyle(color: citizenTitleColor(context)),
+        iconEnabledColor: citizenBodyColor(context),
+        decoration: _inputDecoration(
+          'Select issue type',
+          errorText: _categoryError,
+        ),
         items: _departmentSpecificIssueTypes
             .map(
               (issueType) => DropdownMenuItem<String>(
@@ -845,23 +864,31 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     }
 
     return DropdownButtonFormField<int>(
-      value: _selectedCategoryId,
+      initialValue: _selectedCategoryId,
       isExpanded: true,
       menuMaxHeight: 320,
       borderRadius: BorderRadius.circular(16),
-      dropdownColor: const Color(0xFF1D2536),
-      style: const TextStyle(color: Colors.white),
-      iconEnabledColor: Colors.white,
-      decoration: _inputDecoration('Select issue type', errorText: _categoryError),
-      items: categories.map((item) {
-        final category = item as Map<String, dynamic>;
-        final categoryId = category['id'] is int ? category['id'] as int : int.tryParse('${category['id']}');
-        if (categoryId == null) return null;
-        return DropdownMenuItem<int>(
-          value: categoryId,
-          child: Text((category['name'] ?? 'Unnamed').toString()),
-        );
-      }).whereType<DropdownMenuItem<int>>().toList(),
+      dropdownColor: citizenDropdownColor(context),
+      style: TextStyle(color: citizenTitleColor(context)),
+      iconEnabledColor: citizenBodyColor(context),
+      decoration: _inputDecoration(
+        'Select issue type',
+        errorText: _categoryError,
+      ),
+      items: categories
+          .map((item) {
+            final category = item as Map<String, dynamic>;
+            final categoryId = category['id'] is int
+                ? category['id'] as int
+                : int.tryParse('${category['id']}');
+            if (categoryId == null) return null;
+            return DropdownMenuItem<int>(
+              value: categoryId,
+              child: Text((category['name'] ?? 'Unnamed').toString()),
+            );
+          })
+          .whereType<DropdownMenuItem<int>>()
+          .toList(),
       onChanged: (value) => setState(() => _selectedCategoryId = value),
     );
   }
@@ -870,26 +897,31 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     final orderedOffices = _orderedDepartmentOffices(offices);
 
     return DropdownButtonFormField<int>(
-      value: _selectedOfficeId,
+      initialValue: _selectedOfficeId,
       isExpanded: true,
       menuMaxHeight: 320,
       borderRadius: BorderRadius.circular(16),
-      dropdownColor: const Color(0xFF1D2536),
-      style: const TextStyle(color: Colors.white),
-      iconEnabledColor: Colors.white,
+      dropdownColor: citizenDropdownColor(context),
+      style: TextStyle(color: citizenTitleColor(context)),
+      iconEnabledColor: citizenBodyColor(context),
       decoration: _inputDecoration(
         'Select Department',
         errorText: _officeError,
       ),
-      items: orderedOffices.map((item) {
-        final office = item as Map<String, dynamic>;
-        final officeId = office['id'] is int ? office['id'] as int : int.tryParse('${office['id']}');
-        if (officeId == null) return null;
-        return DropdownMenuItem<int>(
-          value: officeId,
-          child: Text((office['name'] ?? 'Unnamed office').toString()),
-        );
-      }).whereType<DropdownMenuItem<int>>().toList(),
+      items: orderedOffices
+          .map((item) {
+            final office = item as Map<String, dynamic>;
+            final officeId = office['id'] is int
+                ? office['id'] as int
+                : int.tryParse('${office['id']}');
+            if (officeId == null) return null;
+            return DropdownMenuItem<int>(
+              value: officeId,
+              child: Text((office['name'] ?? 'Unnamed office').toString()),
+            );
+          })
+          .whereType<DropdownMenuItem<int>>()
+          .toList(),
       onChanged: (value) {
         Map<String, dynamic>? selectedOffice;
         for (final item in orderedOffices.whereType<Map<String, dynamic>>()) {
@@ -915,9 +947,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   List<dynamic> _orderedDepartmentOffices(List<dynamic> offices) {
     final filtered = offices
         .whereType<Map<String, dynamic>>()
-        .where(
-          (office) => (office['name'] ?? '').toString().trim().isNotEmpty,
-        )
+        .where((office) => (office['name'] ?? '').toString().trim().isNotEmpty)
         .toList();
 
     filtered.sort((a, b) {
@@ -937,7 +967,9 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
 
         return Expanded(
           child: Padding(
-            padding: EdgeInsets.only(right: priority == _priorities.last ? 0 : 8),
+            padding: EdgeInsets.only(
+              right: priority == _priorities.last ? 0 : 8,
+            ),
             child: InkWell(
               borderRadius: BorderRadius.circular(12),
               onTap: () => setState(() => _selectedPriority = priority),
@@ -945,12 +977,14 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                 height: 40,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: isSelected ? palette.fill : const Color(0xFF1D2536),
+                  color: isSelected
+                      ? palette.fill
+                      : citizenInputColor(context),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: isSelected
                         ? palette.border
-                        : Colors.white.withOpacity(0.08),
+                        : citizenBorderColor(context),
                   ),
                 ),
                 child: Text(
@@ -958,7 +992,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                   style: TextStyle(
                     color: isSelected
                         ? palette.text
-                        : Colors.white.withOpacity(0.72),
+                        : citizenBodyColor(context),
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -1007,6 +1041,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   }
 
   Widget _buildEvidenceCard() {
+    final isDark = citizenIsDark(context);
     final attachmentText = _selectedMedia.isEmpty
         ? 'Tap to upload image or video'
         : '${_selectedMedia.length} attachment${_selectedMedia.length == 1 ? '' : 's'} selected';
@@ -1016,11 +1051,11 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
       borderRadius: BorderRadius.circular(14),
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 26),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 22),
         decoration: BoxDecoration(
-          color: const Color(0xFF1D2536),
+          color: citizenInputColor(context),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white.withOpacity(0.12)),
+          border: Border.all(color: citizenBorderColor(context)),
         ),
         child: Column(
           children: [
@@ -1028,17 +1063,22 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.06),
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : const Color(0xFFE0EAFF),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.photo_camera_outlined, color: Colors.white70),
+              child: Icon(
+                Icons.photo_camera_outlined,
+                color: isDark ? Colors.white70 : const Color(0xFF2563EB),
+              ),
             ),
             const SizedBox(height: 12),
             Text(
               attachmentText,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: citizenTitleColor(context),
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
               ),
@@ -1048,7 +1088,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
               'Max 50MB . JPG, PNG, MP4',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.white.withOpacity(0.45),
+                color: citizenMutedColor(context),
                 fontSize: 12,
               ),
             ),
@@ -1064,15 +1104,17 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     required String subtitle,
     required VoidCallback onTap,
   }) {
+    final isDark = citizenIsDark(context);
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: const Color(0xFF1D2536),
+          color: citizenInputColor(context),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withOpacity(0.08)),
+          border: Border.all(color: citizenBorderColor(context)),
         ),
         child: Row(
           children: [
@@ -1080,10 +1122,15 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.06),
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : const Color(0xFFE0EAFF),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: Colors.white),
+              child: Icon(
+                icon,
+                color: isDark ? Colors.white : const Color(0xFF2563EB),
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -1092,8 +1139,8 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: citizenTitleColor(context),
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -1101,14 +1148,17 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                   Text(
                     subtitle,
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.6),
+                      color: citizenBodyColor(context),
                       fontSize: 12,
                     ),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: Colors.white54),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: citizenMutedColor(context),
+            ),
           ],
         ),
       ),
@@ -1117,10 +1167,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
 }
 
 class _SelectedMediaItem {
-  const _SelectedMediaItem({
-    required this.file,
-    required this.mediaType,
-  });
+  const _SelectedMediaItem({required this.file, required this.mediaType});
 
   final XFile file;
   final String mediaType;
@@ -1141,16 +1188,15 @@ class _PriorityPalette {
 }
 
 class _SelectedMediaChip extends StatelessWidget {
-  const _SelectedMediaChip({
-    required this.item,
-    required this.onRemove,
-  });
+  const _SelectedMediaChip({required this.item, required this.onRemove});
 
   final _SelectedMediaItem item;
   final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
+    final isDark = citizenIsDark(context);
+
     if (item.isVideo) {
       return Stack(
         clipBehavior: Clip.none,
@@ -1161,25 +1207,35 @@ class _SelectedMediaChip extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
-              color: Colors.white.withOpacity(0.10),
-              border: Border.all(color: Colors.white.withOpacity(0.16)),
+              color: citizenInputColor(context),
+              border: Border.all(color: citizenBorderColor(context)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.videocam_outlined, color: Colors.white),
+                Icon(
+                  Icons.videocam_outlined,
+                  color: isDark ? Colors.white : const Color(0xFF2563EB),
+                ),
                 const SizedBox(height: 8),
                 Text(
                   item.file.name,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  style: TextStyle(
+                    color: citizenTitleColor(context),
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
           ),
-          Positioned(top: -6, right: -6, child: _RemoveMediaButton(onTap: onRemove)),
+          Positioned(
+            top: -6,
+            right: -6,
+            child: _RemoveMediaButton(onTap: onRemove),
+          ),
         ],
       );
     }
@@ -1197,7 +1253,10 @@ class _SelectedMediaChip extends StatelessWidget {
                 borderRadius: BorderRadius.circular(14),
                 color: const Color(0xFFF3F4F6),
                 image: snapshot.hasData
-                    ? DecorationImage(image: MemoryImage(snapshot.data!), fit: BoxFit.cover)
+                    ? DecorationImage(
+                        image: MemoryImage(snapshot.data!),
+                        fit: BoxFit.cover,
+                      )
                     : null,
               ),
               child: snapshot.hasData
@@ -1212,7 +1271,11 @@ class _SelectedMediaChip extends StatelessWidget {
             );
           },
         ),
-        Positioned(top: -6, right: -6, child: _RemoveMediaButton(onTap: onRemove)),
+        Positioned(
+          top: -6,
+          right: -6,
+          child: _RemoveMediaButton(onTap: onRemove),
+        ),
       ],
     );
   }

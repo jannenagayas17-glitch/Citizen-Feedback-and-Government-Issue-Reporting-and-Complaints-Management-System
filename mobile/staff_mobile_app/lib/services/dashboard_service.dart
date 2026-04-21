@@ -10,7 +10,10 @@ class DashboardService {
   }
 
   Future<Map<String, dynamic>> getAnalytics() async {
-    final response = await _apiClient.get('/admin/analytics', authRequired: true);
+    final response = await _apiClient.get(
+      '/admin/analytics',
+      authRequired: true,
+    );
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
 }

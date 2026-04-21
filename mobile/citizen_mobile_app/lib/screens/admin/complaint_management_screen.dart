@@ -57,7 +57,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     DropdownButtonFormField<String>(
-                      value: selectedStatus,
+                      initialValue: selectedStatus,
                       dropdownColor: const Color(0xFF233246),
                       decoration: _dialogInputDecoration('Status'),
                       style: const TextStyle(color: Colors.white),
@@ -97,7 +97,9 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                   onPressed: () => Navigator.pop(dialogContext, false),
                   child: Text(
                     'Cancel',
-                    style: TextStyle(color: Colors.white.withOpacity(0.82)),
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.82),
+                    ),
                   ),
                 ),
                 FilledButton(
@@ -149,10 +151,10 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
   InputDecoration _dialogInputDecoration(String label) {
     return InputDecoration(
       labelText: label,
-      labelStyle: TextStyle(color: Colors.white.withOpacity(0.70)),
+      labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.70)),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(18),
-        borderSide: BorderSide(color: Colors.white.withOpacity(0.12)),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
       ),
       focusedBorder: const OutlineInputBorder(
         borderRadius: BorderRadius.all(Radius.circular(18)),
@@ -179,11 +181,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0C1727),
-              Color(0xFF1A2940),
-              Color(0xFF463327),
-            ],
+            colors: [Color(0xFF0C1727), Color(0xFF1A2940), Color(0xFF463327)],
           ),
         ),
         child: RefreshIndicator(
@@ -202,9 +200,10 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                   children: [
                     _GlassNoticeCard(
                       title: 'Unable to load reports',
-                      message: snapshot.error
-                          .toString()
-                          .replaceFirst('Exception: ', ''),
+                      message: snapshot.error.toString().replaceFirst(
+                        'Exception: ',
+                        '',
+                      ),
                     ),
                   ],
                 );
@@ -286,7 +285,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: statuses.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      separatorBuilder: (_, _) => const SizedBox(width: 8),
                       itemBuilder: (context, index) {
                         final status = statuses[index];
                         final isSelected = _selectedStatus == status;
@@ -307,12 +306,12 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                             decoration: BoxDecoration(
                               color: isSelected
                                   ? const Color(0xFF2563EB)
-                                  : Colors.white.withOpacity(0.10),
+                                  : Colors.white.withValues(alpha: 0.10),
                               borderRadius: BorderRadius.circular(14),
                               border: Border.all(
                                 color: isSelected
                                     ? const Color(0xFF2563EB)
-                                    : Colors.white.withOpacity(0.14),
+                                    : Colors.white.withValues(alpha: 0.14),
                               ),
                             ),
                             child: Row(
@@ -331,7 +330,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                                   style: TextStyle(
                                     color: isSelected
                                         ? Colors.white
-                                        : Colors.white.withOpacity(0.78),
+                                        : Colors.white.withValues(alpha: 0.78),
                                     fontWeight: FontWeight.w700,
                                     fontSize: 12,
                                   ),
@@ -362,11 +361,12 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                       final user = report['user'] as Map<String, dynamic>?;
 
                       return _ReportCard(
-                        title: (report['title'] ?? 'Untitled report').toString(),
-                        citizen:
-                            (user?['name'] ?? 'Citizen Reporter').toString(),
-                        location:
-                            (report['location'] ?? 'No location').toString(),
+                        title: (report['title'] ?? 'Untitled report')
+                            .toString(),
+                        citizen: (user?['name'] ?? 'Citizen Reporter')
+                            .toString(),
+                        location: (report['location'] ?? 'No location')
+                            .toString(),
                         category:
                             (report['category_name'] ??
                                     report['category']?['name'] ??
@@ -408,11 +408,7 @@ class _ManagementHeroCard extends StatelessWidget {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF1D4ED8),
-            Color(0xFF2563EB),
-            Color(0xFF0F172A),
-          ],
+          colors: [Color(0xFF1D4ED8), Color(0xFF2563EB), Color(0xFF0F172A)],
         ),
       ),
       child: Column(
@@ -425,11 +421,8 @@ class _ManagementHeroCard extends StatelessWidget {
                 height: 54,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.14),
-                  border: Border.all(
-                    color: const Color(0xFFD8B15A),
-                    width: 2,
-                  ),
+                  color: Colors.white.withValues(alpha: 0.14),
+                  border: Border.all(color: const Color(0xFFD8B15A), width: 2),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(6),
@@ -458,7 +451,7 @@ class _ManagementHeroCard extends StatelessWidget {
           Text(
             'Keep report intake organized, monitor progress across engineering teams, and close the loop with citizens quickly.',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.82),
+              color: Colors.white.withValues(alpha: 0.82),
               height: 1.4,
             ),
           ),
@@ -489,9 +482,9 @@ class _SummaryCard extends StatelessWidget {
       width: width,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Row(
         children: [
@@ -499,7 +492,7 @@ class _SummaryCard extends StatelessWidget {
             width: 46,
             height: 46,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.16),
+              color: color.withValues(alpha: 0.16),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(icon, color: color),
@@ -512,7 +505,7 @@ class _SummaryCard extends StatelessWidget {
                 Text(
                   label,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.72),
+                    color: Colors.white.withValues(alpha: 0.72),
                     fontWeight: FontWeight.w600,
                     fontSize: 12,
                   ),
@@ -536,10 +529,7 @@ class _SummaryCard extends StatelessWidget {
 }
 
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({
-    required this.title,
-    required this.subtitle,
-  });
+  const _SectionTitle({required this.title, required this.subtitle});
 
   final String title;
   final String subtitle;
@@ -561,7 +551,7 @@ class _SectionTitle extends StatelessWidget {
         Text(
           subtitle,
           style: TextStyle(
-            color: Colors.white.withOpacity(0.70),
+            color: Colors.white.withValues(alpha: 0.70),
             height: 1.4,
           ),
         ),
@@ -612,9 +602,9 @@ class _ReportCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -626,7 +616,7 @@ class _ReportCard extends StatelessWidget {
                 width: 46,
                 height: 46,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.16),
+                  color: color.withValues(alpha: 0.16),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Icon(Icons.report_problem_outlined, color: color),
@@ -647,7 +637,9 @@ class _ReportCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       citizen,
-                      style: TextStyle(color: Colors.white.withOpacity(0.72)),
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.72),
+                      ),
                     ),
                   ],
                 ),
@@ -687,7 +679,9 @@ class _ReportCard extends StatelessWidget {
                   onPressed: onOpen,
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.white,
-                    side: BorderSide(color: Colors.white.withOpacity(0.20)),
+                    side: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.20),
+                    ),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
@@ -705,10 +699,7 @@ class _ReportCard extends StatelessWidget {
 }
 
 class _StatusChip extends StatelessWidget {
-  const _StatusChip({
-    required this.label,
-    required this.color,
-  });
+  const _StatusChip({required this.label, required this.color});
 
   final String label;
   final Color color;
@@ -718,7 +709,7 @@ class _StatusChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.16),
+        color: color.withValues(alpha: 0.16),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
@@ -734,10 +725,7 @@ class _StatusChip extends StatelessWidget {
 }
 
 class _MetaChip extends StatelessWidget {
-  const _MetaChip({
-    required this.icon,
-    required this.label,
-  });
+  const _MetaChip({required this.icon, required this.label});
 
   final IconData icon;
   final String label;
@@ -747,7 +735,7 @@ class _MetaChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
+        color: Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
@@ -758,7 +746,7 @@ class _MetaChip extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.82),
+              color: Colors.white.withValues(alpha: 0.82),
               fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
@@ -770,10 +758,7 @@ class _MetaChip extends StatelessWidget {
 }
 
 class _GlassNoticeCard extends StatelessWidget {
-  const _GlassNoticeCard({
-    required this.title,
-    required this.message,
-  });
+  const _GlassNoticeCard({required this.title, required this.message});
 
   final String title;
   final String message;
@@ -783,9 +768,9 @@ class _GlassNoticeCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -802,7 +787,7 @@ class _GlassNoticeCard extends StatelessWidget {
           Text(
             message,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.72),
+              color: Colors.white.withValues(alpha: 0.72),
               height: 1.4,
             ),
           ),

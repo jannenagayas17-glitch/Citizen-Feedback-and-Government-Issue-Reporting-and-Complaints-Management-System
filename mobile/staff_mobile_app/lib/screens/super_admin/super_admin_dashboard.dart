@@ -8,6 +8,7 @@ import '../../services/system_settings_service.dart';
 import '../admin/analytics_reports_screen.dart';
 import '../auth/login_screen.dart';
 import '../admin/complaint_management_screen.dart';
+import '../../utils/admin_theme.dart';
 import 'escalation_management_screen.dart';
 import 'feedback_management_screen.dart';
 import 'manage_admins_screen.dart';
@@ -40,6 +41,8 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
   late Future<_SuperDashboardData> _statsFuture;
   _SuperAdminDesktopSection _desktopSection =
       _SuperAdminDesktopSection.dashboard;
+  final Map<_SuperAdminDesktopSection, Widget> _desktopSectionCache = {};
+  bool _desktopSectionsPreloaded = false;
 
   @override
   void initState() {
@@ -91,11 +94,45 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
     return MediaQuery.of(context).size.width >= 1100;
   }
 
+  void _selectDesktopSection(_SuperAdminDesktopSection section) {
+    if (_desktopSection == section) {
+      return;
+    }
+
+    if (section != _SuperAdminDesktopSection.dashboard) {
+      _cacheDesktopSection(section);
+    }
+
+    setState(() {
+      _desktopSection = section;
+    });
+  }
+
+  void _cacheDesktopSection(_SuperAdminDesktopSection section) {
+    if (section == _SuperAdminDesktopSection.dashboard) {
+      return;
+    }
+
+    _desktopSectionCache.putIfAbsent(
+      section,
+      () => _buildDesktopSectionContent(section),
+    );
+  }
+
+  void _preloadDesktopSections() {
+    if (_desktopSectionsPreloaded) {
+      return;
+    }
+
+    _desktopSectionsPreloaded = true;
+    for (final section in _SuperAdminDesktopSection.values) {
+      _cacheDesktopSection(section);
+    }
+  }
+
   void _showDashboard() {
     if (_isDesktopLayout(context)) {
-      setState(() {
-        _desktopSection = _SuperAdminDesktopSection.dashboard;
-      });
+      _selectDesktopSection(_SuperAdminDesktopSection.dashboard);
       return;
     }
     _refresh();
@@ -103,9 +140,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
 
   Future<void> _openReports() async {
     if (_isDesktopLayout(context)) {
-      setState(() {
-        _desktopSection = _SuperAdminDesktopSection.reports;
-      });
+      _selectDesktopSection(_SuperAdminDesktopSection.reports);
       return;
     }
     await Navigator.push(
@@ -117,9 +152,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
 
   Future<void> _openUsers() async {
     if (_isDesktopLayout(context)) {
-      setState(() {
-        _desktopSection = _SuperAdminDesktopSection.users;
-      });
+      _selectDesktopSection(_SuperAdminDesktopSection.users);
       return;
     }
     await Navigator.push(
@@ -131,9 +164,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
 
   Future<void> _openOffices() async {
     if (_isDesktopLayout(context)) {
-      setState(() {
-        _desktopSection = _SuperAdminDesktopSection.offices;
-      });
+      _selectDesktopSection(_SuperAdminDesktopSection.offices);
       return;
     }
     await Navigator.push(
@@ -145,9 +176,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
 
   Future<void> _openAnalytics() async {
     if (_isDesktopLayout(context)) {
-      setState(() {
-        _desktopSection = _SuperAdminDesktopSection.analytics;
-      });
+      _selectDesktopSection(_SuperAdminDesktopSection.analytics);
       return;
     }
     await Navigator.push(
@@ -159,9 +188,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
 
   Future<void> _openFeedback() async {
     if (_isDesktopLayout(context)) {
-      setState(() {
-        _desktopSection = _SuperAdminDesktopSection.feedback;
-      });
+      _selectDesktopSection(_SuperAdminDesktopSection.feedback);
       return;
     }
     await Navigator.push(
@@ -173,25 +200,19 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
 
   Future<void> _openSettings() async {
     if (_isDesktopLayout(context)) {
-      setState(() {
-        _desktopSection = _SuperAdminDesktopSection.settings;
-      });
+      _selectDesktopSection(_SuperAdminDesktopSection.settings);
       return;
     }
     await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const SystemSettingsScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const SystemSettingsScreen()),
     );
     await _refresh();
   }
 
   Future<void> _openEscalations() async {
     if (_isDesktopLayout(context)) {
-      setState(() {
-        _desktopSection = _SuperAdminDesktopSection.escalations;
-      });
+      _selectDesktopSection(_SuperAdminDesktopSection.escalations);
       return;
     }
     await Navigator.push(
@@ -239,59 +260,71 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
     final elevatedUsers = data.users
         .where((user) => ['admin', 'super_admin'].contains(user['role']))
         .toList();
-    final resolved =
-        reports.where((report) => _reportStatus(report) == 'Resolved').length;
+    final resolved = reports
+        .where((report) => _reportStatus(report) == 'Resolved')
+        .length;
     final unresolved = reports
         .where((report) => _reportStatus(report) != 'Resolved')
         .toList();
-    final triggerHours = int.tryParse(
+    final triggerHours =
+        int.tryParse(
           '${data.settings['escalation_settings']?['trigger_time_hours'] ?? 72}',
         ) ??
         72;
     final avgHours = unresolved.isEmpty
         ? 0
-        : (unresolved.map((report) {
-              final created = _reportCreatedAt(report);
-              if (created == null) return 0.0;
-              return DateTime.now().difference(created).inHours.toDouble();
-            }).fold<double>(0, (sum, value) => sum + value) /
-            unresolved.length)
-            .round();
-    final resolutionRate =
-        reports.isEmpty ? 0 : ((resolved / reports.length) * 100).round();
+        : (unresolved
+                      .map((report) {
+                        final created = _reportCreatedAt(report);
+                        if (created == null) return 0.0;
+                        return DateTime.now()
+                            .difference(created)
+                            .inHours
+                            .toDouble();
+                      })
+                      .fold<double>(0, (sum, value) => sum + value) /
+                  unresolved.length)
+              .round();
+    final resolutionRate = reports.isEmpty
+        ? 0
+        : ((resolved / reports.length) * 100).round();
 
-    final escalations = reports.where((report) {
-      final created = _reportCreatedAt(report);
-      if (created == null) return false;
-      return _reportStatus(report) != 'Resolved' &&
-          DateTime.now().difference(created).inHours >= triggerHours;
-    }).toList()
-      ..sort((a, b) {
-        final aDate = _reportCreatedAt(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
-        final bDate = _reportCreatedAt(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
-        return aDate.compareTo(bDate);
-      });
+    final escalations =
+        reports.where((report) {
+          final created = _reportCreatedAt(report);
+          if (created == null) return false;
+          return _reportStatus(report) != 'Resolved' &&
+              DateTime.now().difference(created).inHours >= triggerHours;
+        }).toList()..sort((a, b) {
+          final aDate =
+              _reportCreatedAt(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final bDate =
+              _reportCreatedAt(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
+          return aDate.compareTo(bDate);
+        });
 
-    final officeStats = offices.map((office) {
-      final name = (office['name'] ?? '').toString().trim();
-      final officeReports =
-          reports.where((report) => _reportOfficeName(report) == name).toList();
-      final officeResolved = officeReports
-          .where((report) => _reportStatus(report) == 'Resolved')
-          .length;
-      return {
-        'name': name,
-        'total': officeReports.length,
-        'pending': officeReports
-            .where((report) => _reportStatus(report) == 'Pending')
-            .length,
-        'resolved': officeResolved,
-        'resolutionRate': officeReports.isEmpty
-            ? 0
-            : ((officeResolved / officeReports.length) * 100).round(),
-      };
-    }).toList()
-      ..sort((a, b) => (b['total'] as int).compareTo(a['total'] as int));
+    final officeStats =
+        offices.map((office) {
+            final name = (office['name'] ?? '').toString().trim();
+            final officeReports = reports
+                .where((report) => _reportOfficeName(report) == name)
+                .toList();
+            final officeResolved = officeReports
+                .where((report) => _reportStatus(report) == 'Resolved')
+                .length;
+            return {
+              'name': name,
+              'total': officeReports.length,
+              'pending': officeReports
+                  .where((report) => _reportStatus(report) == 'Pending')
+                  .length,
+              'resolved': officeResolved,
+              'resolutionRate': officeReports.isEmpty
+                  ? 0
+                  : ((officeResolved / officeReports.length) * 100).round(),
+            };
+          }).toList()
+          ..sort((a, b) => (b['total'] as int).compareTo(a['total'] as int));
 
     final officePerformance = officeStats.take(5).toList();
     final hottestBarangays = <Map<String, dynamic>>[];
@@ -301,8 +334,9 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
       if (barangay.isEmpty) continue;
       byBarangay[barangay] = (byBarangay[barangay] ?? 0) + 1;
     }
-    final maxBarangayCount =
-        byBarangay.values.isEmpty ? 1 : byBarangay.values.reduce(math.max);
+    final maxBarangayCount = byBarangay.values.isEmpty
+        ? 1
+        : byBarangay.values.reduce(math.max);
     final barangayEntries = byBarangay.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     hottestBarangays.addAll(
@@ -313,8 +347,8 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
         final severity = ratio >= 0.8
             ? 'High'
             : ratio >= 0.45
-                ? 'Medium'
-                : 'Low';
+            ? 'Medium'
+            : 'Low';
         return {
           'label': item.key,
           'count': item.value,
@@ -324,30 +358,43 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
         };
       }),
     );
-    hottestBarangays.sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
+    hottestBarangays.sort(
+      (a, b) => (b['count'] as int).compareTo(a['count'] as int),
+    );
 
-    final adminRows = elevatedUsers.map((user) {
-      final department = (user['department'] ?? '').toString().trim();
-      return {
-        'name': (user['name'] ?? 'Admin User').toString(),
-        'department': department.isEmpty ? 'No department' : department,
-        'active': user['is_active'] == true,
-        'role': (user['role'] ?? 'admin').toString(),
-      };
-    }).toList()
-      ..sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
+    final adminRows =
+        elevatedUsers.map((user) {
+          final department = (user['department'] ?? '').toString().trim();
+          return {
+            'name': (user['name'] ?? 'Admin User').toString(),
+            'department': department.isEmpty ? 'No department' : department,
+            'active': user['is_active'] == true,
+            'role': (user['role'] ?? 'admin').toString(),
+          };
+        }).toList()..sort(
+          (a, b) => (a['name'] as String).compareTo(b['name'] as String),
+        );
 
     final priorityWeights = {'Low': 1, 'Normal': 2, 'High': 3, 'Urgent': 4};
     final avgSeverity = reports.isEmpty
         ? 0.0
         : reports
-                .map((report) => priorityWeights[_reportPriority(report)] ?? 2)
-                .fold<int>(0, (sum, value) => sum + value) /
-            reports.length;
-    final praiseLike = reports.where((report) => _reportStatus(report) == 'Resolved').length;
-    final suggestionLike = reports.where((report) => _reportStatus(report) == 'Pending').length;
+                  .map(
+                    (report) => priorityWeights[_reportPriority(report)] ?? 2,
+                  )
+                  .fold<int>(0, (sum, value) => sum + value) /
+              reports.length;
+    final praiseLike = reports
+        .where((report) => _reportStatus(report) == 'Resolved')
+        .length;
+    final suggestionLike = reports
+        .where((report) => _reportStatus(report) == 'Pending')
+        .length;
     final complaintLike = reports
-        .where((report) => ['In Progress', 'Rejected'].contains(_reportStatus(report)))
+        .where(
+          (report) =>
+              ['In Progress', 'Rejected'].contains(_reportStatus(report)),
+        )
         .length;
 
     final monthlyMap = <int, int>{};
@@ -363,7 +410,9 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
 
     return {
       'totalReports': reports.length,
-      'totalDepartments': offices.where((office) => office['is_active'] != false).length,
+      'totalDepartments': offices
+          .where((office) => office['is_active'] != false)
+          .length,
       'avgResponseHours': avgHours,
       'resolutionRate': resolutionRate,
       'escalations': escalations.take(2).toList(),
@@ -385,19 +434,23 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     final bottomSafeArea = MediaQuery.of(context).padding.bottom;
     final isDesktop = _isDesktopLayout(context);
     return Scaffold(
-      backgroundColor: const Color(0xFF0C1727),
+      backgroundColor: colors.background,
       appBar: isDesktop
           ? null
           : AppBar(
-              backgroundColor: const Color(0xFF0C1727),
-              foregroundColor: Colors.white,
+              backgroundColor: colors.background,
+              foregroundColor: colors.text,
               elevation: 0,
               title: const Text('Super Admin Dashboard'),
               actions: [
-                IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh)),
+                IconButton(
+                  onPressed: _refresh,
+                  icon: const Icon(Icons.refresh),
+                ),
                 IconButton(
                   onPressed: _openSettings,
                   icon: const Icon(Icons.person_outline),
@@ -405,39 +458,40 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
               ],
             ),
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0C1727),
-              Color(0xFF1A2940),
-              Color(0xFF463327),
-            ],
+            colors: colors.backgroundGradient,
           ),
         ),
         child: FutureBuilder<_SuperDashboardData>(
           future: _statsFuture,
           builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
+            if (snapshot.connectionState != ConnectionState.done &&
+                !snapshot.hasData) {
               return const Center(child: CircularProgressIndicator());
             }
 
-            if (snapshot.hasError) {
+            if (snapshot.hasError && !snapshot.hasData) {
               return ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
                   _GlassMessageCard(
                     title: 'Unable to load command center',
-                    message: snapshot.error
-                        .toString()
-                        .replaceFirst('Exception: ', ''),
+                    message: snapshot.error.toString().replaceFirst(
+                      'Exception: ',
+                      '',
+                    ),
                   ),
                 ],
               );
             }
 
-            final data = snapshot.data!;
+            final data = snapshot.data;
+            if (data == null) {
+              return const Center(child: CircularProgressIndicator());
+            }
             final currentUser = data.user;
             final metrics = _buildDashboardMetrics(data);
 
@@ -446,15 +500,18 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
                 final isWide = constraints.maxWidth >= 1100;
 
                 if (isWide) {
+                  _preloadDesktopSections();
+
                   return Column(
                     children: [
                       _SuperDashboardTopBar(
                         onReportsTap: _openEscalations,
                         onProfileTap: _openSettings,
-                        adminName:
-                            (currentUser['name'] ?? 'Super Admin').toString(),
+                        adminName: (currentUser['name'] ?? 'Super Admin')
+                            .toString(),
                         notificationCount:
-                            (metrics['escalations'] as List<dynamic>? ?? const [])
+                            (metrics['escalations'] as List<dynamic>? ??
+                                    const [])
                                 .length,
                       ),
                       Expanded(
@@ -517,9 +574,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _buildDashboardLanding(
-                                metrics: metrics,
-                              ),
+                              _buildDashboardLanding(metrics: metrics),
                             ],
                           ),
                         ),
@@ -535,9 +590,8 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
     );
   }
 
-  Widget _buildDashboardLanding({
-    required Map<String, dynamic> metrics,
-  }) {
+  Widget _buildDashboardLanding({required Map<String, dynamic> metrics}) {
+    final colors = AdminThemeColors.of(context);
     final isWide = MediaQuery.of(context).size.width >= 1180;
     final officePerformance =
         (metrics['officePerformance'] as List<dynamic>? ?? const []);
@@ -546,19 +600,19 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
     final escalations = (metrics['escalations'] as List<dynamic>? ?? const []);
     final barangays = (metrics['barangays'] as List<dynamic>? ?? const []);
     final feedback =
-        metrics['feedback'] as Map<String, dynamic>? ?? const <String, dynamic>{};
+        metrics['feedback'] as Map<String, dynamic>? ??
+        const <String, dynamic>{};
     final monthlySeries =
         (metrics['monthlySeries'] as List<dynamic>? ?? const []);
-    final subtitle =
-        'Tacloban City Engineering Office - All Departments';
+    final subtitle = 'Tacloban City Government - All Offices and Departments';
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final summaryColumns = constraints.maxWidth >= 1200
             ? 4
             : constraints.maxWidth >= 760
-                ? 2
-                : 1;
+            ? 2
+            : 1;
         final summaryCardWidth =
             (constraints.maxWidth - ((summaryColumns - 1) * 12)) /
             summaryColumns;
@@ -566,10 +620,10 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'System Overview',
               style: TextStyle(
-                color: Colors.white,
+                color: colors.text,
                 fontSize: 22,
                 fontWeight: FontWeight.w800,
               ),
@@ -577,10 +631,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
             const SizedBox(height: 4),
             Text(
               subtitle,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.60),
-                fontSize: 13,
-              ),
+              style: TextStyle(color: colors.mutedText, fontSize: 13),
             ),
             const SizedBox(height: 18),
             Wrap(
@@ -632,7 +683,9 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
                     child: _DashboardPanel(
                       title: 'Complaint Heat Map',
                       trailing: 'Tacloban City',
-                      child: _HeatMapCard(items: barangays.cast<Map<String, dynamic>>()),
+                      child: _HeatMapCard(
+                        items: barangays.cast<Map<String, dynamic>>(),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -642,7 +695,8 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
                       title: 'Department Performance',
                       child: _DepartmentPerformanceCard(
                         items: officePerformance.cast<Map<String, dynamic>>(),
-                        avgResponseHours: '${metrics['avgResponseHours'] ?? 0}h',
+                        avgResponseHours:
+                            '${metrics['avgResponseHours'] ?? 0}h',
                         resolutionRate: '${metrics['resolutionRate'] ?? 0}%',
                         totalReports: '${metrics['totalReports'] ?? 0}',
                       ),
@@ -654,7 +708,9 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
               _DashboardPanel(
                 title: 'Complaint Heat Map',
                 trailing: 'Tacloban City',
-                child: _HeatMapCard(items: barangays.cast<Map<String, dynamic>>()),
+                child: _HeatMapCard(
+                  items: barangays.cast<Map<String, dynamic>>(),
+                ),
               ),
               const SizedBox(height: 16),
               _DashboardPanel(
@@ -671,7 +727,9 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
             _DashboardPanel(
               title: 'All Departments',
               trailing: 'Resolution tracking',
-              child: _DepartmentGrid(items: officeStats.cast<Map<String, dynamic>>()),
+              child: _DepartmentGrid(
+                items: officeStats.cast<Map<String, dynamic>>(),
+              ),
             ),
             const SizedBox(height: 16),
             if (isWide)
@@ -681,7 +739,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
                   Expanded(
                     flex: 5,
                     child: _DashboardPanel(
-                      title: 'Admin Management',
+                      title: 'Account Management',
                       trailing: 'Create / Disable / Assign',
                       child: _AdminManagementTable(
                         items: adminRows.cast<Map<String, dynamic>>(),
@@ -705,7 +763,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
               )
             else ...[
               _DashboardPanel(
-                title: 'Admin Management',
+                title: 'Account Management',
                 trailing: 'Create / Disable / Assign',
                 child: _AdminManagementTable(
                   items: adminRows.cast<Map<String, dynamic>>(),
@@ -725,7 +783,9 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
             const SizedBox(height: 16),
             _DashboardPanel(
               title: 'Monthly Report Volume - All Departments',
-              child: _MonthlyVolumeChart(items: monthlySeries.cast<Map<String, dynamic>>()),
+              child: _MonthlyVolumeChart(
+                items: monthlySeries.cast<Map<String, dynamic>>(),
+              ),
             ),
           ],
         );
@@ -737,28 +797,53 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
     required double bottomSafeArea,
     required Map<String, dynamic> metrics,
   }) {
-    switch (_desktopSection) {
-      case _SuperAdminDesktopSection.dashboard:
-        return SingleChildScrollView(
-          padding: EdgeInsets.only(bottom: 24 + bottomSafeArea),
-          child: _buildDashboardLanding(
-            metrics: metrics,
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: Offstage(
+            offstage: _desktopSection != _SuperAdminDesktopSection.dashboard,
+            child: TickerMode(
+              enabled: _desktopSection == _SuperAdminDesktopSection.dashboard,
+              child: SingleChildScrollView(
+                padding: EdgeInsets.only(bottom: 24 + bottomSafeArea),
+                child: _buildDashboardLanding(metrics: metrics),
+              ),
+            ),
           ),
-        );
+        ),
+        ..._desktopSectionCache.entries.map((entry) {
+          final visible = entry.key == _desktopSection;
+          return Positioned.fill(
+            child: Offstage(
+              offstage: !visible,
+              child: TickerMode(enabled: visible, child: entry.value),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _buildDesktopSectionContent(_SuperAdminDesktopSection section) {
+    final sectionKey = ValueKey('desktop-${section.name}');
+
+    switch (section) {
+      case _SuperAdminDesktopSection.dashboard:
+        return const SizedBox.shrink();
       case _SuperAdminDesktopSection.reports:
-        return const ComplaintManagementScreen(embedded: true);
+        return ComplaintManagementScreen(key: sectionKey, embedded: true);
       case _SuperAdminDesktopSection.analytics:
-        return const AnalyticsReportsScreen(embedded: true);
+        return AnalyticsReportsScreen(key: sectionKey, embedded: true);
       case _SuperAdminDesktopSection.feedback:
-        return const FeedbackManagementScreen(embedded: true);
+        return FeedbackManagementScreen(key: sectionKey, embedded: true);
       case _SuperAdminDesktopSection.settings:
-        return const SystemSettingsScreen(embedded: true);
+        return SystemSettingsScreen(key: sectionKey, embedded: true);
       case _SuperAdminDesktopSection.users:
-        return const ManageAdminsScreen(embedded: true);
+        return ManageAdminsScreen(key: sectionKey, embedded: true);
       case _SuperAdminDesktopSection.offices:
-        return const ManageOfficesScreen(embedded: true);
+        return ManageOfficesScreen(key: sectionKey, embedded: true);
       case _SuperAdminDesktopSection.escalations:
-        return const EscalationManagementScreen(embedded: true);
+        return EscalationManagementScreen(key: sectionKey, embedded: true);
     }
   }
 }
@@ -794,15 +879,15 @@ class _SuperDashboardTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF111625),
+        color: colors.topBar,
+        gradient: LinearGradient(colors: colors.topBarGradient),
         borderRadius: BorderRadius.circular(0),
-        border: Border(
-          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
-        ),
+        border: Border(bottom: BorderSide(color: colors.border)),
       ),
       child: Row(
         children: [
@@ -816,17 +901,14 @@ class _SuperDashboardTopBar extends StatelessWidget {
             padding: const EdgeInsets.all(3),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(4),
-              child: Image.asset(
-                'assets/images/logo.png',
-                fit: BoxFit.cover,
-              ),
+              child: Image.asset('assets/images/logo.png', fit: BoxFit.cover),
             ),
           ),
           const SizedBox(width: 8),
-          const Text(
+          Text(
             'CityTrack PH',
             style: TextStyle(
-              color: Colors.white,
+              color: colors.isDark ? colors.text : Colors.white,
               fontSize: 14,
               fontWeight: FontWeight.w700,
             ),
@@ -835,9 +917,9 @@ class _SuperDashboardTopBar extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFF2C2018),
+              color: colors.warningSurface,
               borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: const Color(0xFF6F4D2C)),
+              border: Border.all(color: colors.warningBorder),
             ),
             child: const Text(
               'SUPER ADMIN',
@@ -852,7 +934,9 @@ class _SuperDashboardTopBar extends StatelessWidget {
           Text(
             'System Status:',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.66),
+              color: colors.isDark
+                  ? colors.mutedText
+                  : Colors.white.withValues(alpha: 0.88),
               fontSize: 11,
             ),
           ),
@@ -876,11 +960,11 @@ class _SuperDashboardTopBar extends StatelessWidget {
                   width: 34,
                   height: 34,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF171E2D),
+                    color: colors.isDark
+                        ? colors.panelAlt
+                        : Colors.white.withValues(alpha: 0.16),
                     borderRadius: BorderRadius.circular(999),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.06),
-                    ),
+                    border: Border.all(color: colors.border),
                   ),
                   child: const Icon(
                     Icons.notifications_rounded,
@@ -920,11 +1004,11 @@ class _SuperDashboardTopBar extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
-                color: const Color(0xFF171E2D),
+                color: colors.isDark
+                    ? colors.panelAlt
+                    : Colors.white.withValues(alpha: 0.16),
                 borderRadius: BorderRadius.circular(999),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.06),
-                ),
+                border: Border.all(color: colors.border),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -946,8 +1030,8 @@ class _SuperDashboardTopBar extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text(
                     adminName,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: colors.isDark ? colors.text : Colors.white,
                       fontWeight: FontWeight.w600,
                       fontSize: 11,
                     ),
@@ -991,8 +1075,16 @@ class _SuperDashboardSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Container(
-      color: const Color(0xFF101423),
+      decoration: BoxDecoration(
+        color: colors.sidebar,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: colors.sidebarGradient,
+        ),
+      ),
       child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(8, 12, 8, 18),
@@ -1002,7 +1094,8 @@ class _SuperDashboardSidebar extends StatelessWidget {
               _SuperSidebarNavItem(
                 icon: Icons.dashboard_outlined,
                 label: 'Dashboard',
-                isActive: selectedSection == _SuperAdminDesktopSection.dashboard,
+                isActive:
+                    selectedSection == _SuperAdminDesktopSection.dashboard,
                 onTap: onDashboard,
               ),
               _SuperSidebarNavItem(
@@ -1013,7 +1106,7 @@ class _SuperDashboardSidebar extends StatelessWidget {
               ),
               _SuperSidebarNavItem(
                 icon: Icons.manage_accounts_outlined,
-                label: 'Admin Management',
+                label: 'Account Management',
                 isActive: selectedSection == _SuperAdminDesktopSection.users,
                 onTap: onUsers,
               ),
@@ -1026,7 +1119,8 @@ class _SuperDashboardSidebar extends StatelessWidget {
               _SuperSidebarNavItem(
                 icon: Icons.insights_outlined,
                 label: 'Analytics',
-                isActive: selectedSection == _SuperAdminDesktopSection.analytics,
+                isActive:
+                    selectedSection == _SuperAdminDesktopSection.analytics,
                 onTap: onAnalytics,
               ),
               _SuperSidebarNavItem(
@@ -1041,7 +1135,9 @@ class _SuperDashboardSidebar extends StatelessWidget {
                 child: Text(
                   'SYSTEM',
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.34),
+                    color: colors.isDark
+                        ? colors.mutedText.withValues(alpha: 0.72)
+                        : Colors.white.withValues(alpha: 0.58),
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 1.1,
@@ -1057,7 +1153,8 @@ class _SuperDashboardSidebar extends StatelessWidget {
               _SuperSidebarNavItem(
                 icon: Icons.notifications_active_outlined,
                 label: 'Escalations',
-                isActive: selectedSection == _SuperAdminDesktopSection.escalations,
+                isActive:
+                    selectedSection == _SuperAdminDesktopSection.escalations,
                 onTap: onEscalations,
               ),
               _SuperSidebarNavItem(
@@ -1091,11 +1188,16 @@ class _SuperSidebarNavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const activeTextColor = Color(0xFFF0A43B);
+    final colors = AdminThemeColors.of(context);
+    final activeTextColor = colors.activeText;
     const activeIconColor = Colors.white;
-    const defaultColor = Color(0xFFD6DBE7);
+    final defaultColor = colors.isDark
+        ? colors.mutedText
+        : Colors.white.withValues(alpha: 0.88);
     const destructiveColor = Color(0xFFFCA5A5);
-    const activeBackground = Color(0xFF243455);
+    final activeBackground = colors.isDark
+        ? colors.activeNav
+        : Colors.white.withValues(alpha: 0.20);
     final textColor = isDestructive
         ? destructiveColor
         : (isActive ? activeTextColor : defaultColor);
@@ -1111,13 +1213,9 @@ class _SuperSidebarNavItem extends StatelessWidget {
         child: Ink(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           decoration: BoxDecoration(
-            color: isActive
-                ? activeBackground
-                : Colors.transparent,
+            color: isActive ? activeBackground : Colors.transparent,
             border: Border.all(
-              color: isActive
-                  ? Colors.white.withValues(alpha: 0.06)
-                  : Colors.transparent,
+              color: isActive ? colors.border : Colors.transparent,
             ),
             borderRadius: BorderRadius.circular(14),
           ),
@@ -1143,42 +1241,34 @@ class _SuperSidebarNavItem extends StatelessWidget {
 }
 
 class _GlassMessageCard extends StatelessWidget {
-  const _GlassMessageCard({
-    required this.title,
-    required this.message,
-  });
+  const _GlassMessageCard({required this.title, required this.message});
 
   final String title;
   final String message;
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.10),
+        color: colors.panel,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+        border: Border.all(color: colors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: colors.text,
               fontSize: 16,
               fontWeight: FontWeight.w800,
             ),
           ),
           const SizedBox(height: 6),
-          Text(
-            message,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.72),
-              height: 1.4,
-            ),
-          ),
+          Text(message, style: TextStyle(color: colors.mutedText, height: 1.4)),
         ],
       ),
     );
@@ -1202,24 +1292,19 @@ class _DashboardStatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Container(
       width: width,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF151A2E),
+        color: colors.panel,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        border: Border.all(color: colors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.68),
-              fontSize: 12,
-            ),
-          ),
+          Text(label, style: TextStyle(color: colors.mutedText, fontSize: 12)),
           const SizedBox(height: 10),
           Text(
             value,
@@ -1257,13 +1342,14 @@ class _DashboardPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF151A2E),
+        color: colors.panel,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        border: Border.all(color: colors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1273,8 +1359,8 @@ class _DashboardPanel extends StatelessWidget {
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: colors.text,
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
                   ),
@@ -1283,10 +1369,7 @@ class _DashboardPanel extends StatelessWidget {
               if (trailing != null)
                 Text(
                   trailing!,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.48),
-                    fontSize: 11,
-                  ),
+                  style: TextStyle(color: colors.mutedText, fontSize: 11),
                 ),
             ],
           ),
@@ -1309,6 +1392,7 @@ class _EscalationStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     if (escalations.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(14),
@@ -1321,13 +1405,19 @@ class _EscalationStrip extends StatelessWidget {
           children: [
             const Icon(Icons.verified_rounded, color: Color(0xFF68D9A2)),
             const SizedBox(width: 10),
-            const Expanded(
+            Expanded(
               child: Text(
                 'No reports are currently beyond the escalation window.',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  color: colors.text,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-            TextButton(onPressed: onReportsTap, child: const Text('Open Reports'))
+            TextButton(
+              onPressed: onReportsTap,
+              child: const Text('Open Reports'),
+            ),
           ],
         ),
       );
@@ -1360,15 +1450,19 @@ class _EscalationStrip extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          ...escalations.take(2).map(
-            (report) => Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(
-                '${report['title'] ?? 'Untitled report'} • ${((report['office'] as Map<String, dynamic>?)?['name'] ?? 'No office')}',
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.82)),
+          ...escalations
+              .take(2)
+              .map(
+                (report) => Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    '${report['title'] ?? 'Untitled report'} • ${((report['office'] as Map<String, dynamic>?)?['name'] ?? 'No office')}',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.82),
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ),
         ],
       ),
     );
@@ -1393,14 +1487,15 @@ class _HeatMapCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Column(
       children: [
         Container(
           height: 220,
           decoration: BoxDecoration(
-            color: const Color(0xFF101525),
+            color: colors.input,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.04)),
+            border: Border.all(color: colors.border),
           ),
           child: Stack(
             children: [
@@ -1415,7 +1510,9 @@ class _HeatMapCard extends StatelessWidget {
                         child: Container(
                           margin: const EdgeInsets.only(bottom: 10),
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.015),
+                            color: colors.isDark
+                                ? Colors.white.withValues(alpha: 0.015)
+                                : const Color(0xFFE3ECF8),
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
@@ -1425,7 +1522,9 @@ class _HeatMapCard extends StatelessWidget {
                 ),
               ),
               ...items.take(5).map((item) {
-                final color = _severityColor((item['severity'] ?? 'Low').toString());
+                final color = _severityColor(
+                  (item['severity'] ?? 'Low').toString(),
+                );
                 return Positioned(
                   left: 30 + 240 * ((item['x'] as num?)?.toDouble() ?? 0.2),
                   top: 20 + 120 * ((item['y'] as num?)?.toDouble() ?? 0.2),
@@ -1437,8 +1536,15 @@ class _HeatMapCard extends StatelessWidget {
                       border: Border.all(color: color.withValues(alpha: 0.8)),
                     ),
                     child: Text(
-                      (item['severity'] ?? 'Low').toString().substring(0, 3).toUpperCase(),
-                      style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w800),
+                      (item['severity'] ?? 'Low')
+                          .toString()
+                          .substring(0, 3)
+                          .toUpperCase(),
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
                 );
@@ -1475,6 +1581,7 @@ class _DepartmentPerformanceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Column(
       children: [
         ...items.take(5).map((item) {
@@ -1489,13 +1596,18 @@ class _DepartmentPerformanceCard extends StatelessWidget {
                     Expanded(
                       child: Text(
                         (item['name'] ?? 'Department').toString(),
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                          color: colors.text,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                     Text(
                       '$rate%',
                       style: TextStyle(
-                        color: rate >= 70 ? const Color(0xFF68D9A2) : const Color(0xFFFF9E66),
+                        color: rate >= 70
+                            ? const Color(0xFF68D9A2)
+                            : const Color(0xFFFF9E66),
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -1507,9 +1619,13 @@ class _DepartmentPerformanceCard extends StatelessWidget {
                   child: LinearProgressIndicator(
                     value: rate / 100,
                     minHeight: 8,
-                    backgroundColor: Colors.white.withValues(alpha: 0.06),
+                    backgroundColor: colors.isDark
+                        ? Colors.white.withValues(alpha: 0.06)
+                        : const Color(0xFFE3ECF8),
                     valueColor: AlwaysStoppedAnimation<Color>(
-                      rate >= 70 ? const Color(0xFF68D9A2) : const Color(0xFF5F92FF),
+                      rate >= 70
+                          ? const Color(0xFF68D9A2)
+                          : const Color(0xFF5F92FF),
                     ),
                   ),
                 ),
@@ -1537,13 +1653,14 @@ class _DepartmentGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
         final columns = constraints.maxWidth >= 1180
             ? 3
             : constraints.maxWidth >= 760
-                ? 2
-                : 1;
+            ? 2
+            : 1;
         final cardWidth =
             (constraints.maxWidth - ((columns - 1) * 12)) / columns;
 
@@ -1556,9 +1673,9 @@ class _DepartmentGrid extends StatelessWidget {
               width: cardWidth,
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: const Color(0xFF111829),
+                color: colors.panelAlt,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                border: Border.all(color: colors.border),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1567,7 +1684,10 @@ class _DepartmentGrid extends StatelessWidget {
                     (item['name'] ?? 'Department').toString(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                    style: TextStyle(
+                      color: colors.text,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   ClipRRect(
@@ -1575,14 +1695,18 @@ class _DepartmentGrid extends StatelessWidget {
                     child: LinearProgressIndicator(
                       value: rate / 100,
                       minHeight: 6,
-                      backgroundColor: Colors.white.withValues(alpha: 0.05),
-                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF61D69F)),
+                      backgroundColor: colors.isDark
+                          ? Colors.white.withValues(alpha: 0.05)
+                          : const Color(0xFFE3ECF8),
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        Color(0xFF61D69F),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 10),
                   Text(
                     '${item['total'] ?? 0} total | ${item['pending'] ?? 0} pending | $rate% resolved',
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.62), fontSize: 12),
+                    style: TextStyle(color: colors.mutedText, fontSize: 12),
                   ),
                 ],
               ),
@@ -1595,16 +1719,14 @@ class _DepartmentGrid extends StatelessWidget {
 }
 
 class _AdminManagementTable extends StatelessWidget {
-  const _AdminManagementTable({
-    required this.items,
-    required this.onManageTap,
-  });
+  const _AdminManagementTable({required this.items, required this.onManageTap});
 
   final List<Map<String, dynamic>> items;
   final VoidCallback onManageTap;
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Column(
       children: [
         Align(
@@ -1622,9 +1744,7 @@ class _AdminManagementTable extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
-            ),
+            border: Border(bottom: BorderSide(color: colors.border)),
           ),
           child: Row(
             children: [
@@ -1639,9 +1759,7 @@ class _AdminManagementTable extends StatelessWidget {
           (item) => Container(
             padding: const EdgeInsets.symmetric(vertical: 12),
             decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: Colors.white.withValues(alpha: 0.04)),
-              ),
+              border: Border(bottom: BorderSide(color: colors.border)),
             ),
             child: Row(
               children: [
@@ -1653,15 +1771,20 @@ class _AdminManagementTable extends StatelessWidget {
                         radius: 14,
                         backgroundColor: const Color(0xFF3F4FB8),
                         child: Text(
-                          ((item['name'] ?? 'A').toString()).substring(0, 1).toUpperCase(),
-                          style: const TextStyle(color: Colors.white, fontSize: 11),
+                          ((item['name'] ?? 'A').toString())
+                              .substring(0, 1)
+                              .toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           (item['name'] ?? 'Admin').toString(),
-                          style: const TextStyle(color: Colors.white),
+                          style: TextStyle(color: colors.text),
                         ),
                       ),
                     ],
@@ -1671,7 +1794,7 @@ class _AdminManagementTable extends StatelessWidget {
                   flex: 4,
                   child: Text(
                     (item['department'] ?? '-').toString(),
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.74)),
+                    style: TextStyle(color: colors.mutedText),
                   ),
                 ),
                 Expanded(
@@ -1687,7 +1810,11 @@ class _AdminManagementTable extends StatelessWidget {
                   flex: 3,
                   child: Row(
                     children: [
-                      _ActionSmallButton(label: 'Edit', color: const Color(0xFF4C6FFF), onTap: onManageTap),
+                      _ActionSmallButton(
+                        label: 'Edit',
+                        color: const Color(0xFF4C6FFF),
+                        onTap: onManageTap,
+                      ),
                       const SizedBox(width: 8),
                       _ActionSmallButton(
                         label: item['active'] == true ? 'Disable' : 'Enable',
@@ -1719,6 +1846,7 @@ class _FeedbackAnalyticsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     final total = (feedback['total'] ?? 0).toString();
     final avgStars = ((feedback['avgStars'] ?? 0.0) as num).toDouble();
     final praise = (feedback['praise'] ?? 0) as int;
@@ -1731,7 +1859,9 @@ class _FeedbackAnalyticsCard extends StatelessWidget {
       children: [
         Row(
           children: [
-            Expanded(child: _InfoTile(label: 'Total Feedback', value: total)),
+            Expanded(
+              child: _InfoTile(label: 'Total Feedback', value: total),
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: _InfoTile(
@@ -1742,33 +1872,53 @@ class _FeedbackAnalyticsCard extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-        _FeedbackBar(label: 'Praise', value: praise / denominator, color: const Color(0xFF68D9A2), count: praise),
-        _FeedbackBar(label: 'Suggestion', value: suggestion / denominator, color: const Color(0xFF5F92FF), count: suggestion),
-        _FeedbackBar(label: 'Complaint', value: complaint / denominator, color: const Color(0xFFE6616D), count: complaint),
+        _FeedbackBar(
+          label: 'Praise',
+          value: praise / denominator,
+          color: const Color(0xFF68D9A2),
+          count: praise,
+        ),
+        _FeedbackBar(
+          label: 'Suggestion',
+          value: suggestion / denominator,
+          color: const Color(0xFF5F92FF),
+          count: suggestion,
+        ),
+        _FeedbackBar(
+          label: 'Complaint',
+          value: complaint / denominator,
+          color: const Color(0xFFE6616D),
+          count: complaint,
+        ),
         const SizedBox(height: 14),
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: [
-            'Slow response',
-            'Helped citizen',
-            'Poor service',
-            'Role clarity',
-          ]
-              .map(
-                (tag) => Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF111829),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    tag,
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.72), fontSize: 11),
-                  ),
-                ),
-              )
-              .toList(),
+          children:
+              [
+                    'Slow response',
+                    'Helped citizen',
+                    'Poor service',
+                    'Role clarity',
+                  ]
+                  .map(
+                    (tag) => Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colors.input,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: colors.border),
+                      ),
+                      child: Text(
+                        tag,
+                        style: TextStyle(color: colors.mutedText, fontSize: 11),
+                      ),
+                    ),
+                  )
+                  .toList(),
         ),
         const SizedBox(height: 14),
         Align(
@@ -1790,12 +1940,24 @@ class _MonthlyVolumeChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     final maxCount = items.isEmpty
         ? 1
-        : items
-            .map((item) => (item['count'] as int?) ?? 0)
-            .reduce(math.max);
-    const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        : items.map((item) => (item['count'] as int?) ?? 0).reduce(math.max);
+    const labels = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
 
     return SizedBox(
       height: 180,
@@ -1803,7 +1965,9 @@ class _MonthlyVolumeChart extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: List.generate(items.length, (index) {
           final count = (items[index]['count'] as int?) ?? 0;
-          final height = maxCount == 0 ? 12.0 : math.max(12.0, (count / maxCount) * 120);
+          final height = maxCount == 0
+              ? 12.0
+              : math.max(12.0, (count / maxCount) * 120);
           return Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -1820,7 +1984,7 @@ class _MonthlyVolumeChart extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     labels[index],
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.58), fontSize: 11),
+                    style: TextStyle(color: colors.mutedText, fontSize: 11),
                   ),
                 ],
               ),
@@ -1840,12 +2004,17 @@ class _MiniLegend extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
         const SizedBox(width: 6),
-        Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 11)),
+        Text(label, style: TextStyle(color: colors.mutedText, fontSize: 11)),
       ],
     );
   }
@@ -1859,18 +2028,23 @@ class _InfoTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: const Color(0xFF111829),
+        color: colors.input,
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.58), fontSize: 11)),
+          Text(label, style: TextStyle(color: colors.mutedText, fontSize: 11)),
           const SizedBox(height: 4),
-          Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+          Text(
+            value,
+            style: TextStyle(color: colors.text, fontWeight: FontWeight.w800),
+          ),
         ],
       ),
     );
@@ -1885,12 +2059,13 @@ class _TableLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Expanded(
       flex: flex,
       child: Text(
         label,
         style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.46),
+          color: colors.mutedText,
           fontSize: 11,
           fontWeight: FontWeight.w700,
         ),
@@ -1916,7 +2091,11 @@ class _StatusBadge extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700),
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
@@ -1947,7 +2126,11 @@ class _ActionSmallButton extends StatelessWidget {
         ),
         child: Text(
           label,
-          style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700),
+          style: TextStyle(
+            color: color,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
     );
@@ -1969,13 +2152,14 @@ class _FeedbackBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         children: [
           SizedBox(
             width: 84,
-            child: Text(label, style: const TextStyle(color: Colors.white)),
+            child: Text(label, style: TextStyle(color: colors.text)),
           ),
           Expanded(
             child: ClipRRect(
@@ -1983,7 +2167,7 @@ class _FeedbackBar extends StatelessWidget {
               child: LinearProgressIndicator(
                 value: value,
                 minHeight: 8,
-                backgroundColor: Colors.white.withValues(alpha: 0.06),
+                backgroundColor: colors.border,
                 valueColor: AlwaysStoppedAnimation<Color>(color),
               ),
             ),
@@ -1994,7 +2178,7 @@ class _FeedbackBar extends StatelessWidget {
             child: Text(
               '$count',
               textAlign: TextAlign.right,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+              style: TextStyle(color: colors.text, fontWeight: FontWeight.w700),
             ),
           ),
         ],

@@ -27,7 +27,7 @@ class CitizenFeedbackService {
       authRequired: true,
       body: {
         'office_id': officeId,
-        if (reportId != null) 'report_id': reportId,
+        'report_id': ?reportId,
         'type': type,
         'message': message,
         'rating': rating,
@@ -62,9 +62,8 @@ class CitizenFeedbackService {
       return decoded
           .whereType<Map>()
           .map(
-            (entry) => entry.map(
-              (key, value) => MapEntry(key.toString(), value),
-            ),
+            (entry) =>
+                entry.map((key, value) => MapEntry(key.toString(), value)),
           )
           .toList();
     }

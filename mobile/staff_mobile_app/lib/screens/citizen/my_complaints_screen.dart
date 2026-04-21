@@ -4,7 +4,9 @@ import '../../services/report_service.dart';
 import 'complaint_detail_screen.dart';
 
 class MyComplaintsScreen extends StatefulWidget {
-  const MyComplaintsScreen({super.key});
+  const MyComplaintsScreen({super.key, this.initialReports});
+
+  final List<dynamic>? initialReports;
 
   @override
   State<MyComplaintsScreen> createState() => _MyComplaintsScreenState();
@@ -13,11 +15,15 @@ class MyComplaintsScreen extends StatefulWidget {
 class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
   final ReportService _reportService = ReportService();
   late Future<List<dynamic>> _reportsFuture;
+  List<dynamic>? _cachedReports;
 
   @override
   void initState() {
     super.initState();
-    _reportsFuture = _reportService.getReports();
+    _cachedReports = widget.initialReports;
+    _reportsFuture = widget.initialReports == null
+        ? _reportService.getReports()
+        : Future<List<dynamic>>.value(widget.initialReports);
   }
 
   Future<void> _refresh() async {
@@ -25,7 +31,7 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
     setState(() {
       _reportsFuture = future;
     });
-    await future;
+    _cachedReports = await future;
   }
 
   @override
@@ -42,171 +48,175 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0C1727),
-              Color(0xFF1E293B),
-              Color(0xFF463327),
-            ],
+            colors: [Color(0xFF0C1727), Color(0xFF1E293B), Color(0xFF463327)],
           ),
         ),
         child: RefreshIndicator(
           onRefresh: _refresh,
           child: FutureBuilder<List<dynamic>>(
-          future: _reportsFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator());
-            }
+            future: _reportsFuture,
+            initialData: _cachedReports,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done &&
+                  !snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-            if (snapshot.hasError) {
-              return ListView(
-                padding: const EdgeInsets.all(24),
-                children: [
-                  _ReportsHero(
-                    total: 0,
-                    subtitle: 'Your submitted reports in one place.',
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    snapshot.error.toString().replaceFirst('Exception: ', ''),
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                ],
-              );
-            }
+              if (snapshot.hasError && !snapshot.hasData) {
+                return ListView(
+                  padding: const EdgeInsets.all(24),
+                  children: [
+                    _ReportsHero(
+                      total: 0,
+                      subtitle: 'Your submitted reports in one place.',
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      snapshot.error.toString().replaceFirst('Exception: ', ''),
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ],
+                );
+              }
 
-            final reports = snapshot.data ?? const [];
+              final reports = snapshot.data ?? const [];
 
-            if (reports.isEmpty) {
-              return ListView(
-                padding: const EdgeInsets.all(24),
-                children: const [
-                  _ReportsHero(
-                    total: 0,
-                    subtitle: 'Your submitted reports in one place.',
-                  ),
-                  SizedBox(height: 16),
-                  _ReportsEmptyState(),
-                ],
-              );
-            }
+              if (reports.isEmpty) {
+                return ListView(
+                  padding: const EdgeInsets.all(24),
+                  children: const [
+                    _ReportsHero(
+                      total: 0,
+                      subtitle: 'Your submitted reports in one place.',
+                    ),
+                    SizedBox(height: 16),
+                    _ReportsEmptyState(),
+                  ],
+                );
+              }
 
-            return ListView.separated(
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.all(16),
-              itemCount: reports.length + 1,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (context, index) {
-                if (index == 0) {
-                  return _ReportsHero(
-                    total: reports.length,
-                    subtitle: 'Track your issue submissions and progress updates.',
-                  );
-                }
+              return ListView.separated(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.all(16),
+                itemCount: reports.length + 1,
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  if (index == 0) {
+                    return _ReportsHero(
+                      total: reports.length,
+                      subtitle:
+                          'Track your issue submissions and progress updates.',
+                    );
+                  }
 
-                final report = reports[index - 1] as Map<String, dynamic>;
-                final status = (report['status'] ?? 'Pending').toString();
-                final title = (report['title'] ?? 'Untitled report').toString();
-                final location =
-                    (report['location'] ?? 'No location provided').toString();
-                final categoryName =
-                    ((report['category'] as Map<String, dynamic>?)?['name'] ??
-                            'General')
-                        .toString();
-                final createdAt = (report['created_at'] ?? '').toString();
-                final reportId = report['id'] as int;
+                  final report = reports[index - 1] as Map<String, dynamic>;
+                  final status = (report['status'] ?? 'Pending').toString();
+                  final title = (report['title'] ?? 'Untitled report')
+                      .toString();
+                  final location =
+                      (report['location'] ?? 'No location provided').toString();
+                  final categoryName =
+                      ((report['category'] as Map<String, dynamic>?)?['name'] ??
+                              'General')
+                          .toString();
+                  final createdAt = (report['created_at'] ?? '').toString();
+                  final reportId = report['id'] as int;
 
-                return InkWell(
-                  borderRadius: BorderRadius.circular(18),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ComplaintDetailScreen(
-                          reportId: reportId,
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(18),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              ComplaintDetailScreen(reportId: reportId),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.14),
                         ),
                       ),
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.10),
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: Colors.white.withOpacity(0.14)),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 42,
-                          height: 42,
-                          decoration: BoxDecoration(
-                            color: _statusColor(status).withOpacity(0.14),
-                            borderRadius: BorderRadius.circular(12),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: _statusColor(
+                                status,
+                              ).withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              _statusIcon(status),
+                              color: _statusColor(status),
+                            ),
                           ),
-                          child: Icon(
-                            _statusIcon(status),
-                            color: _statusColor(status),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      title,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w700,
-                                        height: 1.25,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        title,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w700,
+                                          height: 1.25,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  _StatusChip(status: status),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                location,
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.72),
+                                    const SizedBox(width: 8),
+                                    _StatusChip(status: status),
+                                  ],
                                 ),
-                              ),
-                              const SizedBox(height: 10),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  _MetaChip(label: categoryName),
-                                  _MetaChip(
-                                    label: createdAt.isEmpty
-                                        ? 'No date'
-                                        : createdAt.substring(0, 10),
+                                const SizedBox(height: 6),
+                                Text(
+                                  location,
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.72),
                                   ),
-                                ],
-                              ),
-                            ],
+                                ),
+                                const SizedBox(height: 10),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    _MetaChip(label: categoryName),
+                                    _MetaChip(
+                                      label: createdAt.isEmpty
+                                          ? 'No date'
+                                          : createdAt.substring(0, 10),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        const Icon(Icons.chevron_right, color: Colors.white),
-                      ],
+                          const SizedBox(width: 8),
+                          const Icon(Icons.chevron_right, color: Colors.white),
+                        ],
+                      ),
                     ),
-                  ),
-                );
-              },
-            );
-          },
+                  );
+                },
+              );
+            },
+          ),
         ),
-      ),
       ),
     );
   }
@@ -243,10 +253,7 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
 }
 
 class _ReportsHero extends StatelessWidget {
-  const _ReportsHero({
-    required this.total,
-    required this.subtitle,
-  });
+  const _ReportsHero({required this.total, required this.subtitle});
 
   final int total;
   final String subtitle;
@@ -256,9 +263,9 @@ class _ReportsHero extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -274,13 +281,13 @@ class _ReportsHero extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             subtitle,
-            style: TextStyle(color: Colors.white.withOpacity(0.72)),
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.72)),
           ),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
             decoration: BoxDecoration(
-              color: const Color(0xFF2563EB).withOpacity(0.18),
+              color: const Color(0xFF2563EB).withValues(alpha: 0.18),
               borderRadius: BorderRadius.circular(18),
             ),
             child: Text(
@@ -305,16 +312,16 @@ class _ReportsEmptyState extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Column(
         children: [
           Icon(
             Icons.inbox_outlined,
             size: 36,
-            color: Colors.white.withOpacity(0.72),
+            color: Colors.white.withValues(alpha: 0.72),
           ),
           const SizedBox(height: 12),
           const Text(
@@ -329,7 +336,7 @@ class _ReportsEmptyState extends StatelessWidget {
           Text(
             'Your submitted complaints will appear here once you start reporting issues.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white.withOpacity(0.72)),
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.72)),
           ),
         ],
       ),
@@ -362,7 +369,7 @@ class _StatusChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: _color.withOpacity(0.14),
+        color: _color.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Text(
@@ -387,13 +394,13 @@ class _MetaChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
+        color: Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Text(
         label,
         style: TextStyle(
-          color: Colors.white.withOpacity(0.72),
+          color: Colors.white.withValues(alpha: 0.72),
           fontSize: 11,
           fontWeight: FontWeight.w600,
         ),

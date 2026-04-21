@@ -16,7 +16,9 @@ class FeedbackService {
       if (days != null) 'days=$days',
       if (type != null && type.isNotEmpty && type != 'All Feedback')
         'type=${Uri.encodeComponent(type)}',
-      if (barangay != null && barangay.isNotEmpty && barangay != 'All Barangays')
+      if (barangay != null &&
+          barangay.isNotEmpty &&
+          barangay != 'All Barangays')
         'barangay=${Uri.encodeComponent(barangay)}',
     ].join('&');
 
@@ -37,17 +39,22 @@ class FeedbackService {
       if (days != null) 'days=$days',
       if (type != null && type.isNotEmpty && type != 'All Feedback')
         'type=${Uri.encodeComponent(type)}',
-      if (barangay != null && barangay.isNotEmpty && barangay != 'All Barangays')
+      if (barangay != null &&
+          barangay.isNotEmpty &&
+          barangay != 'All Barangays')
         'barangay=${Uri.encodeComponent(barangay)}',
     ].join('&');
 
-    final endpoint = query.isEmpty ? '/feedback/export' : '/feedback/export?$query';
+    final endpoint = query.isEmpty
+        ? '/feedback/export'
+        : '/feedback/export?$query';
     final response = await _apiClient.get(endpoint, authRequired: true);
 
     if (response.statusCode == 200) {
       return FeedbackExportFile(
         bytes: response.bodyBytes,
-        fileName: _extractFilename(response) ??
+        fileName:
+            _extractFilename(response) ??
             'citizen-feedback-${DateTime.now().millisecondsSinceEpoch}.csv',
         mimeType: response.headers['content-type'] ?? 'text/csv',
       );
@@ -76,9 +83,8 @@ class FeedbackService {
       return decoded
           .whereType<Map>()
           .map(
-            (entry) => entry.map(
-              (key, value) => MapEntry(key.toString(), value),
-            ),
+            (entry) =>
+                entry.map((key, value) => MapEntry(key.toString(), value)),
           )
           .toList();
     }
@@ -101,7 +107,9 @@ class FeedbackService {
       return null;
     }
 
-    final match = RegExp(r'filename="?([^"]+)"?').firstMatch(contentDisposition);
+    final match = RegExp(
+      r'filename="?([^"]+)"?',
+    ).firstMatch(contentDisposition);
     return match?.group(1);
   }
 }

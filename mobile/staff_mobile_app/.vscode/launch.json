@@ -2,16 +2,36 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Flutter Web (Chrome)",
+      "name": "Staff Web (Single Tab)",
       "request": "launch",
       "type": "dart",
-      "deviceId": "chrome"
+      "deviceId": "web-server",
+      "toolArgs": [
+        "--web-hostname",
+        "127.0.0.1",
+        "--web-port",
+        "7351",
+        "--dart-define",
+        "API_HOST=127.0.0.1",
+        "--dart-define",
+        "API_PORT=8000"
+      ]
     },
     {
-      "name": "Flutter Web (Web Server)",
+      "name": "Staff Web (Web Server)",
       "request": "launch",
       "type": "dart",
-      "deviceId": "web-server"
+      "deviceId": "web-server",
+      "toolArgs": [
+        "--web-hostname",
+        "127.0.0.1",
+        "--web-port",
+        "7351",
+        "--dart-define",
+        "API_HOST=127.0.0.1",
+        "--dart-define",
+        "API_PORT=8000"
+      ]
     }
   ]
 }

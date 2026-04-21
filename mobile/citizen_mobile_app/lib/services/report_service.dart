@@ -10,12 +10,18 @@ class ReportService {
 
   Future<List<dynamic>> getCategories() async {
     final response = await _apiClient.get('/categories', authRequired: true);
-    return _decodeListResponse(response, fallbackMessage: 'Failed to fetch categories');
+    return _decodeListResponse(
+      response,
+      fallbackMessage: 'Failed to fetch categories',
+    );
   }
 
   Future<List<dynamic>> getOffices() async {
     final response = await _apiClient.get('/offices', authRequired: true);
-    return _decodeListResponse(response, fallbackMessage: 'Failed to fetch offices');
+    return _decodeListResponse(
+      response,
+      fallbackMessage: 'Failed to fetch offices',
+    );
   }
 
   Future<Map<String, dynamic>> createReport({
@@ -34,10 +40,10 @@ class ReportService {
       '/reports',
       authRequired: true,
       body: {
-        if (categoryId != null) 'category_id': categoryId,
+        'category_id': ?categoryId,
         if (categoryName != null && categoryName.trim().isNotEmpty)
           'category_name': categoryName.trim(),
-        if (officeId != null) 'office_id': officeId,
+        'office_id': ?officeId,
         'title': title,
         'description': description,
         'location': location,
@@ -45,8 +51,8 @@ class ReportService {
           'barangay': barangay.trim(),
         if (priority != null && priority.trim().isNotEmpty)
           'priority': priority.trim(),
-        if (latitude != null) 'latitude': latitude,
-        if (longitude != null) 'longitude': longitude,
+        'latitude': ?latitude,
+        'longitude': ?longitude,
       },
     );
 
@@ -80,10 +86,10 @@ class ReportService {
       '/reports/request-verification',
       authRequired: true,
       body: {
-        if (categoryId != null) 'category_id': categoryId,
+        'category_id': ?categoryId,
         if (categoryName != null && categoryName.trim().isNotEmpty)
           'category_name': categoryName.trim(),
-        if (officeId != null) 'office_id': officeId,
+        'office_id': ?officeId,
         'title': title,
         'description': description,
         'location': location,
@@ -91,8 +97,8 @@ class ReportService {
           'barangay': barangay.trim(),
         if (priority != null && priority.trim().isNotEmpty)
           'priority': priority.trim(),
-        if (latitude != null) 'latitude': latitude,
-        if (longitude != null) 'longitude': longitude,
+        'latitude': ?latitude,
+        'longitude': ?longitude,
       },
     );
 
@@ -116,9 +122,7 @@ class ReportService {
     final response = await _apiClient.post(
       '/reports/verify-and-store',
       authRequired: true,
-      body: {
-        'otp': otp,
-      },
+      body: {'otp': otp},
     );
 
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -137,7 +141,10 @@ class ReportService {
 
   Future<List<dynamic>> getReports() async {
     final response = await _apiClient.get('/reports', authRequired: true);
-    return _decodeListResponse(response, fallbackMessage: 'Failed to fetch reports');
+    return _decodeListResponse(
+      response,
+      fallbackMessage: 'Failed to fetch reports',
+    );
   }
 
   Future<List<dynamic>> getAdminReports({String? status}) async {
@@ -161,7 +168,8 @@ class ReportService {
       authRequired: true,
       body: {
         'status': status,
-        if (remarks != null && remarks.trim().isNotEmpty) 'remarks': remarks.trim(),
+        if (remarks != null && remarks.trim().isNotEmpty)
+          'remarks': remarks.trim(),
       },
     );
 
@@ -222,11 +230,7 @@ class ReportService {
 
     final bytes = await mediaFile.readAsBytes();
     request.files.add(
-      http.MultipartFile.fromBytes(
-        'media',
-        bytes,
-        filename: mediaFile.name,
-      ),
+      http.MultipartFile.fromBytes('media', bytes, filename: mediaFile.name),
     );
 
     final streamedResponse = await request.send();

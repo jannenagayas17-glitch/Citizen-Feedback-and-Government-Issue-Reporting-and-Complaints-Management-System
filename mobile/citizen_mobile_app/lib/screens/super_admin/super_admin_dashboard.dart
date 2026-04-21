@@ -93,7 +93,10 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
         title: const Text('Super Admin Dashboard'),
         actions: [
           IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh)),
-          IconButton(onPressed: _openProfile, icon: const Icon(Icons.person_outline)),
+          IconButton(
+            onPressed: _openProfile,
+            icon: const Icon(Icons.person_outline),
+          ),
         ],
       ),
       body: Container(
@@ -101,11 +104,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0C1727),
-              Color(0xFF1A2940),
-              Color(0xFF463327),
-            ],
+            colors: [Color(0xFF0C1727), Color(0xFF1A2940), Color(0xFF463327)],
           ),
         ),
         child: RefreshIndicator(
@@ -124,9 +123,10 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
                   children: [
                     _GlassMessageCard(
                       title: 'Unable to load command center',
-                      message: snapshot.error
-                          .toString()
-                          .replaceFirst('Exception: ', ''),
+                      message: snapshot.error.toString().replaceFirst(
+                        'Exception: ',
+                        '',
+                      ),
                     ),
                   ],
                 );
@@ -242,11 +242,7 @@ class _SuperHeroCard extends StatelessWidget {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF0F172A),
-            Color(0xFF1D4ED8),
-            Color(0xFF7C3AED),
-          ],
+          colors: [Color(0xFF0F172A), Color(0xFF1D4ED8), Color(0xFF7C3AED)],
         ),
       ),
       child: Column(
@@ -259,11 +255,8 @@ class _SuperHeroCard extends StatelessWidget {
                 height: 56,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.14),
-                  border: Border.all(
-                    color: const Color(0xFFD8B15A),
-                    width: 2,
-                  ),
+                  color: Colors.white.withValues(alpha: 0.14),
+                  border: Border.all(color: const Color(0xFFD8B15A), width: 2),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(6),
@@ -292,7 +285,7 @@ class _SuperHeroCard extends StatelessWidget {
           Text(
             'Monitor engineering operations, maintain administrative access, and keep the feedback platform accountable end to end.',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.84),
+              color: Colors.white.withValues(alpha: 0.84),
               height: 1.4,
             ),
           ),
@@ -323,9 +316,9 @@ class _MetricCard extends StatelessWidget {
       width: width,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Row(
         children: [
@@ -333,7 +326,7 @@ class _MetricCard extends StatelessWidget {
             width: 46,
             height: 46,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.16),
+              color: color.withValues(alpha: 0.16),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(icon, color: color),
@@ -346,7 +339,7 @@ class _MetricCard extends StatelessWidget {
                 Text(
                   label,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.72),
+                    color: Colors.white.withValues(alpha: 0.72),
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -370,10 +363,7 @@ class _MetricCard extends StatelessWidget {
 }
 
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({
-    required this.title,
-    required this.subtitle,
-  });
+  const _SectionTitle({required this.title, required this.subtitle});
 
   final String title;
   final String subtitle;
@@ -395,7 +385,7 @@ class _SectionTitle extends StatelessWidget {
         Text(
           subtitle,
           style: TextStyle(
-            color: Colors.white.withOpacity(0.70),
+            color: Colors.white.withValues(alpha: 0.70),
             height: 1.4,
           ),
         ),
@@ -427,9 +417,9 @@ class _ActionCard extends StatelessWidget {
       child: Ink(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.10),
+          color: Colors.white.withValues(alpha: 0.10),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white.withOpacity(0.14)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -440,7 +430,7 @@ class _ActionCard extends StatelessWidget {
                   width: 52,
                   height: 52,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2563EB).withOpacity(0.16),
+                    color: const Color(0xFF2563EB).withValues(alpha: 0.16),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: const Icon(
@@ -459,14 +449,14 @@ class _ActionCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                Icon(icon, color: Colors.white.withOpacity(0.82)),
+                Icon(icon, color: Colors.white.withValues(alpha: 0.82)),
               ],
             ),
             const SizedBox(height: 10),
             Text(
               subtitle,
               style: TextStyle(
-                color: Colors.white.withOpacity(0.72),
+                color: Colors.white.withValues(alpha: 0.72),
                 height: 1.4,
               ),
             ),
@@ -486,10 +476,7 @@ class _ActionCard extends StatelessWidget {
 }
 
 class _GlassMessageCard extends StatelessWidget {
-  const _GlassMessageCard({
-    required this.title,
-    required this.message,
-  });
+  const _GlassMessageCard({required this.title, required this.message});
 
   final String title;
   final String message;
@@ -499,9 +486,9 @@ class _GlassMessageCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -518,7 +505,7 @@ class _GlassMessageCard extends StatelessWidget {
           Text(
             message,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.72),
+              color: Colors.white.withValues(alpha: 0.72),
               height: 1.4,
             ),
           ),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
+import '../../utils/admin_theme.dart';
+import '../../utils/app_theme_controller.dart';
 import '../../utils/app_routes.dart';
 import '../auth/forgot_password_screen.dart';
 
@@ -12,6 +14,7 @@ class AdminProfileScreen extends StatefulWidget {
     required this.onOpenUsers,
     this.manageUsersLabel = 'Manage users',
     this.manageUsersSubtitle = 'Review admin and citizen accounts',
+    this.showManageUsers = true,
   });
 
   final Map<String, dynamic> user;
@@ -19,6 +22,7 @@ class AdminProfileScreen extends StatefulWidget {
   final VoidCallback onOpenUsers;
   final String manageUsersLabel;
   final String manageUsersSubtitle;
+  final bool showManageUsers;
 
   @override
   State<AdminProfileScreen> createState() => _AdminProfileScreenState();
@@ -64,9 +68,11 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
     return role
         .replaceAll('_', ' ')
         .split(' ')
-        .map((part) => part.isEmpty
-            ? part
-            : '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}')
+        .map(
+          (part) => part.isEmpty
+              ? part
+              : '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}',
+        )
         .join(' ');
   }
 
@@ -97,10 +103,14 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
   String get _initials {
     final name = _nameController.text.trim();
     if (name.isEmpty) return 'AD';
-    final parts =
-        name.split(RegExp(r'\s+')).where((part) => part.isNotEmpty).toList();
+    final parts = name
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .toList();
     if (parts.length == 1) {
-      return parts.first.substring(0, parts.first.length >= 2 ? 2 : 1).toUpperCase();
+      return parts.first
+          .substring(0, parts.first.length >= 2 ? 2 : 1)
+          .toUpperCase();
     }
     return (parts.first[0] + parts.last[0]).toUpperCase();
   }
@@ -203,28 +213,34 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     final bottomSafeArea = MediaQuery.of(context).padding.bottom;
     final isDesktop = MediaQuery.of(context).size.width >= 1100;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0B1020),
+      backgroundColor: colors.background,
       appBar: isDesktop
           ? null
           : AppBar(
               title: const Text('Profile'),
-              backgroundColor: const Color(0xFF0B1020),
-              foregroundColor: Colors.white,
+              backgroundColor: colors.background,
+              foregroundColor: colors.text,
               elevation: 0,
             ),
       body: ListView(
-        padding: EdgeInsets.fromLTRB(22, isDesktop ? 26 : 16, 22, 24 + bottomSafeArea),
+        padding: EdgeInsets.fromLTRB(
+          22,
+          isDesktop ? 26 : 16,
+          22,
+          24 + bottomSafeArea,
+        ),
         children: [
           Text(
             'Profile',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                ),
+              color: colors.text,
+              fontWeight: FontWeight.w800,
+            ),
           ),
           const SizedBox(height: 8),
           Row(
@@ -239,7 +255,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
                 child: Text(
                   '$_department · ${_nameController.text.trim()}',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.56),
+                    color: Colors.white.withValues(alpha: 0.56),
                     fontSize: 13,
                   ),
                 ),
@@ -249,6 +265,8 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
           const SizedBox(height: 18),
           _profilePanel(),
           const SizedBox(height: 16),
+          _appearancePanel(),
+          const SizedBox(height: 16),
           _quickActionsPanel(),
         ],
       ),
@@ -256,12 +274,13 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
   }
 
   Widget _profilePanel() {
+    final colors = AdminThemeColors.of(context);
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        color: const Color(0xFF13182A),
+        color: colors.panel,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        border: Border.all(color: colors.border),
       ),
       child: Column(
         children: [
@@ -320,8 +339,8 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
                       _nameController.text.trim().isEmpty
                           ? 'Admin User'
                           : _nameController.text.trim(),
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: colors.text,
                         fontSize: 20,
                         fontWeight: FontWeight.w800,
                       ),
@@ -330,7 +349,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
                     Text(
                       _jobTitle,
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.72),
+                        color: Colors.white.withValues(alpha: 0.72),
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
                       ),
@@ -339,7 +358,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
                     Text(
                       _department,
                       style: TextStyle(
-                        color: const Color(0xFF8993B7).withOpacity(0.92),
+                        color: const Color(0xFF8993B7).withValues(alpha: 0.92),
                         fontSize: 16,
                       ),
                     ),
@@ -349,7 +368,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
             ],
           ),
           const SizedBox(height: 24),
-          Divider(color: Colors.white.withOpacity(0.06), height: 1),
+          Divider(color: colors.border, height: 1),
           const SizedBox(height: 26),
           _fieldRow(
             label: 'Full Name',
@@ -386,8 +405,8 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
               OutlinedButton(
                 onPressed: _openChangePassword,
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white.withOpacity(0.84),
-                  side: BorderSide(color: Colors.white.withOpacity(0.14)),
+                  foregroundColor: Colors.white.withValues(alpha: 0.84),
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.14)),
                   backgroundColor: const Color(0xFF161D2F),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 18,
@@ -428,13 +447,73 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
     );
   }
 
+  Widget _appearancePanel() {
+    final colors = AdminThemeColors.of(context);
+    final themeController = AppThemeScope.of(context);
+
+    return AnimatedBuilder(
+      animation: themeController,
+      builder: (context, _) {
+        final isDark = themeController.isDarkMode;
+        return Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: colors.panel,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: colors.border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF4C6FFF).withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                  color: const Color(0xFF4C6FFF),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Appearance',
+                      style: TextStyle(
+                        color: colors.text,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      isDark
+                          ? 'Dark mode is saved for this admin account.'
+                          : 'Light mode is saved for this admin account.',
+                      style: TextStyle(color: colors.mutedText, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(value: isDark, onChanged: themeController.setDarkMode),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _quickActionsPanel() {
+    final colors = AdminThemeColors.of(context);
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFF13182A),
+        color: colors.panel,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        border: Border.all(color: colors.border),
       ),
       child: Wrap(
         spacing: 12,
@@ -446,12 +525,13 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
             icon: Icons.assignment_outlined,
             onTap: widget.onOpenReports,
           ),
-          _actionButton(
-            label: widget.manageUsersLabel,
-            subtitle: widget.manageUsersSubtitle,
-            icon: Icons.groups_outlined,
-            onTap: widget.onOpenUsers,
-          ),
+          if (widget.showManageUsers)
+            _actionButton(
+              label: widget.manageUsersLabel,
+              subtitle: widget.manageUsersSubtitle,
+              icon: Icons.groups_outlined,
+              onTap: widget.onOpenUsers,
+            ),
           _actionButton(
             label: 'Logout',
             subtitle: 'Sign out of this account',
@@ -485,7 +565,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
             child: Text(
               label,
               style: TextStyle(
-                color: const Color(0xFF8E97B7).withOpacity(0.86),
+                color: const Color(0xFF8E97B7).withValues(alpha: 0.86),
                 fontSize: 15,
                 fontWeight: FontWeight.w500,
               ),
@@ -512,14 +592,17 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         hintText: hintText,
-        hintStyle: TextStyle(color: Colors.white.withOpacity(0.34)),
+        hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.34)),
         errorText: errorText,
         filled: true,
         fillColor: const Color(0xFF1A2032),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.05)),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -554,7 +637,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
         decoration: BoxDecoration(
           color: const Color(0xFF161D2F),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white.withOpacity(0.05)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
         ),
         child: Row(
           children: [
@@ -562,7 +645,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
               width: 38,
               height: 38,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.14),
+                color: color.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, color: color, size: 18),
@@ -585,7 +668,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.56),
+                      color: Colors.white.withValues(alpha: 0.56),
                       fontSize: 12,
                     ),
                   ),
@@ -595,7 +678,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
             trailing ??
                 Icon(
                   Icons.chevron_right_rounded,
-                  color: Colors.white.withOpacity(0.42),
+                  color: Colors.white.withValues(alpha: 0.42),
                 ),
           ],
         ),

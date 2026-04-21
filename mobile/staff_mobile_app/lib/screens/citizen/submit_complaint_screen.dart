@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -41,12 +39,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   String? _barangayError;
   String? _descriptionError;
 
-  static const List<String> _priorities = [
-    'Low',
-    'Normal',
-    'High',
-    'Urgent',
-  ];
+  static const List<String> _priorities = ['Low', 'Normal', 'High', 'Urgent'];
 
   @override
   void initState() {
@@ -63,13 +56,17 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
       setState(() {
         final remainingSlots = 3 - _selectedMedia.length;
         _selectedMedia.addAll(
-          files.take(remainingSlots).map(
+          files
+              .take(remainingSlots)
+              .map(
                 (file) => _SelectedMediaItem(file: file, mediaType: 'image'),
               ),
         );
       });
     } catch (e) {
-      _showSnack('Unable to select images: ${e.toString().replaceFirst('Exception: ', '')}');
+      _showSnack(
+        'Unable to select images: ${e.toString().replaceFirst('Exception: ', '')}',
+      );
     }
   }
 
@@ -87,7 +84,9 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
         _selectedMedia.add(_SelectedMediaItem(file: file, mediaType: 'video'));
       });
     } catch (e) {
-      _showSnack('Unable to select video: ${e.toString().replaceFirst('Exception: ', '')}');
+      _showSnack(
+        'Unable to select video: ${e.toString().replaceFirst('Exception: ', '')}',
+      );
     }
   }
 
@@ -171,9 +170,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     setState(() => _isSubmitting = true);
 
     try {
-      final categories = await _categoriesFuture.catchError(
-        (_) => <dynamic>[],
-      );
+      final categories = await _categoriesFuture.catchError((_) => <dynamic>[]);
       final selectedCategory = _selectedCategory(categories);
 
       final response = await _reportService.createReport(
@@ -209,6 +206,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
       }
 
       _showSnack('Report submitted successfully.');
+      if (!mounted) return;
       Navigator.pop(context, report);
     } catch (e) {
       if (!mounted) return;
@@ -221,7 +219,9 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   }
 
   void _showSnack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -251,283 +251,286 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0C1727),
-              Color(0xFF1E293B),
-              Color(0xFF463327),
-            ],
+            colors: [Color(0xFF0C1727), Color(0xFF1E293B), Color(0xFF463327)],
           ),
         ),
         child: FutureBuilder<List<dynamic>>(
-        future: Future.wait<dynamic>([_categoriesFuture, _officesFuture]),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
+          future: Future.wait<dynamic>([_categoriesFuture, _officesFuture]),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-          if (snapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  snapshot.error.toString().replaceFirst('Exception: ', ''),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white),
+            if (snapshot.hasError) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    snapshot.error.toString().replaceFirst('Exception: ', ''),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white),
+                  ),
                 ),
-              ),
-            );
-          }
+              );
+            }
 
-          final data = snapshot.data ?? const <dynamic>[];
-          final categories = data.isNotEmpty ? data[0] as List<dynamic> : const [];
-          final offices = data.length > 1 ? data[1] as List<dynamic> : const [];
-          final selectedOffice = _selectedOffice(offices);
-          final selectedCategory = _selectedCategory(categories);
+            final data = snapshot.data ?? const <dynamic>[];
+            final categories = data.isNotEmpty
+                ? data[0] as List<dynamic>
+                : const [];
+            final offices = data.length > 1
+                ? data[1] as List<dynamic>
+                : const [];
+            final selectedOffice = _selectedOffice(offices);
+            final selectedCategory = _selectedCategory(categories);
 
-          return ListView(
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: EdgeInsets.fromLTRB(16, 8, 16, bottomInset + 24),
-            children: [
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withOpacity(0.16)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Report a city issue',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
+            return ListView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: EdgeInsets.fromLTRB(16, 8, 16, bottomInset + 24),
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.16),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Choose the office that should receive your complaint, then attach photo or video evidence if available.',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.72),
-                        fontSize: 13,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Report a city issue',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
                       ),
-                    ),
-                    if (selectedOffice != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        'Choose the office that should receive your complaint, then attach photo or video evidence if available.',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.72),
+                          fontSize: 13,
+                        ),
+                      ),
+                      if (selectedOffice != null) ...[
+                        const SizedBox(height: 16),
+                        _buildSelectedOfficeCard(selectedOffice),
+                      ],
+                      if (selectedCategory != null) ...[
+                        const SizedBox(height: 12),
+                        _buildSelectedCategoryCard(selectedCategory),
+                      ],
+                      const SizedBox(height: 18),
+                      _buildLabel('Government office'),
+                      const SizedBox(height: 8),
+                      _buildOfficeDropdown(offices, errorText: _officeError),
                       const SizedBox(height: 16),
-                      _buildSelectedOfficeCard(selectedOffice),
-                    ],
-                    if (selectedCategory != null) ...[
-                      const SizedBox(height: 12),
-                      _buildSelectedCategoryCard(selectedCategory),
-                    ],
-                    const SizedBox(height: 18),
-                    _buildLabel('Government office'),
-                    const SizedBox(height: 8),
-                    _buildOfficeDropdown(
-                      offices,
-                      errorText: _officeError,
-                    ),
-                    const SizedBox(height: 16),
-                    _buildLabel('Category'),
-                    const SizedBox(height: 8),
-                    _buildCategoryDropdown(
-                      categories,
-                      errorText: _categoryError,
-                    ),
-                    const SizedBox(height: 16),
-                    _buildLabel('Issue title'),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _titleController,
-                      textInputAction: TextInputAction.next,
-                      style: const TextStyle(color: Colors.white),
-                      cursorColor: Colors.white,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.deny(_emojiRegex),
-                      ],
-                      onChanged: (_) {
-                        if (_titleError != null) {
-                          setState(() => _titleError = null);
-                        }
-                      },
-                      decoration: _inputDecoration(
-                        'Example: Broken street light',
-                        errorText: _titleError,
+                      _buildLabel('Category'),
+                      const SizedBox(height: 8),
+                      _buildCategoryDropdown(
+                        categories,
+                        errorText: _categoryError,
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildLabel('Location'),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _locationController,
-                      textInputAction: TextInputAction.next,
-                      style: const TextStyle(color: Colors.white),
-                      cursorColor: Colors.white,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.deny(_emojiRegex),
-                      ],
-                      onChanged: (_) {
-                        if (_locationError != null) {
-                          setState(() => _locationError = null);
-                        }
-                      },
-                      decoration: _inputDecoration(
-                        'Street, landmark, or area',
-                        errorText: _locationError,
+                      const SizedBox(height: 16),
+                      _buildLabel('Issue title'),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _titleController,
+                        textInputAction: TextInputAction.next,
+                        style: const TextStyle(color: Colors.white),
+                        cursorColor: Colors.white,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.deny(_emojiRegex),
+                        ],
+                        onChanged: (_) {
+                          if (_titleError != null) {
+                            setState(() => _titleError = null);
+                          }
+                        },
+                        decoration: _inputDecoration(
+                          'Example: Broken street light',
+                          errorText: _titleError,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildLabel('Barangay'),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _barangayController,
-                      textInputAction: TextInputAction.next,
-                      style: const TextStyle(color: Colors.white),
-                      cursorColor: Colors.white,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.deny(_emojiRegex),
-                      ],
-                      onChanged: (_) {
-                        if (_barangayError != null) {
-                          setState(() => _barangayError = null);
-                        }
-                      },
-                      decoration: _inputDecoration(
-                        'Optional barangay name',
-                        errorText: _barangayError,
+                      const SizedBox(height: 16),
+                      _buildLabel('Location'),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _locationController,
+                        textInputAction: TextInputAction.next,
+                        style: const TextStyle(color: Colors.white),
+                        cursorColor: Colors.white,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.deny(_emojiRegex),
+                        ],
+                        onChanged: (_) {
+                          if (_locationError != null) {
+                            setState(() => _locationError = null);
+                          }
+                        },
+                        decoration: _inputDecoration(
+                          'Street, landmark, or area',
+                          errorText: _locationError,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildLabel('Priority'),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      value: _selectedPriority,
-                      dropdownColor: const Color(0xFF253248),
-                      style: const TextStyle(color: Colors.white),
-                      iconEnabledColor: Colors.white,
-                      decoration: _inputDecoration('Priority'),
-                      items: _priorities
-                          .map(
-                            (priority) => DropdownMenuItem<String>(
-                              value: priority,
-                              child: Text(
-                                priority,
-                                style: const TextStyle(color: Colors.white),
+                      const SizedBox(height: 16),
+                      _buildLabel('Barangay'),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _barangayController,
+                        textInputAction: TextInputAction.next,
+                        style: const TextStyle(color: Colors.white),
+                        cursorColor: Colors.white,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.deny(_emojiRegex),
+                        ],
+                        onChanged: (_) {
+                          if (_barangayError != null) {
+                            setState(() => _barangayError = null);
+                          }
+                        },
+                        decoration: _inputDecoration(
+                          'Optional barangay name',
+                          errorText: _barangayError,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildLabel('Priority'),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        initialValue: _selectedPriority,
+                        dropdownColor: const Color(0xFF253248),
+                        style: const TextStyle(color: Colors.white),
+                        iconEnabledColor: Colors.white,
+                        decoration: _inputDecoration('Priority'),
+                        items: _priorities
+                            .map(
+                              (priority) => DropdownMenuItem<String>(
+                                value: priority,
+                                child: Text(
+                                  priority,
+                                  style: const TextStyle(color: Colors.white),
+                                ),
                               ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        if (value == null) return;
-                        setState(() => _selectedPriority = value);
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    _buildLabel('Attachments'),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: [
-                        OutlinedButton.icon(
-                          onPressed: _selectedMedia.length >= 3 ? null : _pickImages,
-                          style: _attachmentButtonStyle(),
-                          icon: const Icon(Icons.photo_library_outlined),
-                          label: const Text('Add photos'),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: _selectedMedia.length >= 3 ? null : _pickVideo,
-                          style: _attachmentButtonStyle(),
-                          icon: const Icon(Icons.videocam_outlined),
-                          label: const Text('Add video'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'You can upload up to 3 files total.',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.64),
-                        fontSize: 12,
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setState(() => _selectedPriority = value);
+                        },
                       ),
-                    ),
-                    if (_selectedMedia.isNotEmpty) ...[
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 16),
+                      _buildLabel('Attachments'),
+                      const SizedBox(height: 8),
                       Wrap(
                         spacing: 10,
                         runSpacing: 10,
-                        children: List.generate(
-                          _selectedMedia.length,
-                          (index) => _SelectedMediaChip(
-                            item: _selectedMedia[index],
-                            onRemove: () => _removeMediaAt(index),
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: _selectedMedia.length >= 3
+                                ? null
+                                : _pickImages,
+                            style: _attachmentButtonStyle(),
+                            icon: const Icon(Icons.photo_library_outlined),
+                            label: const Text('Add photos'),
                           ),
+                          OutlinedButton.icon(
+                            onPressed: _selectedMedia.length >= 3
+                                ? null
+                                : _pickVideo,
+                            style: _attachmentButtonStyle(),
+                            icon: const Icon(Icons.videocam_outlined),
+                            label: const Text('Add video'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'You can upload up to 3 files total.',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.64),
+                          fontSize: 12,
+                        ),
+                      ),
+                      if (_selectedMedia.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: List.generate(
+                            _selectedMedia.length,
+                            (index) => _SelectedMediaChip(
+                              item: _selectedMedia[index],
+                              onRemove: () => _removeMediaAt(index),
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      _buildLabel('Description'),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _descriptionController,
+                        minLines: 5,
+                        maxLines: 7,
+                        textInputAction: TextInputAction.done,
+                        style: const TextStyle(color: Colors.white),
+                        cursorColor: Colors.white,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.deny(_emojiRegex),
+                        ],
+                        onChanged: (_) {
+                          if (_descriptionError != null) {
+                            setState(() => _descriptionError = null);
+                          }
+                        },
+                        decoration: _inputDecoration(
+                          'Describe the issue, what happened, and any important details.',
+                          errorText: _descriptionError,
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: ElevatedButton(
+                          onPressed: _isSubmitting ? null : _submit,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: accent,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          child: _isSubmitting
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text(
+                                  'Submit',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
                         ),
                       ),
                     ],
-                    const SizedBox(height: 16),
-                    _buildLabel('Description'),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _descriptionController,
-                      minLines: 5,
-                      maxLines: 7,
-                      textInputAction: TextInputAction.done,
-                      style: const TextStyle(color: Colors.white),
-                      cursorColor: Colors.white,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.deny(_emojiRegex),
-                      ],
-                      onChanged: (_) {
-                        if (_descriptionError != null) {
-                          setState(() => _descriptionError = null);
-                        }
-                      },
-                      decoration: _inputDecoration(
-                        'Describe the issue, what happened, and any important details.',
-                        errorText: _descriptionError,
-                      ),
-                    ),
-                    const SizedBox(height: 22),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton(
-                        onPressed: _isSubmitting ? null : _submit,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: accent,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        child: _isSubmitting
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Text(
-                                'Submit',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ],
-          );
-        },
-      ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -547,26 +550,23 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     return InputDecoration(
       hintText: hint,
       filled: true,
-      fillColor: Colors.white.withOpacity(0.10),
+      fillColor: Colors.white.withValues(alpha: 0.10),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.white.withOpacity(0.16)),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.16)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.white.withOpacity(0.16)),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.16)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
         borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.4),
       ),
-      hintStyle: TextStyle(color: Colors.white.withOpacity(0.45)),
+      hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.45)),
       errorText: errorText,
       errorMaxLines: 2,
-      errorStyle: const TextStyle(
-        color: Color(0xFFFFB4B4),
-        fontSize: 12,
-      ),
+      errorStyle: const TextStyle(color: Color(0xFFFFB4B4), fontSize: 12),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
         borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.2),
@@ -581,11 +581,9 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   ButtonStyle _attachmentButtonStyle() {
     return OutlinedButton.styleFrom(
       foregroundColor: Colors.white,
-      side: BorderSide(color: Colors.white.withOpacity(0.22)),
+      side: BorderSide(color: Colors.white.withValues(alpha: 0.22)),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     );
   }
 
@@ -636,9 +634,9 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.14),
+        color: color.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.42)),
+        border: Border.all(color: color.withValues(alpha: 0.42)),
       ),
       child: Row(
         children: [
@@ -646,7 +644,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.18),
+              color: color.withValues(alpha: 0.18),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: color, size: 20),
@@ -659,7 +657,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                 Text(
                   'Selected category',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.68),
+                    color: Colors.white.withValues(alpha: 0.68),
                     fontSize: 12,
                   ),
                 ),
@@ -710,55 +708,59 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     if (categories.isEmpty) {
       return _buildEmptyDropdownState(
         title: 'No categories available',
-        message: 'Please seed the categories table in the backend, then refresh this page.',
+        message:
+            'Please seed the categories table in the backend, then refresh this page.',
       );
     }
 
     return DropdownButtonFormField<int>(
-      value: _selectedCategoryId,
+      initialValue: _selectedCategoryId,
       isExpanded: true,
       dropdownColor: const Color(0xFF253248),
       style: const TextStyle(color: Colors.white),
       iconEnabledColor: Colors.white,
       decoration: _inputDecoration('Select a category', errorText: errorText),
-      items: categories.map((item) {
-        final category = item as Map<String, dynamic>;
-        final rawId = category['id'];
-        final categoryId = rawId is int ? rawId : int.tryParse('$rawId');
-        final categoryName = (category['name'] ?? 'Unnamed').toString();
-        final icon = _categoryIcon(categoryName);
-        final color = _categoryColor(categoryName);
+      items: categories
+          .map((item) {
+            final category = item as Map<String, dynamic>;
+            final rawId = category['id'];
+            final categoryId = rawId is int ? rawId : int.tryParse('$rawId');
+            final categoryName = (category['name'] ?? 'Unnamed').toString();
+            final icon = _categoryIcon(categoryName);
+            final color = _categoryColor(categoryName);
 
-        if (categoryId == null) {
-          return null;
-        }
+            if (categoryId == null) {
+              return null;
+            }
 
-        return DropdownMenuItem<int>(
-          value: categoryId,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.18),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, color: color, size: 16),
+            return DropdownMenuItem<int>(
+              value: categoryId,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.18),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, color: color, size: 16),
+                  ),
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: Text(
+                      categoryName,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 10),
-              Flexible(
-                child: Text(
-                  categoryName,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white),
-                ),
-              ),
-            ],
-          ),
-        );
-      }).whereType<DropdownMenuItem<int>>().toList(),
+            );
+          })
+          .whereType<DropdownMenuItem<int>>()
+          .toList(),
       onChanged: (value) {
         if (value == null) return;
         setState(() {
@@ -776,9 +778,11 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF2563EB).withOpacity(0.14),
+        color: const Color(0xFF2563EB).withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF60A5FA).withOpacity(0.42)),
+        border: Border.all(
+          color: const Color(0xFF60A5FA).withValues(alpha: 0.42),
+        ),
       ),
       child: Row(
         children: [
@@ -786,7 +790,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-              color: const Color(0xFF60A5FA).withOpacity(0.18),
+              color: const Color(0xFF60A5FA).withValues(alpha: 0.18),
               shape: BoxShape.circle,
             ),
             child: const Icon(
@@ -803,7 +807,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                 Text(
                   'Assigned office',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.68),
+                    color: Colors.white.withValues(alpha: 0.68),
                     fontSize: 12,
                   ),
                 ),
@@ -820,7 +824,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                   Text(
                     officeCode,
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.66),
+                      color: Colors.white.withValues(alpha: 0.66),
                       fontSize: 11,
                     ),
                   ),
@@ -831,6 +835,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
       ),
     );
   }
+
   Widget _buildOfficeDropdown(List<dynamic> offices, {String? errorText}) {
     if (offices.isEmpty) {
       return _buildEmptyDropdownState(
@@ -840,7 +845,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     }
 
     return DropdownButtonFormField<int>(
-      value: _selectedOfficeId,
+      initialValue: _selectedOfficeId,
       isExpanded: true,
       dropdownColor: const Color(0xFF253248),
       style: const TextStyle(color: Colors.white),
@@ -849,25 +854,28 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
         'Select the office that should receive this report',
         errorText: errorText,
       ),
-      items: offices.map((item) {
-        final office = item as Map<String, dynamic>;
-        final rawId = office['id'];
-        final officeId = rawId is int ? rawId : int.tryParse('$rawId');
-        final officeName = (office['name'] ?? 'Unnamed office').toString();
+      items: offices
+          .map((item) {
+            final office = item as Map<String, dynamic>;
+            final rawId = office['id'];
+            final officeId = rawId is int ? rawId : int.tryParse('$rawId');
+            final officeName = (office['name'] ?? 'Unnamed office').toString();
 
-        if (officeId == null) {
-          return null;
-        }
+            if (officeId == null) {
+              return null;
+            }
 
-        return DropdownMenuItem<int>(
-          value: officeId,
-          child: Text(
-            officeName,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white),
-          ),
-        );
-      }).whereType<DropdownMenuItem<int>>().toList(),
+            return DropdownMenuItem<int>(
+              value: officeId,
+              child: Text(
+                officeName,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white),
+              ),
+            );
+          })
+          .whereType<DropdownMenuItem<int>>()
+          .toList(),
       onChanged: (value) {
         if (value == null) return;
         setState(() {
@@ -885,9 +893,9 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
+        color: Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -904,7 +912,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
           Text(
             message,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.68),
+              color: Colors.white.withValues(alpha: 0.68),
               fontSize: 12,
             ),
           ),
@@ -921,10 +929,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
 }
 
 class _SelectedMediaItem {
-  const _SelectedMediaItem({
-    required this.file,
-    required this.mediaType,
-  });
+  const _SelectedMediaItem({required this.file, required this.mediaType});
 
   final XFile file;
   final String mediaType;
@@ -933,10 +938,7 @@ class _SelectedMediaItem {
 }
 
 class _SelectedMediaChip extends StatelessWidget {
-  const _SelectedMediaChip({
-    required this.item,
-    required this.onRemove,
-  });
+  const _SelectedMediaChip({required this.item, required this.onRemove});
 
   final _SelectedMediaItem item;
   final VoidCallback onRemove;
@@ -953,8 +955,8 @@ class _SelectedMediaChip extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
-              color: Colors.white.withOpacity(0.10),
-              border: Border.all(color: Colors.white.withOpacity(0.16)),
+              color: Colors.white.withValues(alpha: 0.10),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1023,9 +1025,7 @@ class _SelectedMediaChip extends StatelessWidget {
 }
 
 class _RemoveMediaButton extends StatelessWidget {
-  const _RemoveMediaButton({
-    required this.onTap,
-  });
+  const _RemoveMediaButton({required this.onTap});
 
   final VoidCallback onTap;
 
@@ -1040,11 +1040,7 @@ class _RemoveMediaButton extends StatelessWidget {
           color: Color(0xFF111827),
           shape: BoxShape.circle,
         ),
-        child: const Icon(
-          Icons.close,
-          size: 14,
-          color: Colors.white,
-        ),
+        child: const Icon(Icons.close, size: 14, color: Colors.white),
       ),
     );
   }

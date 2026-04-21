@@ -156,8 +156,8 @@ class DatabaseSeeder extends Seeder
                 'mobile_number' => '09170000003',
                 'password' => 'superadmin123',
                 'role' => 'super_admin',
-                'department' => "City Engineer's Office",
-                'job_title' => 'City Engineer',
+                'department' => 'System Administration',
+                'job_title' => 'Administrator',
             ]
         );
     }

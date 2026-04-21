@@ -42,9 +42,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString().replaceFirst('Exception: ', '')),
-        ),
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
       );
     } finally {
       if (mounted) {
@@ -58,9 +56,11 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
     return role
         .replaceAll('_', ' ')
         .split(' ')
-        .map((part) => part.isEmpty
-            ? part
-            : '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}')
+        .map(
+          (part) => part.isEmpty
+              ? part
+              : '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}',
+        )
         .join(' ');
   }
 
@@ -69,9 +69,11 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
     final bottomSafeArea = MediaQuery.of(context).padding.bottom;
     final name = (widget.user['name'] ?? 'Admin User').toString();
     final email = (widget.user['email'] ?? 'No email').toString();
-    final mobile = (widget.user['mobile_number'] ?? 'No mobile number').toString();
+    final mobile = (widget.user['mobile_number'] ?? 'No mobile number')
+        .toString();
     final role = (widget.user['role'] ?? 'admin').toString();
-    final department = (widget.user['department'] ?? 'Engineering Office').toString();
+    final department = (widget.user['department'] ?? 'Engineering Office')
+        .toString();
     final jobTitle = (widget.user['job_title'] ?? 'Staff').toString();
 
     return Scaffold(
@@ -86,11 +88,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0C1727),
-              Color(0xFF1E293B),
-              Color(0xFF463327),
-            ],
+            colors: [Color(0xFF0C1727), Color(0xFF1E293B), Color(0xFF463327)],
           ),
         ),
         child: ListView(
@@ -147,14 +145,20 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
                     subtitle: 'Review and update submitted complaints',
                     onTap: widget.onOpenReports,
                   ),
-                  Divider(height: 1, color: Colors.white.withOpacity(0.10)),
+                  Divider(
+                    height: 1,
+                    color: Colors.white.withValues(alpha: 0.10),
+                  ),
                   _ActionTile(
                     icon: Icons.groups_outlined,
                     title: widget.manageUsersLabel,
                     subtitle: widget.manageUsersSubtitle,
                     onTap: widget.onOpenUsers,
                   ),
-                  Divider(height: 1, color: Colors.white.withOpacity(0.10)),
+                  Divider(
+                    height: 1,
+                    color: Colors.white.withValues(alpha: 0.10),
+                  ),
                   _ActionTile(
                     icon: Icons.logout,
                     title: 'Logout',
@@ -188,9 +192,9 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Column(
         children: [
@@ -199,11 +203,8 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
             height: 88,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.white.withOpacity(0.16),
-              border: Border.all(
-                color: const Color(0xFFD8B15A),
-                width: 2,
-              ),
+              color: Colors.white.withValues(alpha: 0.16),
+              border: Border.all(color: const Color(0xFFD8B15A), width: 2),
             ),
             child: Padding(
               padding: const EdgeInsets.all(10),
@@ -229,22 +230,22 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
           Text(
             email,
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white.withOpacity(0.72)),
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.72)),
           ),
           const SizedBox(height: 10),
           Text(
             department,
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white.withOpacity(0.62)),
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.62)),
           ),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
             decoration: BoxDecoration(
-              color: const Color(0xFF2563EB).withOpacity(0.18),
+              color: const Color(0xFF2563EB).withValues(alpha: 0.18),
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
-                color: const Color(0xFF2563EB).withOpacity(0.30),
+                color: const Color(0xFF2563EB).withValues(alpha: 0.30),
               ),
             ),
             child: Text(
@@ -263,9 +264,9 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
   Widget _buildActionCard({required Widget child}) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: child,
     );
@@ -288,9 +289,9 @@ class _ProfileStatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -300,7 +301,7 @@ class _ProfileStatCard extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.62),
+              color: Colors.white.withValues(alpha: 0.62),
               fontSize: 12,
             ),
           ),
@@ -346,16 +347,14 @@ class _ActionTile extends StatelessWidget {
       leading: Icon(icon, color: iconColor),
       title: Text(
         title,
-        style: TextStyle(
-          color: titleColor,
-          fontWeight: FontWeight.w700,
-        ),
+        style: TextStyle(color: titleColor, fontWeight: FontWeight.w700),
       ),
       subtitle: Text(
         subtitle,
-        style: TextStyle(color: Colors.white.withOpacity(0.72)),
+        style: TextStyle(color: Colors.white.withValues(alpha: 0.72)),
       ),
-      trailing: trailing ?? const Icon(Icons.chevron_right, color: Colors.white),
+      trailing:
+          trailing ?? const Icon(Icons.chevron_right, color: Colors.white),
       onTap: onTap,
     );
   }

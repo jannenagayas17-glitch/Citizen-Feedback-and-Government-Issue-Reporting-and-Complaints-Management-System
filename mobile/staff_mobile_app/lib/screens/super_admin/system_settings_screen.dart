@@ -2,12 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
 import '../../services/system_settings_service.dart';
+import '../../utils/app_theme_controller.dart';
 
 class SystemSettingsScreen extends StatefulWidget {
-  const SystemSettingsScreen({
-    super.key,
-    this.embedded = false,
-  });
+  const SystemSettingsScreen({super.key, this.embedded = false});
 
   final bool embedded;
 
@@ -71,6 +69,7 @@ class _SystemSettingsScreenState extends State<SystemSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = _SettingsColors.of(context);
     final body = FutureBuilder<Map<String, dynamic>>(
       future: _payloadFuture,
       builder: (context, snapshot) {
@@ -108,10 +107,10 @@ class _SystemSettingsScreenState extends State<SystemSettingsScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0B1020),
+      backgroundColor: colors.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0B1020),
-        foregroundColor: Colors.white,
+        backgroundColor: colors.background,
+        foregroundColor: colors.text,
         elevation: 0,
         title: const Text('Settings'),
       ),
@@ -180,13 +179,16 @@ class _SettingsContentState extends State<_SettingsContent> {
 
   void _hydrate() {
     final notifications = Map<String, dynamic>.from(
-      widget.initialSettings['notifications'] as Map? ?? const <String, dynamic>{},
+      widget.initialSettings['notifications'] as Map? ??
+          const <String, dynamic>{},
     );
     final reportSettings = Map<String, dynamic>.from(
-      widget.initialSettings['report_settings'] as Map? ?? const <String, dynamic>{},
+      widget.initialSettings['report_settings'] as Map? ??
+          const <String, dynamic>{},
     );
     final escalationSettings = Map<String, dynamic>.from(
-      widget.initialSettings['escalation_settings'] as Map? ?? const <String, dynamic>{},
+      widget.initialSettings['escalation_settings'] as Map? ??
+          const <String, dynamic>{},
     );
 
     _enableAlerts = notifications['enable_alerts'] != false;
@@ -256,8 +258,10 @@ class _SettingsContentState extends State<_SettingsContent> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = _SettingsColors.of(context);
     final name = (widget.user['name'] ?? 'Super Admin').toString();
-    final email = (widget.user['email'] ?? 'superadmin@citytrack.local').toString();
+    final email = (widget.user['email'] ?? 'superadmin@citytrack.local')
+        .toString();
     return LayoutBuilder(
       builder: (context, constraints) {
         final contentWidth = constraints.maxWidth == double.infinity
@@ -274,10 +278,10 @@ class _SettingsContentState extends State<_SettingsContent> {
             28,
           ),
           children: [
-            const Text(
+            Text(
               'Settings',
               style: TextStyle(
-                color: Colors.white,
+                color: colors.text,
                 fontSize: 28,
                 fontWeight: FontWeight.w800,
               ),
@@ -285,9 +289,13 @@ class _SettingsContentState extends State<_SettingsContent> {
             const SizedBox(height: 6),
             Text(
               'Manage system settings and configurations.',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.66),
-                fontSize: 14,
+              style: TextStyle(color: colors.mutedText, fontSize: 14),
+            ),
+            const SizedBox(height: 18),
+            _SettingsPanel(
+              title: 'Appearance',
+              child: _AppearanceCard(
+                themeController: AppThemeScope.of(context),
               ),
             ),
             const SizedBox(height: 18),
@@ -299,10 +307,7 @@ class _SettingsContentState extends State<_SettingsContent> {
                 children: [
                   SizedBox(
                     width: panelWidth,
-                    child: _AccountCard(
-                      name: name,
-                      email: email,
-                    ),
+                    child: _AccountCard(name: name, email: email),
                   ),
                   SizedBox(
                     width: panelWidth,
@@ -391,7 +396,8 @@ class _SettingsContentState extends State<_SettingsContent> {
                           value: _priority,
                           items: _priorityOptions,
                           itemLabel: (value) => value,
-                          onChanged: (value) => setState(() => _priority = value),
+                          onChanged: (value) =>
+                              setState(() => _priority = value),
                         ),
                       ],
                     ),
@@ -407,8 +413,10 @@ class _SettingsContentState extends State<_SettingsContent> {
                 style: FilledButton.styleFrom(
                   backgroundColor: const Color(0xFF2C54D4),
                   foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 26, vertical: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 26,
+                    vertical: 16,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
@@ -436,30 +444,28 @@ class _SettingsContentState extends State<_SettingsContent> {
 }
 
 class _SettingsPanel extends StatelessWidget {
-  const _SettingsPanel({
-    required this.title,
-    required this.child,
-  });
+  const _SettingsPanel({required this.title, required this.child});
 
   final String title;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
+    final colors = _SettingsColors.of(context);
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFF121A2B),
+        color: colors.panel,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        border: Border.all(color: colors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: colors.text,
               fontSize: 18,
               fontWeight: FontWeight.w700,
             ),
@@ -472,25 +478,103 @@ class _SettingsPanel extends StatelessWidget {
   }
 }
 
+class _AppearanceCard extends StatelessWidget {
+  const _AppearanceCard({required this.themeController});
+
+  final AppThemeController themeController;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = _SettingsColors.of(context);
+    final isDark = themeController.isDarkMode;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? const [Color(0xFF111A2D), Color(0xFF17213A)]
+              : const [Color(0xFFFFFFFF), Color(0xFFEAF2FF)],
+        ),
+        border: Border.all(color: colors.border),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              color: isDark ? const Color(0xFF243455) : const Color(0xFFDCEBFF),
+            ),
+            child: Icon(
+              isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+              color: isDark ? const Color(0xFFF0A43B) : const Color(0xFF2563EB),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isDark ? 'Dark Mode' : 'Light Mode',
+                  style: TextStyle(
+                    color: colors.text,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  isDark
+                      ? 'Comfortable low-light dashboard colors.'
+                      : 'Brighter workspace for daytime monitoring.',
+                  style: TextStyle(color: colors.mutedText, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: isDark,
+            onChanged: themeController.setDarkMode,
+            activeThumbColor: Colors.white,
+            activeTrackColor: const Color(0xFF2563EB),
+            inactiveThumbColor: Colors.white,
+            inactiveTrackColor: const Color(0xFF93C5FD),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _AccountCard extends StatelessWidget {
-  const _AccountCard({
-    required this.name,
-    required this.email,
-  });
+  const _AccountCard({required this.name, required this.email});
 
   final String name;
   final String email;
 
   @override
   Widget build(BuildContext context) {
+    final colors = _SettingsColors.of(context);
     final initials = name.trim().isEmpty
         ? 'SA'
-        : name.trim().split(RegExp(r'\s+')).take(2).map((part) => part[0]).join().toUpperCase();
+        : name
+              .trim()
+              .split(RegExp(r'\s+'))
+              .take(2)
+              .map((part) => part[0])
+              .join()
+              .toUpperCase();
 
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.02),
+        color: colors.softPanel,
         borderRadius: BorderRadius.circular(18),
       ),
       child: Column(
@@ -517,19 +601,14 @@ class _AccountCard extends StatelessWidget {
                   children: [
                     Text(
                       name,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: colors.text,
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Text(
-                      email,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.60),
-                      ),
-                    ),
+                    Text(email, style: TextStyle(color: colors.mutedText)),
                   ],
                 ),
               ),
@@ -560,6 +639,7 @@ class _ToggleSettingsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = _SettingsColors.of(context);
     return Column(
       children: [
         _SwitchTile(
@@ -567,13 +647,13 @@ class _ToggleSettingsCard extends StatelessWidget {
           value: enableAlerts,
           onChanged: onEnableAlertsChanged,
         ),
-        const Divider(color: Color(0x1AFFFFFF), height: 18),
+        Divider(color: colors.border, height: 18),
         _SwitchTile(
           label: 'Escalation Notifications',
           value: escalationNotifications,
           onChanged: onEscalationNotificationsChanged,
         ),
-        const Divider(color: Color(0x1AFFFFFF), height: 18),
+        Divider(color: colors.border, height: 18),
         _SwitchTile(
           label: 'Feedback Notifications',
           value: feedbackNotifications,
@@ -597,21 +677,19 @@ class _SwitchTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = _SettingsColors.of(context);
     return Row(
       children: [
         Expanded(
           child: Text(
             label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 15,
-            ),
+            style: TextStyle(color: colors.text, fontSize: 15),
           ),
         ),
         Switch(
           value: value,
           onChanged: onChanged,
-          activeColor: Colors.white,
+          activeThumbColor: Colors.white,
           activeTrackColor: const Color(0xFF2E62FF),
         ),
       ],
@@ -638,6 +716,7 @@ class _LabeledDropdown<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = _SettingsColors.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -646,37 +725,32 @@ class _LabeledDropdown<T> extends StatelessWidget {
             Expanded(
               child: Text(
                 label,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: colors.text,
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
                 ),
               ),
             ),
             if (trailingText != null)
-              Text(
-                trailingText!,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.54),
-                ),
-              ),
+              Text(trailingText!, style: TextStyle(color: colors.mutedText)),
           ],
         ),
         const SizedBox(height: 10),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(
-            color: const Color(0xFF0F1524),
+            color: colors.input,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            border: Border.all(color: colors.border),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<T>(
               value: value,
               isExpanded: true,
-              dropdownColor: const Color(0xFF1A2337),
-              style: const TextStyle(color: Colors.white),
-              iconEnabledColor: Colors.white70,
+              dropdownColor: colors.panel,
+              style: TextStyle(color: colors.text),
+              iconEnabledColor: colors.mutedText,
               items: items
                   .map(
                     (item) => DropdownMenuItem<T>(
@@ -699,24 +773,22 @@ class _LabeledDropdown<T> extends StatelessWidget {
 }
 
 class _SettingsMessageCard extends StatelessWidget {
-  const _SettingsMessageCard({
-    required this.title,
-    required this.message,
-  });
+  const _SettingsMessageCard({required this.title, required this.message});
 
   final String title;
   final String message;
 
   @override
   Widget build(BuildContext context) {
+    final colors = _SettingsColors.of(context);
     return Center(
       child: Container(
         constraints: const BoxConstraints(maxWidth: 520),
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: const Color(0xFF121A2B),
+          color: colors.panel,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+          border: Border.all(color: colors.border),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -730,8 +802,8 @@ class _SettingsMessageCard extends StatelessWidget {
             Text(
               title,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: colors.text,
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
               ),
@@ -740,13 +812,56 @@ class _SettingsMessageCard extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.68),
-              ),
+              style: TextStyle(color: colors.mutedText),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _SettingsColors {
+  const _SettingsColors({
+    required this.background,
+    required this.panel,
+    required this.softPanel,
+    required this.input,
+    required this.border,
+    required this.text,
+    required this.mutedText,
+  });
+
+  final Color background;
+  final Color panel;
+  final Color softPanel;
+  final Color input;
+  final Color border;
+  final Color text;
+  final Color mutedText;
+
+  static _SettingsColors of(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (isDark) {
+      return _SettingsColors(
+        background: const Color(0xFF0B1020),
+        panel: const Color(0xFF121A2B),
+        softPanel: Colors.white.withValues(alpha: 0.02),
+        input: const Color(0xFF0F1524),
+        border: Colors.white.withValues(alpha: 0.08),
+        text: Colors.white,
+        mutedText: Colors.white.withValues(alpha: 0.64),
+      );
+    }
+
+    return _SettingsColors(
+      background: const Color(0xFFF5F8FC),
+      panel: Colors.white,
+      softPanel: const Color(0xFFF1F6FF),
+      input: const Color(0xFFF8FAFC),
+      border: const Color(0xFFDDE7F5),
+      text: const Color(0xFF0F172A),
+      mutedText: const Color(0xFF64748B),
     );
   }
 }

@@ -7,9 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../services/auth_service.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
-  const ForgotPasswordScreen({
-    super.key,
-  });
+  const ForgotPasswordScreen({super.key});
 
   @override
   State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
@@ -62,7 +60,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       if (!mounted) return;
 
       final message =
-          response['message']?.toString() ?? 'Password reset link sent successfully';
+          response['message']?.toString() ??
+          'Password reset link sent successfully';
 
       _showSnack(message);
       _emailController.clear();
@@ -81,18 +80,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   }
 
   void _showSnack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _openMailApp(String email) async {
     final gmailInboxUri = Uri.parse('https://mail.google.com/mail/u/0/#inbox');
     final gmailSchemeUri = Uri.parse('googlegmail:///');
-    final genericMailUri = Uri(
-      scheme: 'mailto',
-      path: email,
-    );
+    final genericMailUri = Uri(scheme: 'mailto', path: email);
 
     if (await canLaunchUrl(gmailSchemeUri)) {
       await launchUrl(gmailSchemeUri, mode: LaunchMode.externalApplication);
@@ -121,37 +117,29 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          DecoratedBox(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFF0C1727),
-                  Color(0xFF1E293B),
-                  Color(0xFF463327),
-                ],
-              ),
-            ),
-          ),
           Positioned.fill(
-            child: Opacity(
-              opacity: 0.08,
-              child: Image.asset(
-                'assets/images/logo.png',
-                fit: BoxFit.cover,
-              ),
-            ),
-          ),
-          Positioned.fill(
-            child: Container(
-              color: Colors.black.withOpacity(0.42),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.asset(
+                  'assets/images/Tacloban_City_bg.png',
+                  fit: BoxFit.cover,
+                ),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0C1727).withValues(alpha: 0.62),
+                  ),
+                ),
+              ],
             ),
           ),
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 18,
+                ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(22),
                   child: BackdropFilter(
@@ -162,12 +150,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(22),
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.18),
+                          color: Colors.white.withValues(alpha: 0.18),
                         ),
-                        color: const Color(0xFF121B31).withOpacity(0.92),
+                        color: const Color(0xFF121B31).withValues(alpha: 0.92),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.24),
+                            color: Colors.black.withValues(alpha: 0.24),
                             blurRadius: 26,
                             offset: const Offset(0, 12),
                           ),
@@ -182,7 +170,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                               onPressed: () => Navigator.pop(context),
                               icon: Icon(
                                 Icons.close,
-                                color: Colors.white.withOpacity(0.72),
+                                color: Colors.white.withValues(alpha: 0.72),
                               ),
                             ),
                           ),
@@ -193,7 +181,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                               height: 52,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: const Color(0xFF163E9C).withOpacity(0.65),
+                                color: const Color(
+                                  0xFF163E9C,
+                                ).withValues(alpha: 0.65),
                                 border: Border.all(
                                   color: const Color(0xFF3B82F6),
                                   width: 1.2,
@@ -221,7 +211,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                             "No worries! Enter your email and we'll send\nyou a reset link.",
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.74),
+                              color: Colors.white.withValues(alpha: 0.74),
                               fontSize: 14,
                               height: 1.45,
                             ),
@@ -230,7 +220,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                           Text(
                             'Email Address',
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.92),
+                              color: Colors.white.withValues(alpha: 0.92),
                               fontSize: 14,
                               fontWeight: FontWeight.w500,
                             ),
@@ -251,15 +241,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                             decoration: InputDecoration(
                               hintText: 'official@taclobancity.gov',
                               hintStyle: TextStyle(
-                                color: Colors.white.withOpacity(0.45),
+                                color: Colors.white.withValues(alpha: 0.45),
                               ),
                               prefixIcon: Icon(
                                 Icons.email_outlined,
-                                color: Colors.white.withOpacity(0.65),
+                                color: Colors.white.withValues(alpha: 0.65),
                                 size: 20,
                               ),
                               filled: true,
-                              fillColor: Colors.white.withOpacity(0.12),
+                              fillColor: Colors.white.withValues(alpha: 0.12),
                               contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 16,
                                 vertical: 16,
@@ -267,17 +257,19 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(10),
                                 borderSide: BorderSide(
-                                  color: Colors.white.withOpacity(0.2),
+                                  color: Colors.white.withValues(alpha: 0.2),
                                 ),
                               ),
                               enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(10),
                                 borderSide: BorderSide(
-                                  color: Colors.white.withOpacity(0.2),
+                                  color: Colors.white.withValues(alpha: 0.2),
                                 ),
                               ),
                               focusedBorder: const OutlineInputBorder(
-                                borderRadius: BorderRadius.all(Radius.circular(10)),
+                                borderRadius: BorderRadius.all(
+                                  Radius.circular(10),
+                                ),
                                 borderSide: BorderSide(
                                   color: Color(0xFF3B82F6),
                                   width: 1.3,
@@ -290,14 +282,18 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                 fontSize: 12,
                               ),
                               errorBorder: const OutlineInputBorder(
-                                borderRadius: BorderRadius.all(Radius.circular(10)),
+                                borderRadius: BorderRadius.all(
+                                  Radius.circular(10),
+                                ),
                                 borderSide: BorderSide(
                                   color: Color(0xFFEF4444),
                                   width: 1.2,
                                 ),
                               ),
                               focusedErrorBorder: const OutlineInputBorder(
-                                borderRadius: BorderRadius.all(Radius.circular(10)),
+                                borderRadius: BorderRadius.all(
+                                  Radius.circular(10),
+                                ),
                                 borderSide: BorderSide(
                                   color: Color(0xFFEF4444),
                                   width: 1.3,
@@ -342,7 +338,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                             child: Text(
                               'Back to Login',
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.78),
+                                color: Colors.white.withValues(alpha: 0.78),
                                 fontSize: 14,
                               ),
                             ),

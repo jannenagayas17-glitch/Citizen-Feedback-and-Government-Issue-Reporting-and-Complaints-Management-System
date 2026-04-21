@@ -1,40 +1,93 @@
 import 'package:flutter/material.dart';
 
+import '../../services/citizen_data_cache.dart';
 import '../../services/report_feedback_service.dart';
-import '../../services/report_service.dart';
+import '../../utils/citizen_theme_colors.dart';
+import '../../widgets/citizen_bottom_nav.dart';
+import 'citizen_home_screen.dart';
+import 'citizen_profile_screen.dart';
+import 'my_complaints_screen.dart';
+import 'submit_complaint_screen.dart';
 
 class CitizenNotificationsScreen extends StatefulWidget {
   const CitizenNotificationsScreen({super.key});
 
   @override
-  State<CitizenNotificationsScreen> createState() => _CitizenNotificationsScreenState();
+  State<CitizenNotificationsScreen> createState() =>
+      _CitizenNotificationsScreenState();
 }
 
-class _CitizenNotificationsScreenState extends State<CitizenNotificationsScreen> {
-  final ReportService _reportService = ReportService();
+class _CitizenNotificationsScreenState
+    extends State<CitizenNotificationsScreen> {
   late Future<List<dynamic>> _reportsFuture;
 
   @override
   void initState() {
     super.initState();
-    _reportsFuture = _reportService.getReports();
+    _reportsFuture = CitizenDataCache.getReports();
   }
 
   Future<void> _refresh() async {
-    final future = _reportService.getReports();
+    final future = CitizenDataCache.getReports(refresh: true);
     setState(() {
       _reportsFuture = future;
     });
     await future;
   }
 
+  Future<void> _openHome() async {
+    await Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const CitizenHomeScreen()),
+    );
+  }
+
+  Future<void> _openReports() async {
+    await Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const MyComplaintsScreen()),
+    );
+  }
+
+  Future<void> _openProfile() async {
+    final user = await CitizenDataCache.getUser();
+    if (!mounted) return;
+    await Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => CitizenProfileScreen(user: user)),
+    );
+  }
+
+  Future<void> _openSubmit() async {
+    final created = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SubmitComplaintScreen()),
+    );
+
+    if (!mounted) return;
+    if (created != null) {
+      if (created is Map<String, dynamic>) {
+        CitizenDataCache.prependReport(created);
+      } else {
+        CitizenDataCache.invalidateReports();
+      }
+      setState(() {
+        _reportsFuture = CitizenDataCache.getReports();
+      });
+      CitizenDataCache.getReports(refresh: true).then((reports) {
+        if (!mounted) return;
+        setState(() => _reportsFuture = Future.value(reports));
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF101826),
+      backgroundColor: citizenScaffoldColor(context),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF101826),
-        foregroundColor: Colors.white,
+        backgroundColor: citizenScaffoldColor(context),
+        foregroundColor: citizenTitleColor(context),
         elevation: 0,
         title: const Text('Complaint Updates'),
       ),
@@ -44,7 +97,23 @@ class _CitizenNotificationsScreenState extends State<CitizenNotificationsScreen>
           future: _reportsFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator());
+              return ListView(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                children: List.generate(
+                  4,
+                  (_) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Container(
+                      height: 124,
+                      decoration: BoxDecoration(
+                        color: citizenCardColor(context),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: citizenBorderColor(context)),
+                      ),
+                    ),
+                  ),
+                ),
+              );
             }
 
             if (snapshot.hasError) {
@@ -53,7 +122,7 @@ class _CitizenNotificationsScreenState extends State<CitizenNotificationsScreen>
                 children: [
                   Text(
                     snapshot.error.toString().replaceFirst('Exception: ', ''),
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(color: citizenTitleColor(context)),
                   ),
                 ],
               );
@@ -62,17 +131,15 @@ class _CitizenNotificationsScreenState extends State<CitizenNotificationsScreen>
             final reports = snapshot.data ?? const [];
             if (reports.isEmpty) {
               return ListView(
-                padding: const EdgeInsets.all(16),
-                children: const [
-                  _NotificationsEmptyState(),
-                ],
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                children: const [_NotificationsEmptyState()],
               );
             }
 
             return ListView.separated(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
               itemCount: reports.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final report = reports[index] as Map<String, dynamic>;
                 final rawId = report['id'];
@@ -83,19 +150,23 @@ class _CitizenNotificationsScreenState extends State<CitizenNotificationsScreen>
                 final title = (report['title'] ?? 'Untitled report').toString();
                 final rawStatus = (report['status'] ?? 'New').toString();
                 final status = _normalizedStatus(rawStatus);
-                final location = (report['location'] ?? report['barangay'] ?? 'No location')
-                    .toString();
-                final createdAt = DateTime.tryParse((report['created_at'] ?? '').toString());
+                final location =
+                    (report['location'] ?? report['barangay'] ?? 'No location')
+                        .toString();
+                final createdAt = DateTime.tryParse(
+                  (report['created_at'] ?? '').toString(),
+                );
                 final officeName =
-                    ((report['office'] as Map<String, dynamic>?)?['name'] ?? 'Assigned office')
+                    ((report['office'] as Map<String, dynamic>?)?['name'] ??
+                            'Assigned office')
                         .toString();
 
                 return Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1A2233),
+                    color: citizenCardColor(context),
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: Colors.white.withOpacity(0.08)),
+                    border: Border.all(color: citizenBorderColor(context)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -107,7 +178,9 @@ class _CitizenNotificationsScreenState extends State<CitizenNotificationsScreen>
                             width: 42,
                             height: 42,
                             decoration: BoxDecoration(
-                              color: _statusColor(status).withOpacity(0.16),
+                              color: _statusColor(
+                                status,
+                              ).withValues(alpha: 0.16),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Icon(
@@ -124,8 +197,8 @@ class _CitizenNotificationsScreenState extends State<CitizenNotificationsScreen>
                                   title,
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
+                                  style: TextStyle(
+                                    color: citizenTitleColor(context),
                                     fontWeight: FontWeight.w700,
                                     fontSize: 16,
                                   ),
@@ -169,6 +242,24 @@ class _CitizenNotificationsScreenState extends State<CitizenNotificationsScreen>
           },
         ),
       ),
+      bottomNavigationBar: CitizenBottomNav(
+        currentIndex: 3,
+        onHomeTap: _openHome,
+        onReportsTap: _openReports,
+        onAlertsTap: () {},
+        onProfileTap: _openProfile,
+      ),
+      floatingActionButton: SizedBox(
+        width: 62,
+        height: 62,
+        child: FloatingActionButton(
+          shape: const CircleBorder(),
+          backgroundColor: const Color(0xFF3B82F6),
+          onPressed: _openSubmit,
+          child: const Icon(Icons.add, color: Colors.white, size: 28),
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
     );
   }
 
@@ -210,7 +301,7 @@ class _CitizenNotificationsScreenState extends State<CitizenNotificationsScreen>
       case 'Resolved':
         return const Color(0xFF64748B);
       default:
-        return Colors.white70;
+        return const Color(0xFF64748B);
     }
   }
 
@@ -271,13 +362,13 @@ class _StatusBadge extends StatelessWidget {
         color = const Color(0xFF64748B);
         break;
       default:
-        color = Colors.white70;
+        color = const Color(0xFF64748B);
     }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.18),
+        color: color.withValues(alpha: 0.18),
         borderRadius: BorderRadius.circular(18),
       ),
       child: Text(
@@ -293,10 +384,7 @@ class _StatusBadge extends StatelessWidget {
 }
 
 class _NotificationRow extends StatelessWidget {
-  const _NotificationRow({
-    required this.icon,
-    required this.value,
-  });
+  const _NotificationRow({required this.icon, required this.value});
 
   final IconData icon;
   final String value;
@@ -306,13 +394,13 @@ class _NotificationRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 15, color: Colors.white54),
+        Icon(icon, size: 15, color: citizenMutedColor(context)),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             value,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.74),
+              color: citizenBodyColor(context),
               fontSize: 12.5,
               height: 1.4,
             ),
@@ -331,14 +419,14 @@ class _NotificationsEmptyState extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A2233),
+        color: citizenCardColor(context),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: citizenBorderColor(context)),
       ),
       child: Text(
         'No complaint updates yet. Submit a report first so status changes appear here.',
         style: TextStyle(
-          color: Colors.white.withOpacity(0.72),
+          color: citizenBodyColor(context),
           height: 1.5,
         ),
       ),

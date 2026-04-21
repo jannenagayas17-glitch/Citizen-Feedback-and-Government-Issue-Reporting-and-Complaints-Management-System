@@ -1,22 +1,18 @@
 import 'package:flutter/material.dart';
 
 class CitizenNotificationsScreen extends StatelessWidget {
-  const CitizenNotificationsScreen({
-    super.key,
-    required this.reports,
-  });
+  const CitizenNotificationsScreen({super.key, required this.reports});
 
   final List<dynamic> reports;
 
   @override
   Widget build(BuildContext context) {
-    final notifications = reports
-        .map((item) => item as Map<String, dynamic>)
-        .map(_buildNotification)
-        .toList()
-      ..sort(
-        (a, b) => b.timestamp.compareTo(a.timestamp),
-      );
+    final notifications =
+        reports
+            .map((item) => item as Map<String, dynamic>)
+            .map(_buildNotification)
+            .toList()
+          ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
     return Scaffold(
       backgroundColor: const Color(0xFF0C1727),
@@ -30,127 +26,128 @@ class CitizenNotificationsScreen extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0C1727),
-              Color(0xFF1E293B),
-              Color(0xFF463327),
-            ],
+            colors: [Color(0xFF0C1727), Color(0xFF1E293B), Color(0xFF463327)],
           ),
         ),
         child: notifications.isEmpty
-          ? ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                _SummaryCard(
-                  title: 'Notifications',
-                  subtitle: 'Stay updated on your submitted reports.',
-                  countLabel: '0 updates',
-                ),
-                const SizedBox(height: 16),
-                _EmptyState(
-                  icon: Icons.notifications_off_outlined,
-                  title: 'No notifications yet',
-                  message:
-                      'When your reports are reviewed, updated, or resolved, you will see them here.',
-                ),
-              ],
-            )
-          : ListView.separated(
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.all(16),
-              itemCount: notifications.length + 1,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (context, index) {
-                if (index == 0) {
-                  final resolvedCount = notifications
-                      .where((item) => item.title == 'Issue resolved')
-                      .length;
-                  return _SummaryCard(
+            ? ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  _SummaryCard(
                     title: 'Notifications',
-                    subtitle: 'Latest updates on your submitted reports.',
-                    countLabel:
-                        '${notifications.length} updates • $resolvedCount resolved',
-                  );
-                }
-
-                final item = notifications[index - 1];
-
-                return Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.10),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: Colors.white.withOpacity(0.14)),
+                    subtitle: 'Stay updated on your submitted reports.',
+                    countLabel: '0 updates',
                   ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      CircleAvatar(
-                        radius: 22,
-                        backgroundColor: item.color.withOpacity(0.12),
-                        child: Icon(item.icon, color: item.color),
+                  const SizedBox(height: 16),
+                  _EmptyState(
+                    icon: Icons.notifications_off_outlined,
+                    title: 'No notifications yet',
+                    message:
+                        'When your reports are reviewed, updated, or resolved, you will see them here.',
+                  ),
+                ],
+              )
+            : ListView.separated(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.all(16),
+                itemCount: notifications.length + 1,
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  if (index == 0) {
+                    final resolvedCount = notifications
+                        .where((item) => item.title == 'Issue resolved')
+                        .length;
+                    return _SummaryCard(
+                      title: 'Notifications',
+                      subtitle: 'Latest updates on your submitted reports.',
+                      countLabel:
+                          '${notifications.length} updates • $resolvedCount resolved',
+                    );
+                  }
+
+                  final item = notifications[index - 1];
+
+                  return Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.14),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    item.title,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white,
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        CircleAvatar(
+                          radius: 22,
+                          backgroundColor: item.color.withValues(alpha: 0.12),
+                          child: Icon(item.icon, color: item.color),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      item.title,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.white,
+                                      ),
                                     ),
                                   ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    _timeAgo(item.timestamp),
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.52,
+                                      ),
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                item.message,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.82),
+                                  height: 1.3,
                                 ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  _timeAgo(item.timestamp),
+                              ),
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: item.color.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Text(
+                                  item.caption,
                                   style: TextStyle(
-                                    color: Colors.white.withOpacity(0.52),
+                                    color: item.color,
                                     fontSize: 11,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              item.message,
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.82),
-                                height: 1.3,
                               ),
-                            ),
-                            const SizedBox(height: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: item.color.withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: Text(
-                                item.caption,
-                                style: TextStyle(
-                                  color: item.color,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
+                      ],
+                    ),
+                  );
+                },
+              ),
       ),
     );
   }
@@ -176,7 +173,8 @@ class CitizenNotificationsScreen extends StatelessWidget {
     final status = (report['status'] ?? 'New').toString();
     final location = (report['location'] ?? report['barangay'] ?? 'No location')
         .toString();
-    final createdAt = DateTime.tryParse((report['created_at'] ?? '').toString()) ??
+    final createdAt =
+        DateTime.tryParse((report['created_at'] ?? '').toString()) ??
         DateTime.fromMillisecondsSinceEpoch(0);
 
     switch (status) {
@@ -255,9 +253,9 @@ class _SummaryCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -273,13 +271,13 @@ class _SummaryCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             subtitle,
-            style: TextStyle(color: Colors.white.withOpacity(0.72)),
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.72)),
           ),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
             decoration: BoxDecoration(
-              color: const Color(0xFF2563EB).withOpacity(0.18),
+              color: const Color(0xFF2563EB).withValues(alpha: 0.18),
               borderRadius: BorderRadius.circular(18),
             ),
             child: Text(
@@ -312,13 +310,13 @@ class _EmptyState extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Column(
         children: [
-          Icon(icon, size: 36, color: Colors.white.withOpacity(0.72)),
+          Icon(icon, size: 36, color: Colors.white.withValues(alpha: 0.72)),
           const SizedBox(height: 12),
           Text(
             title,
@@ -332,7 +330,7 @@ class _EmptyState extends StatelessWidget {
           Text(
             message,
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white.withOpacity(0.72)),
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.72)),
           ),
         ],
       ),

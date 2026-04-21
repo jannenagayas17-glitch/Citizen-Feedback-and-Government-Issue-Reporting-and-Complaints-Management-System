@@ -7,16 +7,13 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../services/auth_service.dart';
 import '../../services/google_auth_service.dart';
 import '../../utils/app_routes.dart';
+import '../../utils/app_theme_controller.dart';
 import '../../utils/token_storage.dart';
 import 'forgot_password_screen.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({
-    super.key,
-    this.authService,
-    this.googleAuthService,
-  });
+  const LoginScreen({super.key, this.authService, this.googleAuthService});
 
   final AuthService? authService;
   final GoogleAuthService? googleAuthService;
@@ -51,8 +48,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   GoogleAuthService get _resolvedGoogleAuthService =>
-      _googleAuthService ??=
-          widget.googleAuthService ?? GoogleAuthService();
+      _googleAuthService ??= widget.googleAuthService ?? GoogleAuthService();
 
   bool _containsEmoji(String value) {
     return _emojiRegex.hasMatch(value);
@@ -74,6 +70,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _login() async {
+    final themeController = AppThemeScope.of(context);
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
@@ -105,10 +102,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final data = await _authService.login(
-        email: email,
-        password: password,
-      );
+      final data = await _authService.login(email: email, password: password);
 
       final user = data['user'] as Map<String, dynamic>? ?? {};
       final role = (user['role']?.toString() ?? '').trim().toLowerCase();
@@ -123,10 +117,8 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      await TokenStorage.saveLastEmailForRole(
-        role: 'citizen',
-        email: email,
-      );
+      await TokenStorage.saveLastEmailForRole(role: 'citizen', email: email);
+      await themeController.loadForUser(user);
 
       if (!mounted) return;
 
@@ -146,6 +138,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _loginWithGoogle() async {
+    final themeController = AppThemeScope.of(context);
     setState(() => _isGoogleLoading = true);
 
     try {
@@ -188,6 +181,7 @@ class _LoginScreenState extends State<LoginScreen> {
         role: 'citizen',
         email: user.email ?? '',
       );
+      await themeController.loadForUser(backendUser);
 
       if (!mounted) return;
 
@@ -209,25 +203,21 @@ class _LoginScreenState extends State<LoginScreen> {
   void _openRegisterScreen() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const RegisterScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const RegisterScreen()),
     );
   }
 
   void _openForgotPasswordScreen() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const ForgotPasswordScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
     );
   }
 
   void _showSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -277,7 +267,8 @@ class _LoginScreenState extends State<LoginScreen> {
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
-                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
                 padding: EdgeInsets.fromLTRB(20, 16, 20, bottomInset + 16),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(24),
@@ -289,19 +280,19 @@ class _LoginScreenState extends State<LoginScreen> {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(24),
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.22),
+                          color: Colors.white.withValues(alpha: 0.22),
                         ),
                         gradient: LinearGradient(
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
-                            Colors.white.withOpacity(0.22),
-                            Colors.white.withOpacity(0.10),
+                            Colors.white.withValues(alpha: 0.22),
+                            Colors.white.withValues(alpha: 0.10),
                           ],
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.25),
+                            color: Colors.black.withValues(alpha: 0.25),
                             blurRadius: 24,
                             offset: const Offset(0, 12),
                           ),
@@ -316,7 +307,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               height: 88,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: Colors.white.withOpacity(0.16),
+                                color: Colors.white.withValues(alpha: 0.16),
                                 border: Border.all(
                                   color: const Color(0xFFD8B15A),
                                   width: 2,
@@ -348,14 +339,14 @@ class _LoginScreenState extends State<LoginScreen> {
                             'Tacloban City Citizen Feedback',
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.82),
+                              color: Colors.white.withValues(alpha: 0.82),
                               fontSize: 13,
                             ),
                           ),
                           const SizedBox(height: 20),
                           _SectionDivider(
                             label: 'SIGN IN',
-                            color: Colors.white.withOpacity(0.75),
+                            color: Colors.white.withValues(alpha: 0.75),
                           ),
                           const SizedBox(height: 18),
                           _fieldLabel('Email Address'),
@@ -386,7 +377,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               child: RichText(
                                 text: TextSpan(
                                   style: TextStyle(
-                                    color: Colors.white.withOpacity(0.68),
+                                    color: Colors.white.withValues(alpha: 0.68),
                                     fontSize: 13,
                                   ),
                                   children: const [
@@ -405,7 +396,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           const SizedBox(height: 4),
                           _SectionDivider(
                             label: 'Or continue with',
-                            color: Colors.white.withOpacity(0.62),
+                            color: Colors.white.withValues(alpha: 0.62),
                           ),
                           const SizedBox(height: 18),
                           _buildGoogleButton(),
@@ -415,13 +406,15 @@ class _LoginScreenState extends State<LoginScreen> {
                           TextButton(
                             onPressed: _openRegisterScreen,
                             style: TextButton.styleFrom(
-                              foregroundColor: Colors.white.withOpacity(0.84),
+                              foregroundColor: Colors.white.withValues(
+                                alpha: 0.84,
+                              ),
                             ),
                             child: RichText(
                               textAlign: TextAlign.center,
                               text: TextSpan(
                                 style: TextStyle(
-                                  color: Colors.white.withOpacity(0.72),
+                                  color: Colors.white.withValues(alpha: 0.72),
                                   fontSize: 14,
                                 ),
                                 children: const [
@@ -454,7 +447,7 @@ class _LoginScreenState extends State<LoginScreen> {
     return Text(
       text,
       style: TextStyle(
-        color: Colors.white.withOpacity(0.92),
+        color: Colors.white.withValues(alpha: 0.92),
         fontSize: 14,
         fontWeight: FontWeight.w500,
       ),
@@ -480,16 +473,10 @@ class _LoginScreenState extends State<LoginScreen> {
           : null,
       textInputAction: TextInputAction.next,
       style: const TextStyle(color: Colors.white),
-      decoration: _inputDecoration(
-        hintText: hintText,
-        icon: icon,
-      ).copyWith(
+      decoration: _inputDecoration(hintText: hintText, icon: icon).copyWith(
         errorText: errorText,
         errorMaxLines: 2,
-        errorStyle: const TextStyle(
-          color: Color(0xFFFFB4B4),
-          fontSize: 12,
-        ),
+        errorStyle: const TextStyle(color: Color(0xFFFFB4B4), fontSize: 12),
       ),
     );
   }
@@ -497,9 +484,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _buildPasswordField() {
     return TextField(
       controller: _passwordController,
-      inputFormatters: [
-        FilteringTextInputFormatter.deny(_emojiRegex),
-      ],
+      inputFormatters: [FilteringTextInputFormatter.deny(_emojiRegex)],
       onChanged: (_) {
         if (_passwordError != null) {
           setState(() => _passwordError = null);
@@ -510,28 +495,26 @@ class _LoginScreenState extends State<LoginScreen> {
       textInputAction: TextInputAction.done,
       onSubmitted: (_) => _isLoading ? null : _login(),
       style: const TextStyle(color: Colors.white),
-      decoration: _inputDecoration(
-        hintText: '........',
-        icon: Icons.lock_outline,
-      ).copyWith(
-        errorText: _passwordError,
-        errorMaxLines: 2,
-        errorStyle: const TextStyle(
-          color: Color(0xFFFFB4B4),
-          fontSize: 12,
-        ),
-        suffixIcon: IconButton(
-          onPressed: () {
-            setState(() => _obscurePassword = !_obscurePassword);
-          },
-          icon: Icon(
-            _obscurePassword
-                ? Icons.visibility_off_outlined
-                : Icons.visibility_outlined,
-            color: Colors.white.withOpacity(0.72),
+      decoration:
+          _inputDecoration(
+            hintText: '........',
+            icon: Icons.lock_outline,
+          ).copyWith(
+            errorText: _passwordError,
+            errorMaxLines: 2,
+            errorStyle: const TextStyle(color: Color(0xFFFFB4B4), fontSize: 12),
+            suffixIcon: IconButton(
+              onPressed: () {
+                setState(() => _obscurePassword = !_obscurePassword);
+              },
+              icon: Icon(
+                _obscurePassword
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
+                color: Colors.white.withValues(alpha: 0.72),
+              ),
+            ),
           ),
-        ),
-      ),
     );
   }
 
@@ -541,20 +524,22 @@ class _LoginScreenState extends State<LoginScreen> {
   }) {
     return InputDecoration(
       hintText: hintText,
-      hintStyle: TextStyle(
-        color: Colors.white.withOpacity(0.5),
+      hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+      prefixIcon: Icon(
+        icon,
+        color: Colors.white.withValues(alpha: 0.72),
+        size: 20,
       ),
-      prefixIcon: Icon(icon, color: Colors.white.withOpacity(0.72), size: 20),
       filled: true,
-      fillColor: Colors.white.withOpacity(0.14),
+      fillColor: Colors.white.withValues(alpha: 0.14),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.white.withOpacity(0.18)),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.white.withOpacity(0.18)),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -569,8 +554,8 @@ class _LoginScreenState extends State<LoginScreen> {
       child: OutlinedButton(
         onPressed: _isGoogleLoading ? null : _loginWithGoogle,
         style: OutlinedButton.styleFrom(
-          backgroundColor: Colors.white.withOpacity(0.14),
-          side: BorderSide(color: Colors.white.withOpacity(0.18)),
+          backgroundColor: Colors.white.withValues(alpha: 0.14),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -592,10 +577,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(width: 10),
                   const Text(
                     'Sign in with Google',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                    ),
+                    style: TextStyle(color: Colors.white, fontSize: 16),
                   ),
                 ],
               ),
@@ -626,10 +608,7 @@ class _LoginScreenState extends State<LoginScreen> {
               )
             : const Text(
                 'Login',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
       ),
     );
@@ -637,10 +616,7 @@ class _LoginScreenState extends State<LoginScreen> {
 }
 
 class _SectionDivider extends StatelessWidget {
-  const _SectionDivider({
-    required this.label,
-    required this.color,
-  });
+  const _SectionDivider({required this.label, required this.color});
 
   final String label;
   final Color color;
@@ -649,19 +625,15 @@ class _SectionDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(child: Divider(color: color.withOpacity(0.35))),
+        Expanded(child: Divider(color: color.withValues(alpha: 0.35))),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Text(
             label,
-            style: TextStyle(
-              color: color,
-              fontSize: 13,
-              letterSpacing: 0.6,
-            ),
+            style: TextStyle(color: color, fontSize: 13, letterSpacing: 0.6),
           ),
         ),
-        Expanded(child: Divider(color: color.withOpacity(0.35))),
+        Expanded(child: Divider(color: color.withValues(alpha: 0.35))),
       ],
     );
   }

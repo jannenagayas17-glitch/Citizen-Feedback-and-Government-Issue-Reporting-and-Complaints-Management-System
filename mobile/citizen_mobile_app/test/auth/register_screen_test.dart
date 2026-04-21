@@ -20,9 +20,7 @@ class _FakeCitizenAuthService extends AuthService {
     registerCalled = true;
     return {
       'token': 'fake-token',
-      'user': {
-        'role': 'citizen',
-      },
+      'user': {'role': 'citizen'},
     };
   }
 }
@@ -42,9 +40,8 @@ void main() {
       MaterialApp(
         home: RegisterScreen(authService: authService),
         routes: {
-          AppRoutes.citizenHome: (_) => const Scaffold(
-            body: Text('Citizen Home'),
-          ),
+          AppRoutes.citizenHome: (_) =>
+              const Scaffold(body: Text('Citizen Home')),
         },
       ),
     );

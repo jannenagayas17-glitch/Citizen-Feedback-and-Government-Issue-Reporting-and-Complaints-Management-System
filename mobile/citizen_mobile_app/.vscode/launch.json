@@ -2,16 +2,22 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Flutter Web (Chrome)",
+      "name": "Citizen Mobile",
       "request": "launch",
       "type": "dart",
-      "deviceId": "chrome"
+      "toolArgs": [
+        "--dart-define",
+        "API_PORT=8000"
+      ]
     },
     {
-      "name": "Flutter Web (Web Server)",
+      "name": "Citizen Mobile (Debug)",
       "request": "launch",
       "type": "dart",
-      "deviceId": "web-server"
+      "toolArgs": [
+        "--dart-define",
+        "API_PORT=8000"
+      ]
     }
   ]
 }

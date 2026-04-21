@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/auth_service.dart';
+import '../../utils/app_theme_controller.dart';
 import '../../utils/app_routes.dart';
 import 'my_complaints_screen.dart';
 
@@ -62,10 +63,7 @@ class _CitizenProfileValidators {
 }
 
 class CitizenProfileScreen extends StatefulWidget {
-  const CitizenProfileScreen({
-    super.key,
-    required this.user,
-  });
+  const CitizenProfileScreen({super.key, required this.user});
 
   final Map<String, dynamic> user;
 
@@ -100,11 +98,7 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.toString().replaceFirst('Exception: ', ''),
-          ),
-        ),
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
       );
     } finally {
       if (mounted) {
@@ -141,7 +135,9 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
       if (!mounted) return;
 
       setState(() {
-        _user = Map<String, dynamic>.from(response['user'] as Map<String, dynamic>);
+        _user = Map<String, dynamic>.from(
+          response['user'] as Map<String, dynamic>,
+        );
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -161,6 +157,7 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = _CitizenProfileColors.of(context);
     final name = (_user['name'] ?? 'Citizen').toString();
     final email = (_user['email'] ?? 'No email').toString();
     final mobile = (_user['mobile_number'] ?? 'No mobile number').toString();
@@ -168,101 +165,102 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
     final bottomSafeArea = MediaQuery.of(context).padding.bottom;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0C1727),
+      backgroundColor: colors.background,
       appBar: AppBar(
         title: const Text('Profile'),
-        backgroundColor: const Color(0xFF0C1727),
-        foregroundColor: Colors.white,
+        backgroundColor: colors.background,
+        foregroundColor: colors.text,
       ),
       body: DecoratedBox(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0C1727),
-              Color(0xFF1E293B),
-              Color(0xFF463327),
-            ],
+            colors: colors.gradient,
           ),
         ),
         child: ListView(
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: EdgeInsets.fromLTRB(16, 16, 16, bottomSafeArea + 24),
-        children: [
-          _buildHeroCard(name, email, role),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: _ProfileStatCard(
-                  icon: Icons.badge_outlined,
-                  label: 'Role',
-                  value: _prettyRole(role),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _ProfileStatCard(
-                  icon: Icons.call_outlined,
-                  label: 'Mobile',
-                  value: mobile == 'No mobile number' ? 'Not set' : mobile,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _buildActionCard(
-            child: Column(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: EdgeInsets.fromLTRB(16, 16, 16, bottomSafeArea + 24),
+          children: [
+            _buildHeroCard(name, email, role),
+            const SizedBox(height: 14),
+            Row(
               children: [
-                _ActionTile(
-                  icon: Icons.edit_outlined,
-                  title: 'Edit profile',
-                  subtitle: 'Update your name, email, and mobile number',
-                  trailing: _isSavingProfile
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.chevron_right, color: Colors.white),
-                  onTap: _isSavingProfile ? null : _openEditProfile,
+                Expanded(
+                  child: _ProfileStatCard(
+                    icon: Icons.badge_outlined,
+                    label: 'Role',
+                    value: _prettyRole(role),
+                  ),
                 ),
-                Divider(height: 1, color: Colors.white.withOpacity(0.10)),
-                _ActionTile(
-                  icon: Icons.description_outlined,
-                  title: 'My reports',
-                  subtitle: 'View all your submitted complaints',
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const MyComplaintsScreen(),
-                      ),
-                    );
-                  },
-                ),
-                Divider(height: 1, color: Colors.white.withOpacity(0.10)),
-                _ActionTile(
-                  icon: Icons.logout,
-                  title: 'Logout',
-                  subtitle: 'Sign out of this citizen account',
-                  iconColor: const Color(0xFFFF7B7B),
-                  titleColor: const Color(0xFFFF7B7B),
-                  trailing: _isLoggingOut
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.chevron_right, color: Colors.white),
-                  onTap: _isLoggingOut ? null : _logout,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _ProfileStatCard(
+                    icon: Icons.call_outlined,
+                    label: 'Mobile',
+                    value: mobile == 'No mobile number' ? 'Not set' : mobile,
+                  ),
                 ),
               ],
             ),
-          ),
-        ],
-      ),
+            const SizedBox(height: 14),
+            _buildActionCard(
+              child: Column(
+                children: [
+                  _ActionTile(
+                    icon: Icons.edit_outlined,
+                    title: 'Edit profile',
+                    subtitle: 'Update your name, email, and mobile number',
+                    colors: colors,
+                    trailing: _isSavingProfile
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(Icons.chevron_right, color: colors.text),
+                    onTap: _isSavingProfile ? null : _openEditProfile,
+                  ),
+                  Divider(height: 1, color: colors.divider),
+                  _appearanceTile(colors),
+                  Divider(height: 1, color: colors.divider),
+                  _ActionTile(
+                    icon: Icons.description_outlined,
+                    title: 'My reports',
+                    subtitle: 'View all your submitted complaints',
+                    colors: colors,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const MyComplaintsScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  Divider(height: 1, color: colors.divider),
+                  _ActionTile(
+                    icon: Icons.logout,
+                    title: 'Logout',
+                    subtitle: 'Sign out of this citizen account',
+                    iconColor: const Color(0xFFFF7B7B),
+                    titleColor: const Color(0xFFFF7B7B),
+                    colors: colors,
+                    trailing: _isLoggingOut
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(Icons.chevron_right, color: colors.text),
+                    onTap: _isLoggingOut ? null : _logout,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -272,25 +270,28 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
     return role
         .replaceAll('_', ' ')
         .split(' ')
-        .map((part) => part.isEmpty
-            ? part
-            : '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}')
+        .map(
+          (part) => part.isEmpty
+              ? part
+              : '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}',
+        )
         .join(' ');
   }
 
   Widget _buildHeroCard(String name, String email, String role) {
+    final colors = _CitizenProfileColors.of(context);
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: colors.card,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: colors.border),
       ),
       child: Column(
         children: [
           CircleAvatar(
             radius: 38,
-            backgroundColor: const Color(0xFF2563EB).withOpacity(0.16),
+            backgroundColor: const Color(0xFF2563EB).withValues(alpha: 0.16),
             child: Text(
               name.isEmpty ? 'C' : name[0].toUpperCase(),
               style: const TextStyle(
@@ -304,25 +305,27 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
           Text(
             name,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 21,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
+              color: colors.text,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             email,
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white.withOpacity(0.72)),
+            style: TextStyle(color: colors.mutedText),
           ),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
             decoration: BoxDecoration(
-              color: const Color(0xFF2563EB).withOpacity(0.18),
+              color: const Color(0xFF2563EB).withValues(alpha: 0.18),
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: const Color(0xFF2563EB).withOpacity(0.30)),
+              border: Border.all(
+                color: const Color(0xFF2563EB).withValues(alpha: 0.30),
+              ),
             ),
             child: Text(
               _prettyRole(role),
@@ -338,16 +341,89 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
   }
 
   Widget _buildActionCard({required Widget child}) {
+    final colors = _CitizenProfileColors.of(context);
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: colors.card,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: colors.border),
       ),
       child: child,
     );
   }
 
+  Widget _appearanceTile(_CitizenProfileColors colors) {
+    final themeController = AppThemeScope.of(context);
+
+    return AnimatedBuilder(
+      animation: themeController,
+      builder: (context, _) {
+        final isDark = themeController.isDarkMode;
+        return _ActionTile(
+          icon: isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+          title: 'Appearance',
+          subtitle: isDark
+              ? 'Dark mode is active for this account'
+              : 'Light mode is active for this account',
+          colors: colors,
+          trailing: Switch(
+            value: isDark,
+            onChanged: themeController.setDarkMode,
+          ),
+          onTap: () => themeController.setDarkMode(!isDark),
+        );
+      },
+    );
+  }
+}
+
+class _CitizenProfileColors {
+  const _CitizenProfileColors({
+    required this.background,
+    required this.gradient,
+    required this.card,
+    required this.border,
+    required this.text,
+    required this.mutedText,
+    required this.divider,
+  });
+
+  final Color background;
+  final List<Color> gradient;
+  final Color card;
+  final Color border;
+  final Color text;
+  final Color mutedText;
+  final Color divider;
+
+  static _CitizenProfileColors of(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (isDark) {
+      return _CitizenProfileColors(
+        background: const Color(0xFF0C1727),
+        gradient: const [
+          Color(0xFF0C1727),
+          Color(0xFF1E293B),
+          Color(0xFF463327),
+        ],
+        card: Colors.white.withValues(alpha: 0.10),
+        border: Colors.white.withValues(alpha: 0.14),
+        text: Colors.white,
+        mutedText: Colors.white.withValues(alpha: 0.72),
+        divider: Colors.white.withValues(alpha: 0.10),
+      );
+    }
+
+    return _CitizenProfileColors(
+      background: const Color(0xFFF5F8FC),
+      gradient: const [Color(0xFFF5F8FC), Color(0xFFEAF1FB), Color(0xFFDDEBFA)],
+      card: Colors.white,
+      border: const Color(0xFFD6E2F2),
+      text: const Color(0xFF172033),
+      mutedText: const Color(0xFF60708A),
+      divider: const Color(0xFFE1E9F5),
+    );
+  }
 }
 
 class _EditCitizenProfileSheet extends StatefulWidget {
@@ -362,7 +438,8 @@ class _EditCitizenProfileSheet extends StatefulWidget {
   final String initialMobile;
 
   @override
-  State<_EditCitizenProfileSheet> createState() => _EditCitizenProfileSheetState();
+  State<_EditCitizenProfileSheet> createState() =>
+      _EditCitizenProfileSheetState();
 }
 
 class _EditCitizenProfileSheetState extends State<_EditCitizenProfileSheet> {
@@ -393,8 +470,12 @@ class _EditCitizenProfileSheetState extends State<_EditCitizenProfileSheet> {
   void _submit() {
     setState(() {
       _nameError = _CitizenProfileValidators.validateName(_nameController.text);
-      _emailError = _CitizenProfileValidators.validateEmail(_emailController.text);
-      _mobileError = _CitizenProfileValidators.validateMobile(_mobileController.text);
+      _emailError = _CitizenProfileValidators.validateEmail(
+        _emailController.text,
+      );
+      _mobileError = _CitizenProfileValidators.validateMobile(
+        _mobileController.text,
+      );
     });
 
     if (_nameError != null || _emailError != null || _mobileError != null) {
@@ -414,13 +495,18 @@ class _EditCitizenProfileSheetState extends State<_EditCitizenProfileSheet> {
     final bottomSafeArea = MediaQuery.of(context).padding.bottom;
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, 16, 16, bottomInset + bottomSafeArea + 16),
+      padding: EdgeInsets.fromLTRB(
+        16,
+        16,
+        16,
+        bottomInset + bottomSafeArea + 16,
+      ),
       child: Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           color: const Color(0xFF121B31),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white.withOpacity(0.14)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -442,7 +528,9 @@ class _EditCitizenProfileSheetState extends State<_EditCitizenProfileSheet> {
               style: const TextStyle(color: Colors.white),
               cursorColor: Colors.white,
               inputFormatters: [
-                FilteringTextInputFormatter.deny(_CitizenProfileValidators.emojiRegex),
+                FilteringTextInputFormatter.deny(
+                  _CitizenProfileValidators.emojiRegex,
+                ),
               ],
               onChanged: (_) {
                 if (_nameError != null) {
@@ -463,7 +551,9 @@ class _EditCitizenProfileSheetState extends State<_EditCitizenProfileSheet> {
               style: const TextStyle(color: Colors.white),
               cursorColor: Colors.white,
               inputFormatters: [
-                FilteringTextInputFormatter.deny(_CitizenProfileValidators.emojiRegex),
+                FilteringTextInputFormatter.deny(
+                  _CitizenProfileValidators.emojiRegex,
+                ),
               ],
               onChanged: (_) {
                 if (_emailError != null) {
@@ -526,7 +616,7 @@ class _EditCitizenProfileSheetState extends State<_EditCitizenProfileSheet> {
     return Text(
       text,
       style: TextStyle(
-        color: Colors.white.withOpacity(0.92),
+        color: Colors.white.withValues(alpha: 0.92),
         fontSize: 14,
         fontWeight: FontWeight.w600,
       ),
@@ -539,16 +629,16 @@ class _EditCitizenProfileSheetState extends State<_EditCitizenProfileSheet> {
   }) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: TextStyle(color: Colors.white.withOpacity(0.45)),
+      hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.45)),
       filled: true,
-      fillColor: Colors.white.withOpacity(0.10),
+      fillColor: Colors.white.withValues(alpha: 0.10),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.white.withOpacity(0.16)),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.16)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.white.withOpacity(0.16)),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.16)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
@@ -556,10 +646,7 @@ class _EditCitizenProfileSheetState extends State<_EditCitizenProfileSheet> {
       ),
       errorText: errorText,
       errorMaxLines: 2,
-      errorStyle: const TextStyle(
-        color: Color(0xFFFFB4B4),
-        fontSize: 12,
-      ),
+      errorStyle: const TextStyle(color: Color(0xFFFFB4B4), fontSize: 12),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
         borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.2),
@@ -585,34 +672,26 @@ class _ProfileStatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = _CitizenProfileColors.of(context);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: colors.card,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: colors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(icon, color: const Color(0xFF9DBEFF)),
           const SizedBox(height: 10),
-          Text(
-            label,
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.62),
-              fontSize: 12,
-            ),
-          ),
+          Text(label, style: TextStyle(color: colors.mutedText, fontSize: 12)),
           const SizedBox(height: 4),
           Text(
             value,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
+            style: TextStyle(color: colors.text, fontWeight: FontWeight.w700),
           ),
         ],
       ),
@@ -621,15 +700,17 @@ class _ProfileStatCard extends StatelessWidget {
 }
 
 class _ActionTile extends StatelessWidget {
-  const _ActionTile({
+  _ActionTile({
     required this.icon,
     required this.title,
     required this.subtitle,
     required this.onTap,
-    this.iconColor = Colors.white,
-    this.titleColor = Colors.white,
+    required this.colors,
+    Color? iconColor,
+    Color? titleColor,
     this.trailing,
-  });
+  }) : iconColor = iconColor ?? colors.text,
+       titleColor = titleColor ?? colors.text;
 
   final IconData icon;
   final String title;
@@ -637,6 +718,7 @@ class _ActionTile extends StatelessWidget {
   final VoidCallback? onTap;
   final Color iconColor;
   final Color titleColor;
+  final _CitizenProfileColors colors;
   final Widget? trailing;
 
   @override
@@ -646,16 +728,10 @@ class _ActionTile extends StatelessWidget {
       leading: Icon(icon, color: iconColor),
       title: Text(
         title,
-        style: TextStyle(
-          color: titleColor,
-          fontWeight: FontWeight.w700,
-        ),
+        style: TextStyle(color: titleColor, fontWeight: FontWeight.w700),
       ),
-      subtitle: Text(
-        subtitle,
-        style: TextStyle(color: Colors.white.withOpacity(0.72)),
-      ),
-      trailing: trailing ?? const Icon(Icons.chevron_right, color: Colors.white),
+      subtitle: Text(subtitle, style: TextStyle(color: colors.mutedText)),
+      trailing: trailing ?? Icon(Icons.chevron_right, color: colors.text),
       onTap: onTap,
     );
   }

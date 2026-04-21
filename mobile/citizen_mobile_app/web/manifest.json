@@ -1,11 +1,11 @@
 {
-    "name": "Tacloban City Engineering Office",
-    "short_name": "Tacloban City Engineering Office",
+    "name": "Citizen Mobile App",
+    "short_name": "Citizen App",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Citizen Mobile App",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

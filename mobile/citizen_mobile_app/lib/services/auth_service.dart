@@ -4,11 +4,19 @@ import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../utils/token_storage.dart';
 
+class AuthSessionExpiredException implements Exception {
+  const AuthSessionExpiredException([
+    this.message = 'Your session expired. Please log in again.',
+  ]);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class AuthService {
-  String _extractErrorMessage(
-    Map<String, dynamic> data,
-    String fallback,
-  ) {
+  String _extractErrorMessage(Map<String, dynamic> data, String fallback) {
     final errors = data['errors'];
     if (errors is Map<String, dynamic>) {
       for (final value in errors.values) {
@@ -53,32 +61,35 @@ class AuthService {
     required String email,
     required String password,
   }) async {
-    final response = await http.post(
-      _buildUri('/auth/login'),
-      headers: await _headers(),
-      body: jsonEncode({
-        'email': email,
-        'password': password,
-      }),
-    );
+    try {
+      final response = await http.post(
+        _buildUri('/auth/login'),
+        headers: await _headers(),
+        body: jsonEncode({'email': email, 'password': password}),
+      );
 
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
 
-    if (response.statusCode == 200) {
-      final token = data['token']?.toString();
-      final user = data['user'] as Map<String, dynamic>?;
+      if (response.statusCode == 200) {
+        final token = data['token']?.toString();
+        final user = data['user'] as Map<String, dynamic>?;
 
-      if (token == null || user == null) {
-        throw Exception('Invalid login response from server');
+        if (token == null || user == null) {
+          throw Exception('Invalid login response from server');
+        }
+
+        await TokenStorage.saveToken(token);
+        await TokenStorage.saveRole(user['role']?.toString() ?? 'citizen');
+
+        return data;
       }
 
-      await TokenStorage.saveToken(token);
-      await TokenStorage.saveRole(user['role']?.toString() ?? 'citizen');
-
-      return data;
+      throw Exception(_extractErrorMessage(data, 'Login failed'));
+    } on http.ClientException {
+      throw Exception(
+        'Unable to reach the login server. Start Laravel on http://127.0.0.1:8000 and try again.',
+      );
     }
-
-    throw Exception(_extractErrorMessage(data, 'Login failed'));
   }
 
   Future<Map<String, dynamic>> loginWithGoogle({
@@ -90,11 +101,7 @@ class AuthService {
       final response = await http.post(
         _buildUri('/auth/google-login'),
         headers: await _headers(),
-        body: jsonEncode({
-          'id_token': idToken,
-          if (email != null) 'email': email,
-          if (name != null) 'name': name,
-        }),
+        body: jsonEncode({'id_token': idToken, 'email': ?email, 'name': ?name}),
       );
 
       final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -128,36 +135,42 @@ class AuthService {
     required String password,
     required String passwordConfirmation,
   }) async {
-    final response = await http.post(
-      _buildUri('/auth/register'),
-      headers: await _headers(),
-      body: jsonEncode({
-        'name': name,
-        'email': email,
-        if (mobileNumber != null && mobileNumber.isNotEmpty)
-          'mobile_number': mobileNumber,
-        'password': password,
-        'password_confirmation': passwordConfirmation,
-      }),
-    );
+    try {
+      final response = await http.post(
+        _buildUri('/auth/register'),
+        headers: await _headers(),
+        body: jsonEncode({
+          'name': name,
+          'email': email,
+          if (mobileNumber != null && mobileNumber.isNotEmpty)
+            'mobile_number': mobileNumber,
+          'password': password,
+          'password_confirmation': passwordConfirmation,
+        }),
+      );
 
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
 
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      final token = data['token']?.toString();
-      final user = data['user'] as Map<String, dynamic>?;
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final token = data['token']?.toString();
+        final user = data['user'] as Map<String, dynamic>?;
 
-      if (token == null || user == null) {
-        throw Exception('Invalid register response from server');
+        if (token == null || user == null) {
+          throw Exception('Invalid register response from server');
+        }
+
+        await TokenStorage.saveToken(token);
+        await TokenStorage.saveRole(user['role']?.toString() ?? 'citizen');
+
+        return data;
       }
 
-      await TokenStorage.saveToken(token);
-      await TokenStorage.saveRole(user['role']?.toString() ?? 'citizen');
-
-      return data;
+      throw Exception(_extractErrorMessage(data, 'Registration failed'));
+    } on http.ClientException {
+      throw Exception(
+        'Unable to reach the registration server. Start Laravel on http://localhost:8000 and try again.',
+      );
     }
-
-    throw Exception(_extractErrorMessage(data, 'Registration failed'));
   }
 
   Future<Map<String, dynamic>> requestGovernmentAccount({
@@ -206,15 +219,11 @@ class AuthService {
     );
   }
 
-  Future<Map<String, dynamic>> forgotPassword({
-    required String email,
-  }) async {
+  Future<Map<String, dynamic>> forgotPassword({required String email}) async {
     final response = await http.post(
       _buildUri('/forgot-password'),
       headers: await _headers(),
-      body: jsonEncode({
-        'email': email,
-      }),
+      body: jsonEncode({'email': email}),
     );
 
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -231,24 +240,43 @@ class AuthService {
       }
     }
 
-    throw Exception(
-      data['message']?.toString() ?? 'Failed to send reset link',
-    );
+    throw Exception(data['message']?.toString() ?? 'Failed to send reset link');
   }
 
   Future<Map<String, dynamic>> getCurrentUser() async {
-    final response = await http.get(
-      _buildUri('/user'),
-      headers: await _headers(authRequired: true),
-    );
+    try {
+      final response = await http.get(
+        _buildUri('/user'),
+        headers: await _headers(authRequired: true),
+      );
 
-    final data = jsonDecode(response.body);
+      final data = jsonDecode(response.body);
 
-    if (response.statusCode == 200) {
-      return data as Map<String, dynamic>;
+      if (response.statusCode == 200 && data is Map<String, dynamic>) {
+        return data;
+      }
+
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        await TokenStorage.clearAll();
+        throw const AuthSessionExpiredException();
+      }
+
+      if (data is Map<String, dynamic>) {
+        throw Exception(_extractErrorMessage(data, 'Failed to fetch user'));
+      }
+
+      throw Exception('Failed to fetch user');
+    } on AuthSessionExpiredException {
+      rethrow;
+    } on http.ClientException {
+      throw Exception(
+        'Unable to reach the server. Start Laravel on http://127.0.0.1:8000 and try again.',
+      );
+    } on FormatException {
+      throw Exception(
+        'The server returned an invalid response. Please restart the backend and try again.',
+      );
     }
-
-    throw Exception('Failed to fetch user');
   }
 
   Future<Map<String, dynamic>> updateProfile({
@@ -274,11 +302,12 @@ class AuthService {
 
     final errors = data['errors'];
     if (errors is Map<String, dynamic>) {
-      final firstEntry = errors.entries.cast<MapEntry<String, dynamic>?>().firstWhere(
-            (entry) => entry != null,
-            orElse: () => null,
-          );
-      if (firstEntry != null && firstEntry.value is List && (firstEntry.value as List).isNotEmpty) {
+      final firstEntry = errors.entries
+          .cast<MapEntry<String, dynamic>?>()
+          .firstWhere((entry) => entry != null, orElse: () => null);
+      if (firstEntry != null &&
+          firstEntry.value is List &&
+          (firstEntry.value as List).isNotEmpty) {
         throw Exception((firstEntry.value as List).first.toString());
       }
     }

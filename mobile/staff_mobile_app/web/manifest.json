@@ -1,6 +1,6 @@
 {
-    "name": "City Engineering Portal",
-    "short_name": "City Engineering Portal",
+    "name": "Admin Portal",
+    "short_name": "Admin Portal",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

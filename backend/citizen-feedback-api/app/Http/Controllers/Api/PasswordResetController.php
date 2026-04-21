@@ -33,7 +33,7 @@ class PasswordResetController extends Controller
     public function sendResetLink(Request $request)
     {
         $request->validate([
-            'email' => ['required', 'email', 'not_regex:' . self::EMOJI_REGEX],
+            'email' => ['required', 'email', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/', 'not_regex:' . self::EMOJI_REGEX],
         ], [
             'email.not_regex' => 'Emoji characters are not allowed.',
         ]);
@@ -89,7 +89,7 @@ class PasswordResetController extends Controller
     {
         $request->validate([
             'token' => 'required',
-            'email' => ['required', 'email', 'not_regex:' . self::EMOJI_REGEX],
+            'email' => ['required', 'email', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/', 'not_regex:' . self::EMOJI_REGEX],
             'password' => 'required|min:8|confirmed',
         ], [
             'email.not_regex' => 'Emoji characters are not allowed.',

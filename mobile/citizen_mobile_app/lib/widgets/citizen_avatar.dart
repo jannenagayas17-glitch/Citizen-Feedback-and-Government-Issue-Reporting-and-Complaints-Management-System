@@ -32,7 +32,9 @@ class CitizenAvatar extends StatelessWidget {
       builder: (context, snapshot) {
         final avatarBase64 = snapshot.data;
         final imageBytes = _decodeImageBytes(avatarBase64);
-        final initial = name.trim().isEmpty ? 'C' : name.trim()[0].toUpperCase();
+        final initial = name.trim().isEmpty
+            ? 'C'
+            : name.trim()[0].toUpperCase();
 
         return Container(
           width: size,
@@ -43,10 +45,7 @@ class CitizenAvatar extends StatelessWidget {
             color: backgroundColor,
             border: borderColor == null
                 ? null
-                : Border.all(
-                    color: borderColor!,
-                    width: borderWidth,
-                  ),
+                : Border.all(color: borderColor!, width: borderWidth),
             image: imageBytes == null
                 ? null
                 : DecorationImage(

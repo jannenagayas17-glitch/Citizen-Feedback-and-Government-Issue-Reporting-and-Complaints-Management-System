@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
+import '../../services/citizen_data_cache.dart';
 import '../../services/report_feedback_service.dart';
-import '../../services/report_service.dart';
+import '../../utils/citizen_theme_colors.dart';
+import '../../widgets/citizen_bottom_nav.dart';
+import 'citizen_home_screen.dart';
+import 'citizen_notifications_screen.dart';
+import 'citizen_profile_screen.dart';
+import 'submit_complaint_screen.dart';
 
 class MyComplaintsScreen extends StatefulWidget {
   const MyComplaintsScreen({super.key});
@@ -10,31 +16,102 @@ class MyComplaintsScreen extends StatefulWidget {
 }
 
 class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
-  final ReportService _reportService = ReportService();
   late Future<List<dynamic>> _reportsFuture;
+  final Map<int, Future<Map<String, dynamic>>> _detailFutures = {};
+  int? _selectedReportId;
 
   @override
   void initState() {
     super.initState();
-    _reportsFuture = _reportService.getReports();
+    _reportsFuture = CitizenDataCache.getReports();
   }
 
   Future<void> _refresh() async {
-    final future = _reportService.getReports();
+    _detailFutures.clear();
+    final future = CitizenDataCache.getReports(refresh: true);
     setState(() {
       _reportsFuture = future;
     });
     await future;
   }
 
+  void _syncSelectedReport(List<dynamic> reports) {
+    if (reports.isEmpty) {
+      _selectedReportId = null;
+      return;
+    }
+
+    final hasSelected = reports.any((item) {
+      final report = item as Map<String, dynamic>;
+      return _extractReportId(report) == _selectedReportId;
+    });
+
+    if (!hasSelected) {
+      _selectedReportId = _extractReportId(
+        reports.first as Map<String, dynamic>,
+      );
+    }
+  }
+
+  int? _extractReportId(Map<String, dynamic> report) {
+    final rawId = report['id'];
+    return rawId is int ? rawId : int.tryParse('$rawId');
+  }
+
+  Future<void> _openHome() async {
+    await Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const CitizenHomeScreen()),
+    );
+  }
+
+  Future<void> _openAlerts() async {
+    await Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const CitizenNotificationsScreen()),
+    );
+  }
+
+  Future<void> _openProfile() async {
+    final user = await CitizenDataCache.getUser();
+    if (!mounted) return;
+    await Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => CitizenProfileScreen(user: user)),
+    );
+  }
+
+  Future<void> _openSubmit() async {
+    final created = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SubmitComplaintScreen()),
+    );
+
+    if (!mounted) return;
+    if (created != null) {
+      if (created is Map<String, dynamic>) {
+        CitizenDataCache.prependReport(created);
+      } else {
+        CitizenDataCache.invalidateReports();
+      }
+      setState(() {
+        _reportsFuture = CitizenDataCache.getReports();
+      });
+      CitizenDataCache.getReports(refresh: true).then((reports) {
+        if (!mounted) return;
+        setState(() => _reportsFuture = Future.value(reports));
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF101826),
+      backgroundColor: citizenScaffoldColor(context),
       appBar: AppBar(
         title: const Text('My Reports'),
-        backgroundColor: const Color(0xFF101826),
-        foregroundColor: Colors.white,
+        backgroundColor: citizenScaffoldColor(context),
+        foregroundColor: citizenTitleColor(context),
         elevation: 0,
       ),
       body: RefreshIndicator(
@@ -43,7 +120,23 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
           future: _reportsFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator());
+              return ListView(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                children: List.generate(
+                  3,
+                  (_) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Container(
+                      height: 96,
+                      decoration: BoxDecoration(
+                        color: citizenCardColor(context),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: citizenBorderColor(context)),
+                      ),
+                    ),
+                  ),
+                ),
+              );
             }
 
             if (snapshot.hasError) {
@@ -52,32 +145,34 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
                 children: [
                   Text(
                     snapshot.error.toString().replaceFirst('Exception: ', ''),
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(color: citizenTitleColor(context)),
                   ),
                 ],
               );
             }
 
             final reports = snapshot.data ?? const [];
+            _syncSelectedReport(reports);
             if (reports.isEmpty) {
               return ListView(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-                children: const [
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                children: [
                   _EmptySummaryCard(),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   _SectionCard(
                     title: 'Status Timeline',
                     subtitle: 'Report ID: Awaiting report',
                     child: _EmptyTimeline(),
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   _SectionCard(
                     title: 'Admin Remarks',
                     child: _EmptyMessage(
-                      message: 'Submit your first complaint to receive official updates and remarks here.',
+                      message:
+                          'Submit your first complaint to receive official updates and remarks here.',
                     ),
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   _SectionCard(
                     title: 'Assigned Staff',
                     child: _EmptyAssignedStaff(),
@@ -86,27 +181,37 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
               );
             }
 
-            final latestReport = reports.first as Map<String, dynamic>;
-            final rawId = latestReport['id'];
-            final reportId = rawId is int ? rawId : int.tryParse('$rawId');
+            final selectedReport = reports
+                .cast<Map<String, dynamic>>()
+                .firstWhere(
+                  (report) => _extractReportId(report) == _selectedReportId,
+                  orElse: () => reports.first as Map<String, dynamic>,
+                );
+            final reportId = _extractReportId(selectedReport);
 
             if (reportId == null) {
               return ListView(
                 padding: const EdgeInsets.all(24),
-                children: const [
+                children: [
                   Text(
                     'Unable to load the selected report.',
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(color: citizenTitleColor(context)),
                   ),
                 ],
               );
             }
 
             return FutureBuilder<Map<String, dynamic>>(
-              future: _reportService.getReportDetail(reportId),
+              future: _detailFutures.putIfAbsent(
+                reportId,
+                () => CitizenDataCache.getReportDetail(reportId),
+              ),
               builder: (context, detailSnapshot) {
                 if (detailSnapshot.connectionState != ConnectionState.done) {
-                  return const Center(child: CircularProgressIndicator());
+                  return _buildDetailLoadingState(
+                    reports.cast<Map<String, dynamic>>(),
+                    reportId,
+                  );
                 }
 
                 if (detailSnapshot.hasError) {
@@ -114,20 +219,28 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
                     padding: const EdgeInsets.all(24),
                     children: [
                       Text(
-                        detailSnapshot.error.toString().replaceFirst('Exception: ', ''),
-                        style: const TextStyle(color: Colors.white),
+                        detailSnapshot.error.toString().replaceFirst(
+                          'Exception: ',
+                          '',
+                        ),
+                        style: TextStyle(color: citizenTitleColor(context)),
                       ),
                     ],
                   );
                 }
 
-                final report = detailSnapshot.data ?? latestReport;
+                final report = detailSnapshot.data ?? selectedReport;
                 final title = (report['title'] ?? 'Untitled report').toString();
-                final location = (report['location'] ?? 'No location').toString();
+                final location = (report['location'] ?? 'No location')
+                    .toString();
                 final rawStatus = (report['status'] ?? 'New').toString();
                 final status = _normalizedStatus(rawStatus);
-                final createdAt = DateTime.tryParse((report['created_at'] ?? '').toString());
-                final trackingId = ReportFeedbackService.buildTrackingId(reportId);
+                final createdAt = DateTime.tryParse(
+                  (report['created_at'] ?? '').toString(),
+                );
+                final trackingId = ReportFeedbackService.buildTrackingId(
+                  reportId,
+                );
                 final adminResponses =
                     (report['admin_responses'] as List<dynamic>? ??
                             report['adminResponses'] as List<dynamic>? ??
@@ -138,17 +251,47 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
                             report['statusHistories'] as List<dynamic>? ??
                             const [])
                         .cast<dynamic>();
-                final assignedStaff = _resolveAssignedStaff(adminResponses, statusHistories);
-                final assignedRole = _resolveAssignedRole(adminResponses, statusHistories);
+                final assignedStaff = _resolveAssignedStaff(
+                  adminResponses,
+                  statusHistories,
+                );
+                final assignedRole = _resolveAssignedRole(
+                  adminResponses,
+                  statusHistories,
+                );
                 final adminRemark = _resolveAdminRemark(adminResponses, status);
 
                 return ListView(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                   children: [
+                    Text(
+                      'Submitted Reports',
+                      style: TextStyle(
+                        color: citizenTitleColor(context),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 18,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ...reports.cast<Map<String, dynamic>>().map(
+                      (item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _ReportSelectorCard(
+                          report: item,
+                          selected: _extractReportId(item) == reportId,
+                          onTap: () {
+                            final nextId = _extractReportId(item);
+                            if (nextId == null) return;
+                            setState(() => _selectedReportId = nextId);
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
                     _SummaryCard(
                       title: title,
                       subtitle:
-                          '${_compactLocation(location)} · Submitted ${_formatDate(createdAt)}',
+                          '${_compactLocation(location)} - Submitted ${_formatDate(createdAt)}',
                       status: status,
                       icon: _reportIcon(report),
                     ),
@@ -166,7 +309,7 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
                       child: Text(
                         adminRemark,
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.82),
+                          color: citizenBodyColor(context),
                           height: 1.45,
                         ),
                       ),
@@ -182,8 +325,8 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
                               children: [
                                 Text(
                                   assignedStaff,
-                                  style: const TextStyle(
-                                    color: Colors.white,
+                                  style: TextStyle(
+                                    color: citizenTitleColor(context),
                                     fontWeight: FontWeight.w700,
                                     fontSize: 15,
                                   ),
@@ -192,7 +335,7 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
                                 Text(
                                   assignedRole,
                                   style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.62),
+                                    color: citizenBodyColor(context),
                                     fontSize: 12,
                                   ),
                                 ),
@@ -222,6 +365,24 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
           },
         ),
       ),
+      bottomNavigationBar: CitizenBottomNav(
+        currentIndex: 1,
+        onHomeTap: _openHome,
+        onReportsTap: () {},
+        onAlertsTap: _openAlerts,
+        onProfileTap: _openProfile,
+      ),
+      floatingActionButton: SizedBox(
+        width: 62,
+        height: 62,
+        child: FloatingActionButton(
+          shape: const CircleBorder(),
+          backgroundColor: const Color(0xFF3B82F6),
+          onPressed: _openSubmit,
+          child: const Icon(Icons.add, color: Colors.white, size: 28),
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
     );
   }
 
@@ -235,9 +396,14 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
       ),
       _TimelineEntry(
         title: 'Validated',
-        caption: status == 'Submitted' ? 'Awaiting...' : _nextPhaseCaption(createdAt, 1),
+        caption: status == 'Submitted'
+            ? 'Awaiting...'
+            : _nextPhaseCaption(createdAt, 1),
         active: status == 'Under Review',
-        completed: status == 'Under Review' || status == 'In Progress' || status == 'Resolved',
+        completed:
+            status == 'Under Review' ||
+            status == 'In Progress' ||
+            status == 'Resolved',
       ),
       _TimelineEntry(
         title: 'In Progress',
@@ -249,7 +415,9 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
       ),
       _TimelineEntry(
         title: 'Resolved',
-        caption: status == 'Resolved' ? _nextPhaseCaption(createdAt, 3) : 'Awaiting...',
+        caption: status == 'Resolved'
+            ? _nextPhaseCaption(createdAt, 3)
+            : 'Awaiting...',
         active: status == 'Resolved',
         completed: status == 'Resolved',
         isLast: true,
@@ -280,7 +448,10 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
     }
   }
 
-  String _resolveAssignedStaff(List<dynamic> adminResponses, List<dynamic> statusHistories) {
+  String _resolveAssignedStaff(
+    List<dynamic> adminResponses,
+    List<dynamic> statusHistories,
+  ) {
     if (adminResponses.isNotEmpty) {
       final response = adminResponses.first as Map<String, dynamic>;
       final user = response['user'] as Map<String, dynamic>?;
@@ -302,11 +473,16 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
     return 'Awaiting assignment';
   }
 
-  String _resolveAssignedRole(List<dynamic> adminResponses, List<dynamic> statusHistories) {
+  String _resolveAssignedRole(
+    List<dynamic> adminResponses,
+    List<dynamic> statusHistories,
+  ) {
     if (adminResponses.isNotEmpty) {
       final response = adminResponses.first as Map<String, dynamic>;
       final user = response['user'] as Map<String, dynamic>?;
-      final role = (user?['job_title'] ?? user?['role'] ?? '').toString().trim();
+      final role = (user?['job_title'] ?? user?['role'] ?? '')
+          .toString()
+          .trim();
       if (role.isNotEmpty) {
         return role;
       }
@@ -315,7 +491,9 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
     if (statusHistories.isNotEmpty) {
       final history = statusHistories.first as Map<String, dynamic>;
       final user = history['user'] as Map<String, dynamic>?;
-      final role = (user?['job_title'] ?? user?['role'] ?? '').toString().trim();
+      final role = (user?['job_title'] ?? user?['role'] ?? '')
+          .toString()
+          .trim();
       if (role.isNotEmpty) {
         return role;
       }
@@ -326,7 +504,9 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
 
   IconData _reportIcon(Map<String, dynamic> report) {
     final category =
-        ((report['category'] as Map<String, dynamic>?)?['name'] ?? '').toString().toLowerCase();
+        ((report['category'] as Map<String, dynamic>?)?['name'] ?? '')
+            .toString()
+            .toLowerCase();
     if (category.contains('water')) return Icons.water_drop_rounded;
     if (category.contains('road')) return Icons.handyman_rounded;
     if (category.contains('electric')) return Icons.bolt_rounded;
@@ -384,15 +564,182 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
       'Nov',
       'Dec',
     ];
-    final hour = date.hour > 12 ? date.hour - 12 : (date.hour == 0 ? 12 : date.hour);
+    final hour = date.hour > 12
+        ? date.hour - 12
+        : (date.hour == 0 ? 12 : date.hour);
     final minute = date.minute.toString().padLeft(2, '0');
     final period = date.hour >= 12 ? 'PM' : 'AM';
-    return '${months[date.month - 1]} ${date.day}, ${date.year} · $hour:$minute $period';
+    return '${months[date.month - 1]} ${date.day}, ${date.year} - $hour:$minute $period';
   }
 
   String _nextPhaseCaption(DateTime? createdAt, int dayOffset) {
     if (createdAt == null) return 'Completed';
     return _formatDateTime(createdAt.add(Duration(days: dayOffset)));
+  }
+
+  Widget _buildDetailLoadingState(
+    List<Map<String, dynamic>> reports,
+    int reportId,
+  ) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      children: [
+        Text(
+          'Submitted Reports',
+          style: TextStyle(
+            color: citizenTitleColor(context),
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
+          ),
+        ),
+        const SizedBox(height: 12),
+        ...reports.map(
+          (item) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _ReportSelectorCard(
+              report: item,
+              selected: _extractReportId(item) == reportId,
+              onTap: () {
+                final nextId = _extractReportId(item);
+                if (nextId == null) return;
+                setState(() => _selectedReportId = nextId);
+              },
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        ...List.generate(
+          3,
+          (index) => Padding(
+            padding: EdgeInsets.only(bottom: index == 2 ? 0 : 16),
+            child: Container(
+              height: index == 0 ? 108 : 126,
+              decoration: BoxDecoration(
+                color: citizenCardColor(context),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: citizenBorderColor(context)),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ReportSelectorCard extends StatelessWidget {
+  const _ReportSelectorCard({
+    required this.report,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Map<String, dynamic> report;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = (report['title'] ?? 'Untitled report').toString();
+    final location = (report['location'] ?? 'No location').toString();
+    final rawStatus = (report['status'] ?? 'New').toString();
+    final status = _MyComplaintsScreenState._normalizedStatus(rawStatus);
+    final createdAt = DateTime.tryParse(
+      (report['created_at'] ?? '').toString(),
+    );
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: selected
+              ? (citizenIsDark(context)
+                    ? const Color(0xFF1A2233)
+                    : const Color(0xFFEFF6FF))
+              : citizenCardColor(context),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: selected
+                ? const Color(0xFF274D96)
+                : citizenBorderColor(context),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: citizenIsDark(context)
+                    ? const Color(0xFF24355A)
+                    : const Color(0xFFE0EAFF),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.description_outlined,
+                color: Color(0xFF6FA8FF),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: citizenTitleColor(context),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${_compactText(location)} - ${_reportDate(createdAt)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: citizenBodyColor(context),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            _StatusPill(status: status),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _compactText(String value) {
+    if (value.length <= 30) return value;
+    return '${value.substring(0, 30)}...';
+  }
+
+  static String _reportDate(DateTime? date) {
+    if (date == null) return 'Unknown';
+    const months = <String>[
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${months[date.month - 1]} ${date.day}';
   }
 }
 
@@ -411,12 +758,16 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = citizenIsDark(context);
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A2233),
+        color: isDark ? const Color(0xFF1A2233) : const Color(0xFFEFF6FF),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFF274D96)),
+        border: Border.all(
+          color: isDark ? const Color(0xFF274D96) : const Color(0xFFBFDBFE),
+        ),
       ),
       child: Row(
         children: [
@@ -424,7 +775,7 @@ class _SummaryCard extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: const Color(0xFF24355A),
+              color: isDark ? const Color(0xFF24355A) : const Color(0xFFE0EAFF),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, color: const Color(0xFF6FA8FF)),
@@ -438,8 +789,8 @@ class _SummaryCard extends StatelessWidget {
                   title,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: citizenTitleColor(context),
                     fontWeight: FontWeight.w700,
                     fontSize: 17,
                   ),
@@ -450,7 +801,7 @@ class _SummaryCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.65),
+                    color: citizenBodyColor(context),
                     fontSize: 12,
                   ),
                 ),
@@ -466,11 +817,7 @@ class _SummaryCard extends StatelessWidget {
 }
 
 class _SectionCard extends StatelessWidget {
-  const _SectionCard({
-    required this.title,
-    required this.child,
-    this.subtitle,
-  });
+  const _SectionCard({required this.title, required this.child, this.subtitle});
 
   final String title;
   final Widget child;
@@ -482,17 +829,17 @@ class _SectionCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A2233),
+        color: citizenCardColor(context),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        border: Border.all(color: citizenBorderColor(context)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: citizenTitleColor(context),
               fontWeight: FontWeight.w700,
               fontSize: 18,
             ),
@@ -502,7 +849,7 @@ class _SectionCard extends StatelessWidget {
             Text(
               subtitle!,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.56),
+                color: citizenBodyColor(context),
                 fontSize: 12,
               ),
             ),
@@ -538,14 +885,17 @@ class _TimelineItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = citizenIsDark(context);
     final dotColor = entry.completed
         ? const Color(0xFF22C55E)
         : entry.active
-            ? const Color(0xFF4B82F7)
-            : const Color(0xFF2A3348);
+        ? const Color(0xFF4B82F7)
+        : isDark
+        ? const Color(0xFF2A3348)
+        : const Color(0xFFE2E8F0);
     final textColor = entry.completed || entry.active
         ? (entry.active ? const Color(0xFF6FA8FF) : const Color(0xFF4ADE80))
-        : Colors.white38;
+        : citizenMutedColor(context);
 
     return Padding(
       padding: EdgeInsets.only(bottom: entry.isLast ? 0 : 14),
@@ -572,7 +922,11 @@ class _TimelineItem extends StatelessWidget {
                   width: 2,
                   height: 38,
                   margin: const EdgeInsets.symmetric(vertical: 4),
-                  color: entry.completed ? const Color(0xFF22C55E) : const Color(0xFF2A3348),
+                  color: entry.completed
+                      ? const Color(0xFF22C55E)
+                      : isDark
+                      ? const Color(0xFF2A3348)
+                      : const Color(0xFFE2E8F0),
                 ),
             ],
           ),
@@ -595,7 +949,7 @@ class _TimelineItem extends StatelessWidget {
                   Text(
                     entry.caption,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.48),
+                      color: citizenMutedColor(context),
                       fontSize: 12,
                     ),
                   ),
@@ -654,12 +1008,16 @@ class _EmptySummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = citizenIsDark(context);
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A2233),
+        color: isDark ? const Color(0xFF1A2233) : const Color(0xFFEFF6FF),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFF274D96)),
+        border: Border.all(
+          color: isDark ? const Color(0xFF274D96) : const Color(0xFFBFDBFE),
+        ),
       ),
       child: Row(
         children: [
@@ -667,7 +1025,7 @@ class _EmptySummaryCard extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: const Color(0xFF24355A),
+              color: isDark ? const Color(0xFF24355A) : const Color(0xFFE0EAFF),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(
@@ -680,10 +1038,10 @@ class _EmptySummaryCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'No report selected yet',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: citizenTitleColor(context),
                     fontWeight: FontWeight.w700,
                     fontSize: 16,
                   ),
@@ -692,7 +1050,7 @@ class _EmptySummaryCard extends StatelessWidget {
                 Text(
                   'Submit a complaint to start seeing your tracker updates here.',
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.65),
+                    color: citizenBodyColor(context),
                     fontSize: 12,
                   ),
                 ),
@@ -756,7 +1114,7 @@ class _EmptyMessage extends StatelessWidget {
     return Text(
       message,
       style: TextStyle(
-        color: Colors.white.withValues(alpha: 0.78),
+        color: citizenBodyColor(context),
         height: 1.45,
       ),
     );
@@ -768,16 +1126,18 @@ class _EmptyAssignedStaff extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = citizenIsDark(context);
+
     return Row(
       children: [
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Awaiting assignment',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: citizenTitleColor(context),
                   fontWeight: FontWeight.w700,
                   fontSize: 15,
                 ),
@@ -786,7 +1146,7 @@ class _EmptyAssignedStaff extends StatelessWidget {
               Text(
                 'Staff will appear here after validation',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.62),
+                  color: citizenBodyColor(context),
                   fontSize: 12,
                 ),
               ),
@@ -798,7 +1158,7 @@ class _EmptyAssignedStaff extends StatelessWidget {
           width: 42,
           height: 42,
           decoration: BoxDecoration(
-            color: const Color(0xFF2A2234),
+            color: isDark ? const Color(0xFF2A2234) : const Color(0xFFFFF7ED),
             borderRadius: BorderRadius.circular(12),
           ),
           child: const Icon(

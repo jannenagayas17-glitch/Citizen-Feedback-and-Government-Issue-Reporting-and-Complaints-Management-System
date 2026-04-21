@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
 import '../../services/report_service.dart';
+import '../../utils/admin_theme.dart';
 import '../../utils/file_download.dart';
 import '../citizen/complaint_detail_screen.dart';
 
@@ -21,6 +22,150 @@ class ComplaintManagementScreen extends StatefulWidget {
 }
 
 class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
+  static const List<String> _taclobanBarangays = [
+    'Barangay 1 (Libertad)',
+    'Barangay 2 (Jones)',
+    'Barangay 3 (Upper Nulatula)',
+    'Barangay 4 (Libertad)',
+    'Barangay 5 (T. Claudio)',
+    'Barangay 5-A (T. Claudio)',
+    'Barangay 6',
+    'Barangay 6-A (Sto. Nino)',
+    'Barangay 7',
+    'Barangay 8 (T. Claudio)',
+    'Barangay 8-A',
+    'Barangay 12 (GE Palanog)',
+    'Barangay 13 (Salazar/J. Romualdez)',
+    'Barangay 14',
+    'Barangay 15',
+    'Barangay 16',
+    'Barangay 17',
+    'Barangay 18',
+    'Barangay 19',
+    'Barangay 20',
+    'Barangay 21 (P. Burgos)',
+    'Barangay 22',
+    'Barangay 23',
+    'Barangay 23-A',
+    'Barangay 24',
+    'Barangay 25',
+    'Barangay 26 (P. Gomez)',
+    'Barangay 27',
+    'Barangay 28',
+    'Barangay 29 (P. Gomez)',
+    'Barangay 30 (Burgos)',
+    'Barangay 31',
+    'Barangay 32',
+    'Barangay 33',
+    'Barangay 34 (Real)',
+    'Barangay 35',
+    'Barangay 35-A',
+    'Barangay 36 (Sabang)',
+    'Barangay 36-A (Sabang)',
+    'Barangay 37 (Sea Wall)',
+    'Barangay 37-A (G.E. Palanog Gawad Kalinga Village)',
+    'Barangay 38 (Calvary Hill)',
+    'Barangay 39 (Calvary Hill)',
+    'Barangay 40 (Calvary Hill)',
+    'Barangay 41 (Calvary Hill)',
+    'Barangay 42',
+    'Barangay 42-A (Quarry)',
+    'Barangay 42-B (Quarry)',
+    'Barangay 43',
+    'Barangay 43-A (Quarry)',
+    'Barangay 43-B (Quarry)',
+    'Barangay 44',
+    'Barangay 44-A (Quarry)',
+    'Barangay 44-B (Quarry)',
+    'Barangay 45',
+    'Barangay 46 (Imelda/Juan Luna)',
+    'Barangay 47',
+    'Barangay 48',
+    'Barangay 48-A',
+    'Barangay 48-B',
+    'Barangay 49 (Youngfield)',
+    'Barangay 50 (Youngfield)',
+    'Barangay 50-A (Youngfield)',
+    'Barangay 50-B (Youngfield)',
+    'Barangay 51',
+    'Barangay 51-A',
+    'Barangay 52 (Lucban Magallanes)',
+    'Barangay 53 (Magallanes)',
+    'Barangay 54 (Magallanes)',
+    'Barangay 54-A (Magallanes)',
+    'Barangay 55 (El Reposo)',
+    'Barangay 56 (El Reposo)',
+    'Barangay 56-A (El Reposo)',
+    'Barangay 57 (Whitelane Sampaguita)',
+    'Barangay 58',
+    'Barangay 59 (Sagkahan Picas)',
+    'Barangay 59-A (Sampaguita)',
+    'Barangay 59-B (Sampaguita)',
+    'Barangay 59-E (Sagkahan Picas)',
+    'Barangay 60 (Sagkahan Aslum)',
+    'Barangay 60-A (Sagkahan)',
+    'Barangay 61 (Sagkahan)',
+    'Barangay 62 (Sagkahan Saging)',
+    'Barangay 62-A (Sagkahan Ilong)',
+    'Barangay 62-B (Sagkahan Picas)',
+    'Barangay 63 (Sagkahan Mangga)',
+    'Barangay 64 (Sagkahan Bliss)',
+    'Barangay 65 (Paseo de Legaspi)',
+    'Barangay 66 (Anibong)',
+    'Barangay 66-A (Anibong)',
+    'Barangay 67 (Anibong)',
+    'Barangay 68 (Anibong)',
+    'Barangay 69 (Anibong, Happy Land)',
+    'Barangay 70 (Anibong, Rawis)',
+    'Barangay 71 (Naga-naga)',
+    'Barangay 72 (PHHC Seaside)',
+    'Barangay 73 (PHHC Mountainside)',
+    'Barangay 74 (Lower Nula-Tula)',
+    'Barangay 75 (Fatima Village)',
+    'Barangay 76 (Fatima Village)',
+    'Barangay 77 (Fatima Village)',
+    'Barangay 78 (Marasbaras)',
+    'Barangay 79 (Marasbaras)',
+    'Barangay 80 (Marasbaras)',
+    'Barangay 81 (Marasbaras)',
+    'Barangay 82 (Marasbaras)',
+    'Barangay 83 (Paraiso)',
+    'Barangay 83-A (Burayan)',
+    'Barangay 83-B (San Jose, Cogon)',
+    'Barangay 83-C (San Jose)',
+    'Barangay 84 (San Jose)',
+    'Barangay 85 (San Jose)',
+    'Barangay 86 (San Jose)',
+    'Barangay 87 (San Jose)',
+    'Barangay 88 (San Jose)',
+    'Barangay 89 (San Jose, Baybay)',
+    'Barangay 90 (San Jose)',
+    'Barangay 91 (Abucay)',
+    'Barangay 92 (Apitong)',
+    'Barangay 93 (Bagacay)',
+    'Barangay 94 (Tigbao)',
+    'Barangay 94-A (Basper)',
+    'Barangay 95 (Caibaan)',
+    'Barangay 95-A (Caibaan)',
+    'Barangay 96 (Calanipawan)',
+    'Barangay 97 (Cabalawan)',
+    'Barangay 98 (Camansihay)',
+    'Barangay 99 (Diit)',
+    'Barangay 100 (San Roque)',
+    'Barangay 101 (New Kawayan)',
+    'Barangay 102 (Kawayan)',
+    'Barangay 103 (Palanog)',
+    'Barangay 103-A (San Paglaum)',
+    'Barangay 104 (Salvacion)',
+    'Barangay 105 (Suhi)',
+    'Barangay 106 (Santo Nino)',
+    'Barangay 107 (Santa Elena)',
+    'Barangay 108 (Tagapuro)',
+    'Barangay 109 (V&G Subdivision)',
+    'Barangay 109-A (V&G Subdivision)',
+    'Barangay 110 (Utap)',
+  ];
+
   final ReportService _reportService = ReportService();
   final AuthService _authService = AuthService();
   final TextEditingController _searchController = TextEditingController();
@@ -52,16 +197,21 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
   }
 
   Future<_ReportsPayload> _loadPayload() async {
+    final user = await _authService.getCurrentUser();
+    final isSuperAdmin = _isSuperAdmin(user);
     final results = await Future.wait<dynamic>([
       _reportService.getAdminReports(),
-      _authService.getCurrentUser(),
+      _reportService.getCategories(),
+      _authService.getOffices(includeInactive: isSuperAdmin),
     ]);
     return _ReportsPayload(
       reports: (results[0] as List)
           .whereType<Map<String, dynamic>>()
           .map(Map<String, dynamic>.from)
           .toList(),
-      user: Map<String, dynamic>.from(results[1] as Map),
+      user: Map<String, dynamic>.from(user),
+      categories: results[1] as List<dynamic>,
+      offices: results[2] as List<dynamic>,
     );
   }
 
@@ -74,8 +224,9 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
   Future<void> _exportReports() async {
     setState(() => _exporting = true);
     try {
-      final statusParam =
-          _selectedStatus == 'All Status' ? null : _selectedStatus;
+      final statusParam = _selectedStatus == 'All Status'
+          ? null
+          : _selectedStatus;
       final file = await _reportService.exportAdminReports(status: statusParam);
       await downloadFile(
         bytes: file.bytes,
@@ -97,6 +248,9 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
   }
 
   String _category(Map<String, dynamic> report) {
+    final categoryName = (report['category_name'] ?? '').toString().trim();
+    if (categoryName.isNotEmpty) return categoryName;
+
     final category = report['category'];
     if (category is Map<String, dynamic>) {
       final name = (category['name'] ?? '').toString().trim();
@@ -132,29 +286,124 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
     return 'Unassigned office';
   }
 
+  bool _isSuperAdmin(Map<String, dynamic> user) =>
+      (user['role'] ?? '').toString().trim() == 'super_admin';
+
+  String _departmentLabel(Map<String, dynamic> user) {
+    final office = user['office'];
+    if (office is Map<String, dynamic>) {
+      final name = (office['name'] ?? '').toString().trim();
+      if (name.isNotEmpty) return name;
+    }
+
+    return (user['department'] ?? '').toString().trim();
+  }
+
   DateTime? _createdAt(Map<String, dynamic> report) =>
       DateTime.tryParse((report['created_at'] ?? '').toString())?.toLocal();
 
-  List<String> _options(List<String> items, String allLabel) {
-    final values = items.where((item) => item.trim().isNotEmpty).toSet().toList()
-      ..sort();
-    return [allLabel, ...values];
+  List<String> _options(
+    Iterable<String> items,
+    String allLabel, {
+    int Function(String, String)? compare,
+  }) {
+    final values = <String, String>{};
+    for (final item in items) {
+      final value = item.trim();
+      if (value.isEmpty) continue;
+      values.putIfAbsent(value.toLowerCase(), () => value);
+    }
+
+    final sortedValues = values.values.toList()
+      ..sort(compare ?? (a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return [allLabel, ...sortedValues];
   }
 
-  List<Map<String, dynamic>> _filteredReports(List<Map<String, dynamic>> reports) {
+  List<String> _categoryOptions(_ReportsPayload payload) {
+    return _options([
+      ...payload.categories.whereType<Map<String, dynamic>>().map(
+        (category) => (category['name'] ?? '').toString(),
+      ),
+      ...payload.reports.map(_category),
+    ], 'All Categories');
+  }
+
+  List<String> _departmentOptions(_ReportsPayload payload) {
+    if (!_isSuperAdmin(payload.user)) {
+      final department = _departmentLabel(payload.user);
+      return department.isEmpty ? ['Assigned Department'] : [department];
+    }
+
+    final officeNames = payload.offices.whereType<Map<String, dynamic>>().map(
+      (office) => (office['name'] ?? '').toString(),
+    );
+    final reportOffices = payload.reports
+        .map(_office)
+        .where(
+          (office) => office.trim().isNotEmpty && office != 'Unassigned office',
+        );
+
+    return _options([...officeNames, ...reportOffices], 'All Departments');
+  }
+
+  List<String> _barangayOptions(_ReportsPayload payload) {
+    return _options(
+      [..._taclobanBarangays, ...payload.reports.map(_barangay)],
+      'All Barangays',
+      compare: _compareBarangays,
+    );
+  }
+
+  int _compareBarangays(String a, String b) {
+    final aNumber = _barangayNumber(a);
+    final bNumber = _barangayNumber(b);
+    if (aNumber != null && bNumber != null && aNumber != bNumber) {
+      return aNumber.compareTo(bNumber);
+    }
+    if (aNumber != null && bNumber == null) return -1;
+    if (aNumber == null && bNumber != null) return 1;
+    return a.toLowerCase().compareTo(b.toLowerCase());
+  }
+
+  double? _barangayNumber(String value) {
+    final match = RegExp(
+      r'^barangay\s+(\d+)(?:-([a-z]))?',
+      caseSensitive: false,
+    ).firstMatch(value.trim());
+    if (match == null) return null;
+    final number = double.tryParse(match.group(1)!);
+    if (number == null) return null;
+    final suffix = match.group(2);
+    if (suffix == null) return number;
+    return number + ((suffix.toLowerCase().codeUnitAt(0) - 96) / 10);
+  }
+
+  List<Map<String, dynamic>> _filteredReports(
+    _ReportsPayload payload,
+    List<Map<String, dynamic>> reports,
+  ) {
+    final isSuperAdmin = _isSuperAdmin(payload.user);
+    final assignedDepartment = _departmentLabel(payload.user);
     return reports.where((report) {
+      if (!isSuperAdmin &&
+          assignedDepartment.isNotEmpty &&
+          _office(report) != assignedDepartment) {
+        return false;
+      }
       if (_selectedCategory != 'All Categories' &&
           _category(report) != _selectedCategory) {
         return false;
       }
-      if (_selectedOffice != 'All Departments' && _office(report) != _selectedOffice) {
+      if (_selectedOffice != 'All Departments' &&
+          _office(report) != _selectedOffice) {
         return false;
       }
       if (_selectedBarangay != 'All Barangays' &&
           _barangay(report) != _selectedBarangay) {
         return false;
       }
-      if (_selectedStatus != 'All Status' && _status(report) != _selectedStatus) {
+      if (_selectedStatus != 'All Status' &&
+          _status(report) != _selectedStatus) {
         return false;
       }
       if (_search.isEmpty) return true;
@@ -187,18 +436,24 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   DropdownButtonFormField<String>(
-                    value: selectedStatus,
+                    initialValue: selectedStatus,
                     dropdownColor: const Color(0xFF181C2E),
                     style: const TextStyle(color: Colors.white),
                     decoration: _dialogDecoration('Status'),
                     items: const [
                       DropdownMenuItem(value: 'New', child: Text('New')),
-                      DropdownMenuItem(value: 'Pending', child: Text('Pending')),
+                      DropdownMenuItem(
+                        value: 'Pending',
+                        child: Text('Pending'),
+                      ),
                       DropdownMenuItem(
                         value: 'In Progress',
                         child: Text('In Progress'),
                       ),
-                      DropdownMenuItem(value: 'Resolved', child: Text('Resolved')),
+                      DropdownMenuItem(
+                        value: 'Resolved',
+                        child: Text('Resolved'),
+                      ),
                     ],
                     onChanged: (value) {
                       if (value == null) return;
@@ -220,7 +475,9 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                   onPressed: () => Navigator.pop(dialogContext, false),
                   child: Text(
                     'Cancel',
-                    style: TextStyle(color: Colors.white.withOpacity(0.75)),
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.75),
+                    ),
                   ),
                 ),
                 FilledButton(
@@ -264,17 +521,17 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
   }
 
   InputDecoration _dialogDecoration(String label) => InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(color: Colors.white.withOpacity(0.70)),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.10)),
-        ),
-        focusedBorder: const OutlineInputBorder(
-          borderRadius: BorderRadius.all(Radius.circular(14)),
-          borderSide: BorderSide(color: Color(0xFF2557D6)),
-        ),
-      );
+    labelText: label,
+    labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.70)),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.10)),
+    ),
+    focusedBorder: const OutlineInputBorder(
+      borderRadius: BorderRadius.all(Radius.circular(14)),
+      borderSide: BorderSide(color: Color(0xFF2557D6)),
+    ),
+  );
 
   String _timeAgo(DateTime? date) {
     if (date == null) return '-';
@@ -322,15 +579,16 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     final bottomSafeArea = MediaQuery.of(context).padding.bottom;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0E1B),
+      backgroundColor: colors.background,
       appBar: widget.embedded
           ? null
           : AppBar(
-              backgroundColor: const Color(0xFF0B0E1B),
-              foregroundColor: Colors.white,
+              backgroundColor: colors.background,
+              foregroundColor: colors.text,
               elevation: 0,
               title: const Text('All Reports'),
             ),
@@ -349,8 +607,11 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                   children: [
                     _panel(
                       child: Text(
-                        snapshot.error.toString().replaceFirst('Exception: ', ''),
-                        style: const TextStyle(color: Colors.white),
+                        snapshot.error.toString().replaceFirst(
+                          'Exception: ',
+                          '',
+                        ),
+                        style: TextStyle(color: colors.text),
                       ),
                     ),
                   ],
@@ -358,14 +619,19 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
               }
 
               final payload = snapshot.data!;
+              final superAdmin = _isSuperAdmin(payload.user);
               final reports = payload.reports;
-              final categories =
-                  _options(reports.map(_category).toList(), 'All Categories');
-              final offices =
-                  _options(reports.map(_office).toList(), 'All Departments');
-              final barangays =
-                  _options(reports.map(_barangay).toList(), 'All Barangays');
-              const statuses = ['All Status', 'New', 'Pending', 'In Progress', 'Resolved', 'Rejected'];
+              final categories = _categoryOptions(payload);
+              final offices = _departmentOptions(payload);
+              final barangays = _barangayOptions(payload);
+              const statuses = [
+                'All Status',
+                'New',
+                'Pending',
+                'In Progress',
+                'Resolved',
+                'Rejected',
+              ];
               if (!categories.contains(_selectedCategory)) {
                 _selectedCategory = categories.first;
               }
@@ -378,25 +644,24 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
               if (!statuses.contains(_selectedStatus)) {
                 _selectedStatus = statuses.first;
               }
-              final filtered = _filteredReports(reports);
+              final filtered = _filteredReports(payload, reports);
               final isWide = MediaQuery.of(context).size.width >= 1180;
 
               final content = [
-                const Text(
+                Text(
                   'All Reports',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: colors.text,
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'View and manage all issue reports from across the city.',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.58),
-                    fontSize: 13,
-                  ),
+                  superAdmin
+                      ? 'View and manage all issue reports from across the city.'
+                      : 'View and manage reports assigned to your department.',
+                  style: TextStyle(color: colors.mutedText, fontSize: 13),
                 ),
                 const SizedBox(height: 18),
                 _panel(
@@ -405,9 +670,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                     children: [
                       Row(
                         children: [
-                          Expanded(
-                            child: _searchField(),
-                          ),
+                          Expanded(child: _searchField()),
                           const SizedBox(width: 12),
                           _filterDropdown(
                             value: _selectedCategory,
@@ -463,18 +726,24 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                                       color: Colors.white,
                                     ),
                                   )
-                                : const Icon(Icons.file_download_outlined, size: 16),
-                            label: Text(_exporting ? 'Exporting...' : 'Export CSV'),
+                                : const Icon(
+                                    Icons.file_download_outlined,
+                                    size: 16,
+                                  ),
+                            label: Text(
+                              _exporting ? 'Exporting...' : 'Export Excel',
+                            ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 14),
                       Text(
-                        '${filtered.length} Reports${_selectedOffice != 'All Departments' ? ' • $_selectedOffice' : _selectedBarangay != 'All Barangays' ? ' • $_selectedBarangay' : ''}',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.60),
-                          fontSize: 13,
-                        ),
+                        '${filtered.length} Reports${_selectedOffice != 'All Departments'
+                            ? ' - $_selectedOffice'
+                            : _selectedBarangay != 'All Barangays'
+                            ? ' - $_selectedBarangay'
+                            : ''}',
+                        style: TextStyle(color: colors.mutedText, fontSize: 13),
                       ),
                       const SizedBox(height: 16),
                       _tableHeader(),
@@ -484,7 +753,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                           padding: const EdgeInsets.symmetric(vertical: 20),
                           child: Text(
                             'No reports match your current filters.',
-                            style: TextStyle(color: Colors.white.withOpacity(0.62)),
+                            style: TextStyle(color: colors.mutedText),
                           ),
                         )
                       else
@@ -495,7 +764,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                           Text(
                             'Showing ${filtered.isEmpty ? 0 : 1} to ${filtered.length} of ${reports.length} entries',
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.50),
+                              color: colors.mutedText,
                               fontSize: 12,
                             ),
                           ),
@@ -514,12 +783,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
 
               return ListView(
                 padding: EdgeInsets.fromLTRB(20, 18, 20, 24 + bottomSafeArea),
-                children: [
-                  if (isWide)
-                    ...content
-                  else
-                    ...content,
-                ],
+                children: [if (isWide) ...content else ...content],
               );
             },
           ),
@@ -529,36 +793,39 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
   }
 
   Widget _panel({required Widget child}) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: const Color(0xFF111426),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.white.withOpacity(0.05)),
-        ),
-        child: child,
-      );
+    width: double.infinity,
+    padding: const EdgeInsets.all(18),
+    decoration: BoxDecoration(
+      color: AdminThemeColors.of(context).panel,
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: AdminThemeColors.of(context).border),
+    ),
+    child: child,
+  );
 
   Widget _searchField() => TextField(
-        controller: _searchController,
-        style: const TextStyle(color: Colors.white),
-        decoration: InputDecoration(
-          prefixIcon: const Icon(Icons.search_rounded, color: Colors.white54),
-          hintText: 'Search by report ID, category, or barangay',
-          hintStyle: TextStyle(color: Colors.white.withOpacity(0.42)),
-          filled: true,
-          fillColor: const Color(0xFF181C2E),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
-          ),
-        ),
-      );
+    controller: _searchController,
+    style: TextStyle(color: AdminThemeColors.of(context).text),
+    decoration: InputDecoration(
+      prefixIcon: Icon(
+        Icons.search_rounded,
+        color: AdminThemeColors.of(context).mutedText,
+      ),
+      hintText: 'Search by report ID, category, or barangay',
+      hintStyle: TextStyle(color: AdminThemeColors.of(context).mutedText),
+      filled: true,
+      fillColor: AdminThemeColors.of(context).input,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: AdminThemeColors.of(context).border),
+      ),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: AdminThemeColors.of(context).border),
+      ),
+    ),
+  );
 
   Widget _filterDropdown({
     required String value,
@@ -569,28 +836,51 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
     return SizedBox(
       width: width,
       child: DropdownButtonFormField<String>(
-        value: items.contains(value) ? value : items.first,
-        dropdownColor: const Color(0xFF181C2E),
+        initialValue: items.contains(value) ? value : items.first,
+        isExpanded: true,
+        menuMaxHeight: 360,
+        dropdownColor: AdminThemeColors.of(context).panel,
         decoration: InputDecoration(
           filled: true,
-          fillColor: const Color(0xFF181C2E),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          fillColor: AdminThemeColors.of(context).input,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 14,
+          ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+            borderSide: BorderSide(color: AdminThemeColors.of(context).border),
           ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+            borderSide: BorderSide(color: AdminThemeColors.of(context).border),
           ),
         ),
-        iconEnabledColor: Colors.white70,
-        style: const TextStyle(color: Colors.white),
+        iconEnabledColor: AdminThemeColors.of(context).mutedText,
+        style: TextStyle(color: AdminThemeColors.of(context).text),
+        selectedItemBuilder: (context) => items
+            .map(
+              (item) => Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  item,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: AdminThemeColors.of(context).text),
+                ),
+              ),
+            )
+            .toList(),
         items: items
             .map(
               (item) => DropdownMenuItem<String>(
                 value: item,
-                child: Text(item, style: const TextStyle(color: Colors.white)),
+                child: Text(
+                  item,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: AdminThemeColors.of(context).text),
+                ),
               ),
             )
             .toList(),
@@ -599,27 +889,29 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
     );
   }
 
-  Widget _tableHeader() => Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(color: Colors.white.withOpacity(0.06)),
-          ),
-        ),
-        child: const Row(
-          children: [
-            _HeaderCell('ID', flex: 3),
-                    _HeaderCell('Category', flex: 4),
-                    _HeaderCell('Department', flex: 4),
-                    _HeaderCell('Barangay', flex: 3),
-            _HeaderCell('Reported', flex: 3),
-            _HeaderCell('Status', flex: 2),
-            _HeaderCell('Assigned To', flex: 3),
-          ],
-        ),
-      );
+  Widget _tableHeader() {
+    final colors = AdminThemeColors.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: colors.border)),
+      ),
+      child: const Row(
+        children: [
+          _HeaderCell('ID', flex: 3),
+          _HeaderCell('Category', flex: 4),
+          _HeaderCell('Department', flex: 4),
+          _HeaderCell('Barangay', flex: 3),
+          _HeaderCell('Reported', flex: 3),
+          _HeaderCell('Status', flex: 2),
+          _HeaderCell('Assigned To', flex: 3),
+        ],
+      ),
+    );
+  }
 
   Widget _reportRow(Map<String, dynamic> report) {
+    final colors = AdminThemeColors.of(context);
     final idLabel = 'CTR-${(report['id'] ?? 0).toString().padLeft(4, '0')}';
     final category = _category(report);
     final status = _status(report);
@@ -627,23 +919,24 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
     final categoryColor = _categoryColor(category);
     final createdAt = _createdAt(report);
     final assignee = _assignee(report);
-    final assigneeInitial = assignee.isEmpty ? 'U' : assignee.substring(0, 1).toUpperCase();
+    final assigneeInitial = assignee.isEmpty
+        ? 'U'
+        : assignee.substring(0, 1).toUpperCase();
 
     return InkWell(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => ComplaintDetailScreen(reportId: report['id'] as int),
+            builder: (_) =>
+                ComplaintDetailScreen(reportId: report['id'] as int),
           ),
         );
       },
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(color: Colors.white.withOpacity(0.04)),
-          ),
+          border: Border(bottom: BorderSide(color: colors.border)),
         ),
         child: Row(
           children: [
@@ -654,8 +947,8 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                 children: [
                   Text(
                     idLabel,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: colors.text,
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
                     ),
@@ -663,7 +956,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                   const SizedBox(height: 4),
                   Text(
                     (report['title'] ?? idLabel).toString(),
-                    style: TextStyle(color: Colors.white.withOpacity(0.50), fontSize: 12),
+                    style: TextStyle(color: colors.mutedText, fontSize: 12),
                   ),
                 ],
               ),
@@ -676,16 +969,23 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                     width: 30,
                     height: 30,
                     decoration: BoxDecoration(
-                      color: categoryColor.withOpacity(0.18),
+                      color: categoryColor.withValues(alpha: 0.18),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(Icons.category_rounded, color: categoryColor, size: 16),
+                    child: Icon(
+                      Icons.category_rounded,
+                      color: categoryColor,
+                      size: 16,
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       category,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        color: colors.text,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
@@ -695,7 +995,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
               flex: 4,
               child: Text(
                 _office(report),
-                style: TextStyle(color: Colors.white.withOpacity(0.74)),
+                style: TextStyle(color: colors.mutedText),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -707,12 +1007,15 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                 children: [
                   Text(
                     _barangay(report).isEmpty ? '-' : _barangay(report),
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      color: colors.text,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     _location(report),
-                    style: TextStyle(color: Colors.white.withOpacity(0.46), fontSize: 12),
+                    style: TextStyle(color: colors.mutedText, fontSize: 12),
                   ),
                 ],
               ),
@@ -721,7 +1024,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
               flex: 3,
               child: Text(
                 _timeAgo(createdAt),
-                style: TextStyle(color: Colors.white.withOpacity(0.72)),
+                style: TextStyle(color: colors.mutedText),
               ),
             ),
             Expanded(
@@ -731,14 +1034,20 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                 child: InkWell(
                   onTap: () => _openStatusDialog(report),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 7,
+                    ),
                     decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.14),
+                      color: statusColor.withValues(alpha: 0.14),
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
                       status,
-                      style: TextStyle(color: statusColor, fontWeight: FontWeight.w700),
+                      style: TextStyle(
+                        color: statusColor,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),
@@ -758,10 +1067,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text(
-                      assignee,
-                      style: const TextStyle(color: Colors.white),
-                    ),
+                    child: Text(assignee, style: TextStyle(color: colors.text)),
                   ),
                 ],
               ),
@@ -772,39 +1078,50 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
     );
   }
 
-  Widget _pagerButton(String label) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration: BoxDecoration(
-          color: const Color(0xFF181C2E),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(color: Colors.white.withOpacity(0.72), fontSize: 12),
-        ),
-      );
+  Widget _pagerButton(String label) {
+    final colors = AdminThemeColors.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: colors.input,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: colors.border),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(color: colors.mutedText, fontSize: 12),
+      ),
+    );
+  }
 
-  Widget _pagerIndex(String label) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        decoration: BoxDecoration(
-          color: const Color(0xFF2A3356),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-        ),
-      );
+  Widget _pagerIndex(String label) {
+    final colors = AdminThemeColors.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: colors.activeNav,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(color: colors.activeText, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
 }
 
 class _ReportsPayload {
   const _ReportsPayload({
     required this.reports,
     required this.user,
+    required this.categories,
+    required this.offices,
   });
 
   final List<Map<String, dynamic>> reports;
   final Map<String, dynamic> user;
+  final List<dynamic> categories;
+  final List<dynamic> offices;
 }
 
 class _HeaderCell extends StatelessWidget {
@@ -815,12 +1132,13 @@ class _HeaderCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Expanded(
       flex: flex,
       child: Text(
         label,
         style: TextStyle(
-          color: Colors.white.withOpacity(0.48),
+          color: colors.mutedText,
           fontSize: 12,
           fontWeight: FontWeight.w700,
         ),

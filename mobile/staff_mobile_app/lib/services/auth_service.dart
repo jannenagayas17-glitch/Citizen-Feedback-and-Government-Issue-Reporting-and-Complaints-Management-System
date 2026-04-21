@@ -5,10 +5,7 @@ import '../config/api_config.dart';
 import '../utils/token_storage.dart';
 
 class AuthService {
-  String _extractErrorMessage(
-    Map<String, dynamic> data,
-    String fallback,
-  ) {
+  String _extractErrorMessage(Map<String, dynamic> data, String fallback) {
     final errors = data['errors'];
     if (errors is Map<String, dynamic>) {
       for (final value in errors.values) {
@@ -56,10 +53,7 @@ class AuthService {
     final response = await http.post(
       _buildUri('/auth/login'),
       headers: await _headers(),
-      body: jsonEncode({
-        'email': email,
-        'password': password,
-      }),
+      body: jsonEncode({'email': email, 'password': password}),
     );
 
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -91,8 +85,8 @@ class AuthService {
       headers: await _headers(),
       body: jsonEncode({
         'id_token': idToken,
-        if (email != null) 'email': email,
-        if (name != null) 'name': name,
+        if (email != null && email.trim().isNotEmpty) 'email': email.trim(),
+        if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
       }),
     );
 
@@ -192,18 +186,16 @@ class AuthService {
       return data;
     }
 
-    throw Exception(_extractErrorMessage(data, 'Government account request failed'));
+    throw Exception(
+      _extractErrorMessage(data, 'Government account request failed'),
+    );
   }
 
-  Future<Map<String, dynamic>> forgotPassword({
-    required String email,
-  }) async {
+  Future<Map<String, dynamic>> forgotPassword({required String email}) async {
     final response = await http.post(
       _buildUri('/forgot-password'),
       headers: await _headers(),
-      body: jsonEncode({
-        'email': email,
-      }),
+      body: jsonEncode({'email': email}),
     );
 
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -220,24 +212,43 @@ class AuthService {
       }
     }
 
-    throw Exception(
-      data['message']?.toString() ?? 'Failed to send reset link',
-    );
+    throw Exception(data['message']?.toString() ?? 'Failed to send reset link');
   }
 
   Future<Map<String, dynamic>> getCurrentUser() async {
-    final response = await http.get(
-      _buildUri('/user'),
-      headers: await _headers(authRequired: true),
-    );
+    try {
+      final response = await http.get(
+        _buildUri('/user'),
+        headers: await _headers(authRequired: true),
+      );
 
-    final data = jsonDecode(response.body);
+      Map<String, dynamic>? data;
+      if (response.body.isNotEmpty) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map<String, dynamic>) {
+          data = decoded;
+        }
+      }
 
-    if (response.statusCode == 200) {
-      return data as Map<String, dynamic>;
+      if (response.statusCode == 200 && data != null) {
+        return data;
+      }
+
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        await TokenStorage.clearAll();
+        throw Exception('Session expired. Please log in again.');
+      }
+
+      throw Exception(
+        data == null
+            ? 'Failed to fetch user'
+            : _extractErrorMessage(data, 'Failed to fetch user'),
+      );
+    } on http.ClientException {
+      throw Exception(
+        'Unable to reach the server. Make sure Laravel is running on port 8000.',
+      );
     }
-
-    throw Exception('Failed to fetch user');
   }
 
   Future<Map<String, dynamic>> updateProfile({
@@ -263,11 +274,12 @@ class AuthService {
 
     final errors = data['errors'];
     if (errors is Map<String, dynamic>) {
-      final firstEntry = errors.entries.cast<MapEntry<String, dynamic>?>().firstWhere(
-            (entry) => entry != null,
-            orElse: () => null,
-          );
-      if (firstEntry != null && firstEntry.value is List && (firstEntry.value as List).isNotEmpty) {
+      final firstEntry = errors.entries
+          .cast<MapEntry<String, dynamic>?>()
+          .firstWhere((entry) => entry != null, orElse: () => null);
+      if (firstEntry != null &&
+          firstEntry.value is List &&
+          (firstEntry.value as List).isNotEmpty) {
         throw Exception((firstEntry.value as List).first.toString());
       }
     }
@@ -292,6 +304,81 @@ class AuthService {
     }
 
     throw Exception('Failed to fetch users');
+  }
+
+  Future<Map<String, dynamic>> createManagedAccount({
+    required String name,
+    required String email,
+    String? mobileNumber,
+    required String password,
+    required String passwordConfirmation,
+    required String role,
+    String? department,
+    String? jobTitle,
+  }) async {
+    final response = await http.post(
+      _buildUri('/admin/users'),
+      headers: await _headers(authRequired: true),
+      body: jsonEncode({
+        'name': name,
+        'email': email,
+        'mobile_number': mobileNumber?.trim() ?? '',
+        'password': password,
+        'password_confirmation': passwordConfirmation,
+        'role': role,
+        if (department != null && department.trim().isNotEmpty)
+          'department': department.trim(),
+        if (jobTitle != null && jobTitle.trim().isNotEmpty)
+          'job_title': jobTitle.trim(),
+      }),
+    );
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return data;
+    }
+
+    throw Exception(_extractErrorMessage(data, 'Failed to create account'));
+  }
+
+  Future<Map<String, dynamic>> updateManagedAccount({
+    required int id,
+    required String name,
+    required String email,
+    String? mobileNumber,
+    required String role,
+    String? department,
+    String? jobTitle,
+    String? password,
+    String? passwordConfirmation,
+  }) async {
+    final response = await http.put(
+      _buildUri('/admin/users/$id'),
+      headers: await _headers(authRequired: true),
+      body: jsonEncode({
+        'name': name,
+        'email': email,
+        'mobile_number': mobileNumber?.trim() ?? '',
+        'role': role,
+        if (department != null && department.trim().isNotEmpty)
+          'department': department.trim(),
+        if (jobTitle != null && jobTitle.trim().isNotEmpty)
+          'job_title': jobTitle.trim(),
+        if (password != null && password.trim().isNotEmpty) ...{
+          'password': password.trim(),
+          'password_confirmation': passwordConfirmation?.trim() ?? '',
+        },
+      }),
+    );
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+    if (response.statusCode == 200) {
+      return data;
+    }
+
+    throw Exception(_extractErrorMessage(data, 'Failed to update account'));
   }
 
   Future<List<dynamic>> getOffices({bool includeInactive = false}) async {

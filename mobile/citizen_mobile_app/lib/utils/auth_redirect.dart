@@ -17,10 +17,7 @@ class AuthRedirect {
         : AppRoutes.login;
   }
 
-  static void goToRoleHome(
-    BuildContext context,
-    Object? role,
-  ) {
+  static void goToRoleHome(BuildContext context, Object? role) {
     Navigator.pushNamedAndRemoveUntil(
       context,
       routeForRole(role),

@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../services/dashboard_service.dart';
 import '../../services/report_service.dart';
+import '../../utils/admin_theme.dart';
 import '../citizen/complaint_detail_screen.dart';
 import 'analytics_reports_screen.dart';
 import '../auth/login_screen.dart';
-import '../super_admin/manage_admins_screen.dart';
-import '../super_admin/manage_offices_screen.dart';
+import '../super_admin/feedback_management_screen.dart';
 import 'admin_profile_screen.dart';
 import 'complaint_management_screen.dart';
 
@@ -21,9 +21,8 @@ class AdminHomeScreen extends StatefulWidget {
 enum _AdminDesktopSection {
   dashboard,
   reports,
-  staff,
-  offices,
   analytics,
+  feedback,
   profile,
 }
 
@@ -102,34 +101,6 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     await _refresh();
   }
 
-  Future<void> _openUsers() async {
-    if (_isDesktopLayout(context)) {
-      setState(() {
-        _desktopSection = _AdminDesktopSection.staff;
-      });
-      return;
-    }
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ManageAdminsScreen()),
-    );
-    await _refresh();
-  }
-
-  Future<void> _openOffices() async {
-    if (_isDesktopLayout(context)) {
-      setState(() {
-        _desktopSection = _AdminDesktopSection.offices;
-      });
-      return;
-    }
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ManageOfficesScreen()),
-    );
-    await _refresh();
-  }
-
   Future<void> _openAnalytics() async {
     if (_isDesktopLayout(context)) {
       setState(() {
@@ -140,6 +111,20 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const AnalyticsReportsScreen()),
+    );
+    await _refresh();
+  }
+
+  Future<void> _openFeedback() async {
+    if (_isDesktopLayout(context)) {
+      setState(() {
+        _desktopSection = _AdminDesktopSection.feedback;
+      });
+      return;
+    }
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const FeedbackManagementScreen()),
     );
     await _refresh();
   }
@@ -165,11 +150,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
             },
             onOpenUsers: () {
               Navigator.pop(context);
-              _openUsers();
+              _openFeedback();
             },
-            manageUsersLabel: 'Account directory',
-            manageUsersSubtitle:
-                'Manage citizen and staff account access',
+            manageUsersLabel: 'Department feedback',
+            manageUsersSubtitle: 'Review feedback assigned to your department',
+            showManageUsers: true,
           ),
         ),
       );
@@ -254,8 +239,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   }
 
   DateTime? _reportTimestamp(Map<String, dynamic> report) {
-    final rawTimestamp =
-        (report['updated_at'] ?? report['created_at'] ?? '').toString();
+    final rawTimestamp = (report['updated_at'] ?? report['created_at'] ?? '')
+        .toString();
     return DateTime.tryParse(rawTimestamp);
   }
 
@@ -273,23 +258,24 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   }
 
   InputDecoration _compactFilterDecoration() {
+    final colors = AdminThemeColors.of(context);
     return InputDecoration(
       filled: true,
-      fillColor: const Color(0xFF141C2B),
+      fillColor: colors.input,
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        borderSide: BorderSide(color: colors.border),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        borderSide: BorderSide(color: colors.border),
       ),
-      focusedBorder: const OutlineInputBorder(
-        borderRadius: BorderRadius.all(Radius.circular(12)),
-        borderSide: BorderSide(color: Color(0xFF3B82F6)),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: const BorderRadius.all(Radius.circular(12)),
+        borderSide: BorderSide(color: colors.primary),
       ),
-      hintStyle: const TextStyle(color: Color(0xFF71809C)),
+      hintStyle: TextStyle(color: colors.mutedText),
     );
   }
 
@@ -297,9 +283,17 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     return reports.where((report) => _reportStatus(report) == status).length;
   }
 
-  List<Map<String, dynamic>> _triageReports(List<Map<String, dynamic>> reports) {
+  List<Map<String, dynamic>> _triageReports(
+    List<Map<String, dynamic>> reports,
+  ) {
     final triage = reports
-        .where((report) => const {'Pending', 'New', 'In Progress'}.contains(_reportStatus(report)))
+        .where(
+          (report) => const {
+            'Pending',
+            'New',
+            'In Progress',
+          }.contains(_reportStatus(report)),
+        )
         .toList();
     triage.sort((a, b) {
       final aTime = _reportTimestamp(a);
@@ -323,48 +317,51 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   }
 
   List<Map<String, dynamic>> _tableReports(List<Map<String, dynamic>> reports) {
-    return reports.where((report) {
-      final matchesSearch = _searchQuery.trim().isEmpty ||
-          [
-            _reportTitle(report),
-            _reportLocation(report),
-            _reportCategory(report),
-            _reportCitizen(report),
-          ].join(' ').toLowerCase().contains(_searchQuery.toLowerCase());
+    return reports
+        .where((report) {
+          final matchesSearch =
+              _searchQuery.trim().isEmpty ||
+              [
+                _reportTitle(report),
+                _reportLocation(report),
+                _reportCategory(report),
+                _reportCitizen(report),
+              ].join(' ').toLowerCase().contains(_searchQuery.toLowerCase());
 
-      final matchesStatus =
-          _statusFilter == 'All Status' || _reportStatus(report) == _statusFilter;
-      final matchesPriority =
-          _priorityFilter == 'All Priority' || _reportPriority(report) == _priorityFilter;
+          final matchesStatus =
+              _statusFilter == 'All Status' ||
+              _reportStatus(report) == _statusFilter;
+          final matchesPriority =
+              _priorityFilter == 'All Priority' ||
+              _reportPriority(report) == _priorityFilter;
 
-      return matchesSearch && matchesStatus && matchesPriority;
-    }).take(6).toList();
+          return matchesSearch && matchesStatus && matchesPriority;
+        })
+        .take(6)
+        .toList();
   }
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     final bottomSafeArea = MediaQuery.of(context).padding.bottom;
     final isDesktop = MediaQuery.of(context).size.width >= 1100;
     return Scaffold(
-      backgroundColor: const Color(0xFF0C1727),
+      backgroundColor: colors.background,
       appBar: isDesktop
           ? null
           : AppBar(
-              backgroundColor: const Color(0xFF0C1727),
-              foregroundColor: Colors.white,
+              backgroundColor: colors.background,
+              foregroundColor: colors.text,
               elevation: 0,
               title: const Text('Admin Dashboard'),
             ),
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0C1727),
-              Color(0xFF1A2940),
-              Color(0xFF463327),
-            ],
+            colors: colors.backgroundGradient,
           ),
         ),
         child: RefreshIndicator(
@@ -383,9 +380,10 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                   children: [
                     _GlassMessageCard(
                       title: 'Unable to load dashboard',
-                      message: snapshot.error
-                          .toString()
-                          .replaceFirst('Exception: ', ''),
+                      message: snapshot.error.toString().replaceFirst(
+                        'Exception: ',
+                        '',
+                      ),
                     ),
                   ],
                 );
@@ -397,11 +395,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               final currentUser = data.user;
               final statusBreakdown =
                   (analytics['status_breakdown'] as List<dynamic>? ?? const []);
-              final priorityBreakdown = (analytics['priority_breakdown']
-                      as List<dynamic>? ??
+              final priorityBreakdown =
+                  (analytics['priority_breakdown'] as List<dynamic>? ??
                   const []);
-              final categoryBreakdown = (analytics['category_breakdown']
-                      as List<dynamic>? ??
+              final categoryBreakdown =
+                  (analytics['category_breakdown'] as List<dynamic>? ??
                   const []);
               final filteredReports = reports.where((item) {
                 if (_searchQuery.trim().isEmpty) {
@@ -507,10 +505,10 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                                 .toString();
 
                         return _ReportPreviewCard(
-                          title:
-                              (report['title'] ?? 'Untitled report').toString(),
-                          citizen:
-                              (user?['name'] ?? 'Citizen Reporter').toString(),
+                          title: (report['title'] ?? 'Untitled report')
+                              .toString(),
+                          citizen: (user?['name'] ?? 'Citizen Reporter')
+                              .toString(),
                           location: location,
                           category: category,
                           status: (report['status'] ?? 'Pending').toString(),
@@ -548,14 +546,14 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                     ),
                     const SizedBox(height: 12),
                     _ActionCard(
-                      icon: Icons.groups_outlined,
+                      icon: Icons.rate_review_outlined,
                       iconColor: const Color(0xFFC7F9CC),
                       iconBackground: const Color(0xFF16A34A),
-                      title: 'Manage Accounts',
+                      title: 'Department Feedback',
                       subtitle:
-                          'Review citizen and staff accounts, and deactivate accounts when needed.',
-                      ctaLabel: 'Open Account Directory',
-                      onTap: _openUsers,
+                          'Review citizen feedback connected to your department.',
+                      ctaLabel: 'Open Feedback',
+                      onTap: _openFeedback,
                     ),
                     const SizedBox(height: 12),
                     _ActionCard(
@@ -603,10 +601,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                               onReportsTap: _openReports,
                               onProfileTap: _openProfile,
                               departmentName: _departmentLabel(currentUser),
-                              adminName:
-                                  (currentUser['name'] ?? 'Admin User').toString(),
-                              notificationCount:
-                                  _triageReports(_reportMaps(filteredReports)).length,
+                              adminName: (currentUser['name'] ?? 'Admin User')
+                                  .toString(),
+                              notificationCount: _triageReports(
+                                _reportMaps(filteredReports),
+                              ).length,
                             ),
                             Expanded(
                               child: Row(
@@ -619,8 +618,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                                       onDashboard: _showDashboard,
                                       onReports: _openReports,
                                       onAnalytics: _openAnalytics,
-                                      onUsers: _openUsers,
-                                      onOffices: _openOffices,
+                                      onFeedback: _openFeedback,
                                       onProfile: _openProfile,
                                       onLogout: _logout,
                                     ),
@@ -675,19 +673,18 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         );
       case _AdminDesktopSection.reports:
         return const ComplaintManagementScreen();
-      case _AdminDesktopSection.staff:
-        return const ManageAdminsScreen(embedded: true);
-      case _AdminDesktopSection.offices:
-        return const ManageOfficesScreen(embedded: true);
       case _AdminDesktopSection.analytics:
         return const AnalyticsReportsScreen(embedded: true);
+      case _AdminDesktopSection.feedback:
+        return const FeedbackManagementScreen(embedded: true);
       case _AdminDesktopSection.profile:
         return AdminProfileScreen(
           user: currentUser,
           onOpenReports: _openReports,
-          onOpenUsers: _openUsers,
-          manageUsersLabel: 'Account directory',
-          manageUsersSubtitle: 'Manage citizen and staff account access',
+          onOpenUsers: _openFeedback,
+          manageUsersLabel: 'Department feedback',
+          manageUsersSubtitle: 'Review feedback assigned to your department',
+          showManageUsers: true,
         );
     }
   }
@@ -711,6 +708,10 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         .take(3)
         .toList();
     final rejectedCount = _statusCount(reportList, 'Rejected');
+    final colors = AdminThemeColors.of(context);
+    final panelGradient = LinearGradient(
+      colors: [colors.panel, colors.panel],
+    );
 
     return ListView(
       padding: EdgeInsets.fromLTRB(14, 12, 14, 28 + bottomSafeArea),
@@ -718,15 +719,15 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         Text(
           'Dashboard',
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-              ),
+            color: colors.text,
+            fontWeight: FontWeight.w800,
+          ),
         ),
         const SizedBox(height: 4),
         Text(
           '$departmentName | Tacloban City',
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.56),
+            color: colors.mutedText,
             fontSize: 13,
           ),
         ),
@@ -739,8 +740,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                 value: '${data.stats['total_reports'] ?? 0}',
                 subtitle: '+${triageQueue.length} this week',
                 icon: Icons.bar_chart_rounded,
-                gradient: const LinearGradient(colors: [Color(0xFF1A2234), Color(0xFF1A2234)]),
-                valueColor: Colors.white,
+                gradient: panelGradient,
+                valueColor: colors.text,
                 subtitleColor: const Color(0xFF22C55E),
               ),
             ),
@@ -751,9 +752,9 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                 value: '${data.stats['pending'] ?? 0}',
                 subtitle: 'Needs triage',
                 icon: Icons.pending_actions_rounded,
-                gradient: const LinearGradient(colors: [Color(0xFF1A2234), Color(0xFF1A2234)]),
+                gradient: panelGradient,
                 valueColor: const Color(0xFFFBBF24),
-                subtitleColor: const Color(0xFF94A3B8),
+                subtitleColor: colors.mutedText,
               ),
             ),
             const SizedBox(width: 12),
@@ -763,7 +764,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                 value: '${data.stats['in_progress'] ?? 0}',
                 subtitle: '${assignedReports.length} assigned',
                 icon: Icons.sync_rounded,
-                gradient: const LinearGradient(colors: [Color(0xFF1A2234), Color(0xFF1A2234)]),
+                gradient: panelGradient,
                 valueColor: const Color(0xFF60A5FA),
                 subtitleColor: const Color(0xFF22C55E),
               ),
@@ -775,7 +776,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                 value: '${data.stats['resolved'] ?? 0}',
                 subtitle: 'Updated today',
                 icon: Icons.check_circle_outline_rounded,
-                gradient: const LinearGradient(colors: [Color(0xFF1A2234), Color(0xFF1A2234)]),
+                gradient: panelGradient,
                 valueColor: const Color(0xFF22C55E),
                 subtitleColor: const Color(0xFF22C55E),
               ),
@@ -785,9 +786,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               child: _WideMetricCard(
                 title: 'Rejected',
                 value: '$rejectedCount',
-                subtitle: rejectedCount == 0 ? 'No rejected reports' : 'Invalid or prank',
+                subtitle: rejectedCount == 0
+                    ? 'No rejected reports'
+                    : 'Invalid or prank',
                 icon: Icons.cancel_outlined,
-                gradient: const LinearGradient(colors: [Color(0xFF1A2234), Color(0xFF1A2234)]),
+                gradient: panelGradient,
                 valueColor: const Color(0xFFEF4444),
                 subtitleColor: const Color(0xFFEF4444),
               ),
@@ -805,15 +808,23 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.warning_amber_rounded, color: Color(0xFFF87171)),
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  color: Color(0xFFF87171),
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     '$staleReports reports have exceeded 72 hours without update. Action required immediately.',
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.78)),
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.78),
+                    ),
                   ),
                 ),
-                TextButton(onPressed: _openReports, child: const Text('View Reports')),
+                TextButton(
+                  onPressed: _openReports,
+                  child: const Text('View Reports'),
+                ),
               ],
             ),
           ),
@@ -836,14 +847,18 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                             subtitle: 'Pending review',
                           ),
                         ),
-                        TextButton(onPressed: _openReports, child: const Text('Open queue')),
+                        TextButton(
+                          onPressed: _openReports,
+                          child: const Text('Open queue'),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 14),
                     if (triageQueue.isEmpty)
                       const _PanelEmptyState(
                         title: 'Queue is clear',
-                        subtitle: 'No pending or active reports need review right now.',
+                        subtitle:
+                            'No pending or active reports need review right now.',
                       )
                     else
                       ...triageQueue.map((report) {
@@ -856,7 +871,9 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                             location: _reportLocation(report),
                             category: _reportCategory(report),
                             status: _reportStatus(report),
-                            onTap: reportId == null ? _openReports : () => _openReportDetail(reportId),
+                            onTap: reportId == null
+                                ? _openReports
+                                : () => _openReportDetail(reportId),
                           ),
                         );
                       }),
@@ -879,51 +896,73 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                             subtitle: 'Active field workers',
                           ),
                         ),
-                        TextButton(onPressed: _openUsers, child: const Text('Manage')),
+                        TextButton(
+                          onPressed: _openReports,
+                          child: const Text('Open queue'),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 14),
                     if (assignedReports.isEmpty)
                       const _PanelEmptyState(
                         title: 'No active assignments',
-                        subtitle: 'Assigned reports will appear here once field work starts.',
+                        subtitle:
+                            'Assigned reports will appear here once field work starts.',
                       )
                     else
-                      ...assignedReports.map((report) => Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: ListTile(
-                              tileColor: const Color(0xFF141C2B),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                side: BorderSide(color: Colors.white.withValues(alpha: 0.07)),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                              leading: CircleAvatar(
-                                backgroundColor: _priorityColor(_reportPriority(report)).withValues(alpha: 0.20),
-                                child: Text(
-                                  _reportCitizen(report).substring(0, 1).toUpperCase(),
-                                  style: TextStyle(
-                                    color: _priorityColor(_reportPriority(report)),
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                              title: Text(
-                                _reportCitizen(report),
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-                              ),
-                              subtitle: Text(
-                                _reportTitle(report),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(color: Colors.white.withValues(alpha: 0.56)),
-                              ),
-                              trailing: FilledButton(
-                                onPressed: _openUsers,
-                                child: const Text('Assign'),
+                      ...assignedReports.map(
+                        (report) => Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: ListTile(
+                            tileColor: const Color(0xFF141C2B),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              side: BorderSide(
+                                color: Colors.white.withValues(alpha: 0.07),
                               ),
                             ),
-                          )),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
+                            leading: CircleAvatar(
+                              backgroundColor: _priorityColor(
+                                _reportPriority(report),
+                              ).withValues(alpha: 0.20),
+                              child: Text(
+                                _reportCitizen(
+                                  report,
+                                ).substring(0, 1).toUpperCase(),
+                                style: TextStyle(
+                                  color: _priorityColor(
+                                    _reportPriority(report),
+                                  ),
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            title: Text(
+                              _reportCitizen(report),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            subtitle: Text(
+                              _reportTitle(report),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.56),
+                              ),
+                            ),
+                            trailing: FilledButton(
+                              onPressed: _openReports,
+                              child: const Text('Open'),
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -943,7 +982,10 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                       subtitle: 'Filtered working list',
                     ),
                   ),
-                  TextButton(onPressed: _openReports, child: const Text('Open full queue')),
+                  TextButton(
+                    onPressed: _openReports,
+                    child: const Text('Open full queue'),
+                  ),
                 ],
               ),
               const SizedBox(height: 14),
@@ -952,11 +994,16 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                   Expanded(
                     child: TextFormField(
                       initialValue: _searchQuery,
-                      onChanged: (value) => setState(() => _searchQuery = value),
+                      onChanged: (value) =>
+                          setState(() => _searchQuery = value),
                       style: const TextStyle(color: Colors.white),
                       decoration: _compactFilterDecoration().copyWith(
                         hintText: 'Search reports...',
-                        prefixIcon: const Icon(Icons.search, color: Color(0xFF71809C), size: 18),
+                        prefixIcon: const Icon(
+                          Icons.search,
+                          color: Color(0xFF71809C),
+                          size: 18,
+                        ),
                       ),
                     ),
                   ),
@@ -964,28 +1011,56 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                   SizedBox(
                     width: 150,
                     child: DropdownButtonFormField<String>(
-                      value: _statusFilter,
+                      initialValue: _statusFilter,
                       dropdownColor: const Color(0xFF141C2B),
                       style: const TextStyle(color: Colors.white),
                       decoration: _compactFilterDecoration(),
-                      items: const ['All Status', 'Pending', 'In Progress', 'Resolved', 'Rejected', 'New']
-                          .map((item) => DropdownMenuItem(value: item, child: Text(item)))
-                          .toList(),
-                      onChanged: (value) => setState(() => _statusFilter = value ?? 'All Status'),
+                      items:
+                          const [
+                                'All Status',
+                                'Pending',
+                                'In Progress',
+                                'Resolved',
+                                'Rejected',
+                                'New',
+                              ]
+                              .map(
+                                (item) => DropdownMenuItem(
+                                  value: item,
+                                  child: Text(item),
+                                ),
+                              )
+                              .toList(),
+                      onChanged: (value) =>
+                          setState(() => _statusFilter = value ?? 'All Status'),
                     ),
                   ),
                   const SizedBox(width: 12),
                   SizedBox(
                     width: 150,
                     child: DropdownButtonFormField<String>(
-                      value: _priorityFilter,
+                      initialValue: _priorityFilter,
                       dropdownColor: const Color(0xFF141C2B),
                       style: const TextStyle(color: Colors.white),
                       decoration: _compactFilterDecoration(),
-                      items: const ['All Priority', 'Low', 'Normal', 'High', 'Urgent']
-                          .map((item) => DropdownMenuItem(value: item, child: Text(item)))
-                          .toList(),
-                      onChanged: (value) => setState(() => _priorityFilter = value ?? 'All Priority'),
+                      items:
+                          const [
+                                'All Priority',
+                                'Low',
+                                'Normal',
+                                'High',
+                                'Urgent',
+                              ]
+                              .map(
+                                (item) => DropdownMenuItem(
+                                  value: item,
+                                  child: Text(item),
+                                ),
+                              )
+                              .toList(),
+                      onChanged: (value) => setState(
+                        () => _priorityFilter = value ?? 'All Priority',
+                      ),
                     ),
                   ),
                 ],
@@ -1005,9 +1080,12 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                       title: _reportTitle(report),
                       citizen: _reportCitizen(report),
                       location: _reportLocation(report),
-                      category: '${_reportCategory(report)} | ${_reportPriority(report)}',
+                      category:
+                          '${_reportCategory(report)} | ${_reportPriority(report)}',
                       status: _reportStatus(report),
-                      onTap: reportId == null ? _openReports : () => _openReportDetail(reportId),
+                      onTap: reportId == null
+                          ? _openReports
+                          : () => _openReportDetail(reportId),
                     ),
                   );
                 }),
@@ -1030,10 +1108,14 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                     const SizedBox(height: 16),
                     const _PanelEmptyState(
                       title: 'Proof uploads are handled in the report queue',
-                      subtitle: 'Open a report to attach resolution media and mark it resolved.',
+                      subtitle:
+                          'Open a report to attach resolution media and mark it resolved.',
                     ),
                     const SizedBox(height: 14),
-                    FilledButton(onPressed: _openReports, child: const Text('Open Report Queue')),
+                    FilledButton(
+                      onPressed: _openReports,
+                      child: const Text('Open Report Queue'),
+                    ),
                   ],
                 ),
               ),
@@ -1052,7 +1134,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                     if (categoryBreakdown.isEmpty)
                       const _PanelEmptyState(
                         title: 'No feedback data yet',
-                        subtitle: 'Citizen praise, suggestions, and complaints will appear here.',
+                        subtitle:
+                            'Citizen praise, suggestions, and complaints will appear here.',
                       )
                     else
                       ...categoryBreakdown.take(3).map((item) {
@@ -1063,15 +1146,22 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                             tileColor: const Color(0xFF141C2B),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
-                              side: BorderSide(color: Colors.white.withValues(alpha: 0.07)),
+                              side: BorderSide(
+                                color: Colors.white.withValues(alpha: 0.07),
+                              ),
                             ),
                             title: Text(
                               (record['label'] ?? 'Feedback').toString(),
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                             subtitle: Text(
                               '${record['count'] ?? 0} records in analytics',
-                              style: TextStyle(color: Colors.white.withValues(alpha: 0.56)),
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.56),
+                              ),
                             ),
                             trailing: TextButton(
                               onPressed: _openAnalytics,
@@ -1106,10 +1196,7 @@ class _AdminHomeData {
 }
 
 class _AdminHeroCard extends StatelessWidget {
-  const _AdminHeroCard({
-    required this.totalReports,
-    required this.pending,
-  });
+  const _AdminHeroCard({required this.totalReports, required this.pending});
 
   final String totalReports;
   final String pending;
@@ -1123,11 +1210,7 @@ class _AdminHeroCard extends StatelessWidget {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF2563EB),
-            Color(0xFF1D4ED8),
-            Color(0xFF0F172A),
-          ],
+          colors: [Color(0xFF2563EB), Color(0xFF1D4ED8), Color(0xFF0F172A)],
         ),
         boxShadow: [
           BoxShadow(
@@ -1148,10 +1231,7 @@ class _AdminHeroCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: Colors.white.withValues(alpha: 0.16),
-                  border: Border.all(
-                    color: const Color(0xFFD8B15A),
-                    width: 2,
-                  ),
+                  border: Border.all(color: const Color(0xFFD8B15A), width: 2),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(6),
@@ -1171,9 +1251,9 @@ class _AdminHeroCard extends StatelessWidget {
                     Text(
                       'Engineering Operations',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                          ),
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -1199,10 +1279,7 @@ class _AdminHeroCard extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: _HeroMiniStat(
-                  label: 'Awaiting action',
-                  value: pending,
-                ),
+                child: _HeroMiniStat(label: 'Awaiting action', value: pending),
               ),
             ],
           ),
@@ -1213,10 +1290,7 @@ class _AdminHeroCard extends StatelessWidget {
 }
 
 class _HeroMiniStat extends StatelessWidget {
-  const _HeroMiniStat({
-    required this.label,
-    required this.value,
-  });
+  const _HeroMiniStat({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -1272,13 +1346,14 @@ class _MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Container(
       width: width,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.10),
+        color: colors.panel,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+        border: Border.all(color: colors.border),
       ),
       child: Row(
         children: [
@@ -1299,7 +1374,7 @@ class _MetricCard extends StatelessWidget {
                 Text(
                   label,
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.72),
+                    color: colors.mutedText,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -1307,8 +1382,8 @@ class _MetricCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   value,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: colors.text,
                     fontSize: 26,
                     fontWeight: FontWeight.w800,
                   ),
@@ -1323,23 +1398,21 @@ class _MetricCard extends StatelessWidget {
 }
 
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({
-    required this.title,
-    required this.subtitle,
-  });
+  const _SectionTitle({required this.title, required this.subtitle});
 
   final String title;
   final String subtitle;
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           title,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: colors.text,
             fontSize: 20,
             fontWeight: FontWeight.w800,
           ),
@@ -1348,7 +1421,7 @@ class _SectionTitle extends StatelessWidget {
         Text(
           subtitle,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.70),
+            color: colors.mutedText,
             height: 1.4,
           ),
         ),
@@ -1378,15 +1451,16 @@ class _ActionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(24),
       child: Ink(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.10),
+          color: colors.panel,
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+          border: Border.all(color: colors.border),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1405,15 +1479,15 @@ class _ActionCard extends StatelessWidget {
                 const Spacer(),
                 Icon(
                   Icons.arrow_forward_rounded,
-                  color: Colors.white.withValues(alpha: 0.82),
+                  color: colors.mutedText,
                 ),
               ],
             ),
             const SizedBox(height: 14),
             Text(
               title,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: colors.text,
                 fontSize: 17,
                 fontWeight: FontWeight.w800,
               ),
@@ -1422,15 +1496,15 @@ class _ActionCard extends StatelessWidget {
             Text(
               subtitle,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.72),
+                color: colors.mutedText,
                 height: 1.4,
               ),
             ),
             const SizedBox(height: 14),
             Text(
               ctaLabel,
-              style: const TextStyle(
-                color: Color(0xFFB8D3FF),
+              style: TextStyle(
+                color: colors.primary,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -1476,14 +1550,15 @@ class _ReportPreviewCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final statusColor = _statusColor();
+    final colors = AdminThemeColors.of(context);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF141C2B),
+        color: colors.panelAlt,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+        border: Border.all(color: colors.border),
       ),
       child: InkWell(
         onTap: onTap,
@@ -1513,8 +1588,8 @@ class _ReportPreviewCard extends StatelessWidget {
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: colors.text,
                           fontSize: 16,
                           fontWeight: FontWeight.w800,
                         ),
@@ -1522,9 +1597,7 @@ class _ReportPreviewCard extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         citizen,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.72),
-                        ),
+                        style: TextStyle(color: colors.mutedText),
                       ),
                     ],
                   ),
@@ -1549,10 +1622,7 @@ class _ReportPreviewCard extends StatelessWidget {
 }
 
 class _StatusChip extends StatelessWidget {
-  const _StatusChip({
-    required this.label,
-    required this.color,
-  });
+  const _StatusChip({required this.label, required this.color});
 
   final String label;
   final Color color;
@@ -1578,31 +1648,29 @@ class _StatusChip extends StatelessWidget {
 }
 
 class _MetaChip extends StatelessWidget {
-  const _MetaChip({
-    required this.icon,
-    required this.label,
-  });
+  const _MetaChip({required this.icon, required this.label});
 
   final IconData icon;
   final String label;
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
+        color: colors.input,
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 15, color: const Color(0xFFB8D3FF)),
+          Icon(icon, size: 15, color: colors.primary),
           const SizedBox(width: 6),
           Text(
             label,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.82),
+              color: colors.text,
               fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
@@ -1614,30 +1682,28 @@ class _MetaChip extends StatelessWidget {
 }
 
 class _GlassMessageCard extends StatelessWidget {
-  const _GlassMessageCard({
-    required this.title,
-    required this.message,
-  });
+  const _GlassMessageCard({required this.title, required this.message});
 
   final String title;
   final String message;
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.10),
+        color: colors.panel,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+        border: Border.all(color: colors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: colors.text,
               fontSize: 16,
               fontWeight: FontWeight.w800,
             ),
@@ -1646,7 +1712,7 @@ class _GlassMessageCard extends StatelessWidget {
           Text(
             message,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.72),
+              color: colors.mutedText,
               height: 1.4,
             ),
           ),
@@ -1662,8 +1728,7 @@ class _DashboardSidebar extends StatelessWidget {
     required this.onDashboard,
     required this.onReports,
     required this.onAnalytics,
-    required this.onUsers,
-    required this.onOffices,
+    required this.onFeedback,
     required this.onProfile,
     required this.onLogout,
   });
@@ -1672,15 +1737,15 @@ class _DashboardSidebar extends StatelessWidget {
   final VoidCallback onDashboard;
   final VoidCallback onReports;
   final VoidCallback onAnalytics;
-  final VoidCallback onUsers;
-  final VoidCallback onOffices;
+  final VoidCallback onFeedback;
   final VoidCallback onProfile;
   final VoidCallback onLogout;
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Container(
-      color: const Color(0xFF151B28),
+      color: colors.sidebar,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 14, 12, 18),
         child: Column(
@@ -1699,22 +1764,16 @@ class _DashboardSidebar extends StatelessWidget {
               onTap: onReports,
             ),
             _SidebarNavItem(
-              icon: Icons.groups_outlined,
-              label: 'Staff',
-              isActive: selectedSection == _AdminDesktopSection.staff,
-              onTap: onUsers,
-            ),
-            _SidebarNavItem(
-              icon: Icons.account_balance_outlined,
-              label: 'Department',
-              isActive: selectedSection == _AdminDesktopSection.offices,
-              onTap: onOffices,
-            ),
-            _SidebarNavItem(
               icon: Icons.insights_outlined,
               label: 'Analytics',
               isActive: selectedSection == _AdminDesktopSection.analytics,
               onTap: onAnalytics,
+            ),
+            _SidebarNavItem(
+              icon: Icons.rate_review_outlined,
+              label: 'Feedback',
+              isActive: selectedSection == _AdminDesktopSection.feedback,
+              onTap: onFeedback,
             ),
             _SidebarNavItem(
               icon: Icons.person_outline,
@@ -1728,7 +1787,7 @@ class _DashboardSidebar extends StatelessWidget {
               child: Text(
                 'ACCOUNT',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.32),
+                  color: colors.mutedText.withValues(alpha: 0.72),
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1.1,
@@ -1765,8 +1824,9 @@ class _SidebarNavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const activeColor = Color(0xFF8EB4FF);
-    const defaultColor = Color(0xFFB8C0D4);
+    final colors = AdminThemeColors.of(context);
+    final activeColor = colors.activeText;
+    final defaultColor = colors.isDark ? const Color(0xFFB8C0D4) : Colors.white;
     const destructiveColor = Color(0xFFF87171);
     final itemColor = isDestructive
         ? destructiveColor
@@ -1780,18 +1840,12 @@ class _SidebarNavItem extends StatelessWidget {
         child: Ink(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
           decoration: BoxDecoration(
-            color: isActive
-                ? const Color(0xFF22325A)
-                : Colors.transparent,
+            color: isActive ? colors.activeNav : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
             children: [
-              Icon(
-                icon,
-                color: itemColor,
-                size: 18,
-              ),
+              Icon(icon, color: itemColor, size: 18),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
@@ -1838,13 +1892,12 @@ class _DashboardTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-      decoration: const BoxDecoration(
-        color: Color(0xFF121A29),
-        border: Border(
-          bottom: BorderSide(color: Color(0x1AFFFFFF)),
-        ),
+      decoration: BoxDecoration(
+        color: colors.topBar,
+        border: Border(bottom: BorderSide(color: colors.border)),
       ),
       child: Row(
         children: [
@@ -1861,18 +1914,15 @@ class _DashboardTopBar extends StatelessWidget {
               padding: const EdgeInsets.all(3),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(4),
-                child: Image.asset(
-                  'assets/images/logo.png',
-                  fit: BoxFit.cover,
-                ),
+                child: Image.asset('assets/images/logo.png', fit: BoxFit.cover),
               ),
             ),
           ),
           const SizedBox(width: 10),
-          const Text(
+          Text(
             'CityTrack PH',
             style: TextStyle(
-              color: Colors.white,
+              color: colors.isDark ? Colors.white : Colors.white,
               fontSize: 14,
               fontWeight: FontWeight.w800,
             ),
@@ -1881,7 +1931,9 @@ class _DashboardTopBar extends StatelessWidget {
           Text(
             'Admin Portal',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.34),
+              color: colors.isDark
+                  ? Colors.white.withValues(alpha: 0.34)
+                  : Colors.white.withValues(alpha: 0.72),
               fontSize: 11,
             ),
           ),
@@ -1889,7 +1941,9 @@ class _DashboardTopBar extends StatelessWidget {
           Text(
             departmentName,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.60),
+              color: colors.isDark
+                  ? Colors.white.withValues(alpha: 0.60)
+                  : Colors.white.withValues(alpha: 0.88),
               fontSize: 12,
             ),
           ),
@@ -1904,9 +1958,13 @@ class _DashboardTopBar extends StatelessWidget {
                   width: 34,
                   height: 34,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1D2536),
+                    color: colors.isDark
+                        ? const Color(0xFF1D2536)
+                        : Colors.white.withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.16),
+                    ),
                   ),
                   child: const Icon(
                     Icons.notifications_rounded,
@@ -1946,9 +2004,11 @@ class _DashboardTopBar extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               decoration: BoxDecoration(
-                color: const Color(0xFF1D2536),
+                color: colors.isDark
+                    ? const Color(0xFF1D2536)
+                    : Colors.white.withValues(alpha: 0.18),
                 borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
               ),
               child: Row(
                 children: [
@@ -1956,7 +2016,9 @@ class _DashboardTopBar extends StatelessWidget {
                     radius: 10,
                     backgroundColor: const Color(0xFF8B5CF6),
                     child: Text(
-                      adminName.isEmpty ? 'A' : adminName.substring(0, 1).toUpperCase(),
+                      adminName.isEmpty
+                          ? 'A'
+                          : adminName.substring(0, 1).toUpperCase(),
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 10,
@@ -1967,8 +2029,8 @@ class _DashboardTopBar extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text(
                     adminName,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: colors.isDark ? Colors.white : Colors.white,
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
                     ),
@@ -2004,12 +2066,13 @@ class _WideMetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: gradient,
-        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+        border: Border.all(color: colors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2017,7 +2080,7 @@ class _WideMetricCard extends StatelessWidget {
           Text(
             title,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.68),
+              color: colors.mutedText,
               fontWeight: FontWeight.w600,
               fontSize: 12,
             ),
@@ -2045,7 +2108,7 @@ class _WideMetricCard extends StatelessWidget {
                   ),
                 ),
               ),
-              Icon(icon, color: Colors.white.withValues(alpha: 0.52), size: 22),
+              Icon(icon, color: colors.mutedText, size: 22),
             ],
           ),
         ],
@@ -2055,37 +2118,31 @@ class _WideMetricCard extends StatelessWidget {
 }
 
 class _DarkWebPanel extends StatelessWidget {
-  const _DarkWebPanel({
-    required this.child,
-  });
+  const _DarkWebPanel({required this.child});
 
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A2234),
+        color: colors.panel,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        border: Border.all(color: colors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          child,
-        ],
+        children: [child],
       ),
     );
   }
 }
 
 class _PanelEmptyState extends StatelessWidget {
-  const _PanelEmptyState({
-    this.title,
-    this.subtitle,
-  });
+  const _PanelEmptyState({this.title, this.subtitle});
 
   final String? title;
   final String? subtitle;
@@ -2094,13 +2151,14 @@ class _PanelEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     final heading = title;
     final body = subtitle ?? '';
+    final colors = AdminThemeColors.of(context);
 
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
+        color: colors.panelAlt,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        border: Border.all(color: colors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2109,8 +2167,8 @@ class _PanelEmptyState extends StatelessWidget {
           if (heading != null) ...[
             Text(
               heading,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: colors.text,
                 fontWeight: FontWeight.w700,
                 fontSize: 15,
               ),
@@ -2120,7 +2178,7 @@ class _PanelEmptyState extends StatelessWidget {
           Text(
             body,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.72),
+              color: colors.mutedText,
               height: 1.4,
             ),
           ),

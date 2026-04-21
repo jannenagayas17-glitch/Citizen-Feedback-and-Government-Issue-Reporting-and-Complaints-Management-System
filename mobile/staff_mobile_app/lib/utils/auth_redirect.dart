@@ -4,7 +4,7 @@ import 'app_routes.dart';
 
 class AuthRedirect {
   static String normalizeRole(Object? role) {
-    final normalized = (role ?? 'admin').toString().trim().toLowerCase();
+    final normalized = role?.toString().trim().toLowerCase() ?? '';
     if (normalized == 'staff') {
       return 'admin';
     }
@@ -22,10 +22,7 @@ class AuthRedirect {
     }
   }
 
-  static void goToRoleHome(
-    BuildContext context,
-    Object? role,
-  ) {
+  static void goToRoleHome(BuildContext context, Object? role) {
     Navigator.pushNamedAndRemoveUntil(
       context,
       routeForRole(role),

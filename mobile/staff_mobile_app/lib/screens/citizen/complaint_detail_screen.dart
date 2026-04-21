@@ -7,10 +7,7 @@ import '../../config/api_config.dart';
 import '../../services/report_service.dart';
 
 class ComplaintDetailScreen extends StatefulWidget {
-  const ComplaintDetailScreen({
-    super.key,
-    required this.reportId,
-  });
+  const ComplaintDetailScreen({super.key, required this.reportId});
 
   final int reportId;
 
@@ -52,213 +49,219 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0C1727),
-              Color(0xFF1E293B),
-              Color(0xFF463327),
-            ],
+            colors: [Color(0xFF0C1727), Color(0xFF1E293B), Color(0xFF463327)],
           ),
         ),
         child: RefreshIndicator(
           onRefresh: _refresh,
           child: FutureBuilder<Map<String, dynamic>>(
-          future: _detailFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator());
-            }
+            future: _detailFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-            if (snapshot.hasError) {
+              if (snapshot.hasError) {
+                return ListView(
+                  padding: const EdgeInsets.all(24),
+                  children: [
+                    Text(
+                      snapshot.error.toString().replaceFirst('Exception: ', ''),
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ],
+                );
+              }
+
+              final report = snapshot.data ?? const <String, dynamic>{};
+              final statusHistories =
+                  (report['status_histories'] as List<dynamic>? ??
+                  report['statusHistories'] as List<dynamic>? ??
+                  const []);
+              final adminResponses =
+                  (report['admin_responses'] as List<dynamic>? ??
+                  report['adminResponses'] as List<dynamic>? ??
+                  const []);
+              final attachments =
+                  (report['images'] as List<dynamic>? ?? const []);
+              final categoryName =
+                  ((report['category'] as Map<String, dynamic>?)?['name'] ??
+                          'Uncategorized')
+                      .toString();
+              final officeName =
+                  ((report['office'] as Map<String, dynamic>?)?['name'] ??
+                          'Unassigned office')
+                      .toString();
+              final status = (report['status'] ?? 'Pending').toString();
+              final submittedBy =
+                  ((report['user'] as Map<String, dynamic>?)?['name'] ??
+                          'Unknown')
+                      .toString();
+              final location = (report['location'] ?? 'No location').toString();
+              final createdAt = (report['created_at'] ?? '').toString();
+
               return ListView(
-                padding: const EdgeInsets.all(24),
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: EdgeInsets.fromLTRB(16, 16, 16, bottomSafeArea + 24),
                 children: [
-                  Text(
-                    snapshot.error.toString().replaceFirst('Exception: ', ''),
-                    style: const TextStyle(color: Colors.white),
+                  _buildGlassSection(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _InfoBadge(
+                              label: status,
+                              color: _statusColor(status),
+                              icon: Icons.flag_outlined,
+                            ),
+                            _InfoBadge(
+                              label: categoryName,
+                              color: _categoryColor(categoryName),
+                              icon: _categoryIcon(categoryName),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          (report['title'] ?? 'Untitled report').toString(),
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _DetailRow(label: 'Office', value: officeName),
+                        _DetailRow(label: 'Location', value: location),
+                        _DetailRow(label: 'Submitted by', value: submittedBy),
+                        _DetailRow(
+                          label: 'Date created',
+                          value: createdAt.isEmpty
+                              ? 'Not available'
+                              : createdAt.substring(0, 10),
+                        ),
+                      ],
+                    ),
                   ),
+                  const SizedBox(height: 16),
+                  _buildGlassSection(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Description',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          (report['description'] ?? 'No description')
+                              .toString(),
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.78),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  _buildGlassSection(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Attachments',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        if (attachments.isEmpty)
+                          Text(
+                            'No attachments uploaded for this report.',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.72),
+                            ),
+                          )
+                        else
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            children: attachments.map((item) {
+                              final attachment = item as Map<String, dynamic>;
+                              final mediaType =
+                                  (attachment['media_type'] ?? 'image')
+                                      .toString();
+                              final attachmentUrl = _buildImageUrl(
+                                (attachment['image_path'] ?? '').toString(),
+                              );
+
+                              if (mediaType == 'video') {
+                                return _VideoAttachmentCard(
+                                  fileName:
+                                      (attachment['original_name'] ?? 'video')
+                                          .toString(),
+                                  onOpen: attachmentUrl == null
+                                      ? null
+                                      : () => _openAttachment(attachmentUrl),
+                                );
+                              }
+
+                              return _ImageAttachmentCard(
+                                imageUrl: attachmentUrl,
+                              );
+                            }).toList(),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  _buildSectionTitle('Status History'),
+                  const SizedBox(height: 8),
+                  if (statusHistories.isEmpty)
+                    _buildEmptyMessage('No status updates yet.')
+                  else
+                    ...statusHistories.map(
+                      (item) => _TimelineCard(
+                        title:
+                            '${item['old_status'] ?? 'Unspecified'} -> ${item['new_status'] ?? 'Pending'}',
+                        subtitle:
+                            ((item['user'] as Map<String, dynamic>?)?['name'] ??
+                                    'System')
+                                .toString(),
+                        details: (item['remarks'] ?? 'No remarks').toString(),
+                      ),
+                    ),
+                  const SizedBox(height: 24),
+                  _buildSectionTitle('Admin Responses'),
+                  const SizedBox(height: 8),
+                  if (adminResponses.isEmpty)
+                    _buildEmptyMessage('No admin responses yet.')
+                  else
+                    ...adminResponses.map(
+                      (item) => _TimelineCard(
+                        title:
+                            ((item['user'] as Map<String, dynamic>?)?['name'] ??
+                                    'Admin')
+                                .toString(),
+                        subtitle: 'Official update',
+                        details: (item['response'] ?? '').toString(),
+                      ),
+                    ),
                 ],
               );
-            }
-
-            final report = snapshot.data ?? const <String, dynamic>{};
-            final statusHistories = (report['status_histories'] as List<dynamic>? ??
-                report['statusHistories'] as List<dynamic>? ??
-                const []);
-            final adminResponses = (report['admin_responses'] as List<dynamic>? ??
-                report['adminResponses'] as List<dynamic>? ??
-                const []);
-            final attachments = (report['images'] as List<dynamic>? ?? const []);
-            final categoryName =
-                ((report['category'] as Map<String, dynamic>?)?['name'] ??
-                        'Uncategorized')
-                    .toString();
-            final officeName =
-                ((report['office'] as Map<String, dynamic>?)?['name'] ??
-                        'Unassigned office')
-                    .toString();
-            final status = (report['status'] ?? 'Pending').toString();
-            final submittedBy =
-                ((report['user'] as Map<String, dynamic>?)?['name'] ?? 'Unknown')
-                    .toString();
-            final location = (report['location'] ?? 'No location').toString();
-            final createdAt = (report['created_at'] ?? '').toString();
-
-            return ListView(
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: EdgeInsets.fromLTRB(16, 16, 16, bottomSafeArea + 24),
-              children: [
-                _buildGlassSection(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          _InfoBadge(
-                            label: status,
-                            color: _statusColor(status),
-                            icon: Icons.flag_outlined,
-                          ),
-                          _InfoBadge(
-                            label: categoryName,
-                            color: _categoryColor(categoryName),
-                            icon: _categoryIcon(categoryName),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 14),
-                      Text(
-                        (report['title'] ?? 'Untitled report').toString(),
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      _DetailRow(
-                        label: 'Office',
-                        value: officeName,
-                      ),
-                      _DetailRow(
-                        label: 'Location',
-                        value: location,
-                      ),
-                      _DetailRow(
-                        label: 'Submitted by',
-                        value: submittedBy,
-                      ),
-                      _DetailRow(
-                        label: 'Date created',
-                        value: createdAt.isEmpty ? 'Not available' : createdAt.substring(0, 10),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _buildGlassSection(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Description',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        (report['description'] ?? 'No description').toString(),
-                        style: TextStyle(color: Colors.white.withOpacity(0.78)),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                _buildGlassSection(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Attachments',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      if (attachments.isEmpty)
-                        Text(
-                          'No attachments uploaded for this report.',
-                          style: TextStyle(color: Colors.white.withOpacity(0.72)),
-                        )
-                      else
-                        Wrap(
-                          spacing: 12,
-                          runSpacing: 12,
-                          children: attachments.map((item) {
-                            final attachment = item as Map<String, dynamic>;
-                            final mediaType =
-                                (attachment['media_type'] ?? 'image').toString();
-                            final attachmentUrl = _buildImageUrl(
-                              (attachment['image_path'] ?? '').toString(),
-                            );
-
-                            if (mediaType == 'video') {
-                              return _VideoAttachmentCard(
-                                fileName: (attachment['original_name'] ?? 'video').toString(),
-                                onOpen: attachmentUrl == null
-                                    ? null
-                                    : () => _openAttachment(attachmentUrl),
-                              );
-                            }
-
-                            return _ImageAttachmentCard(imageUrl: attachmentUrl);
-                          }).toList(),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                _buildSectionTitle('Status History'),
-                const SizedBox(height: 8),
-                if (statusHistories.isEmpty)
-                  _buildEmptyMessage('No status updates yet.')
-                else
-                  ...statusHistories.map(
-                    (item) => _TimelineCard(
-                      title:
-                          '${item['old_status'] ?? 'Unspecified'} -> ${item['new_status'] ?? 'Pending'}',
-                      subtitle: ((item['user'] as Map<String, dynamic>?)?['name'] ??
-                              'System')
-                          .toString(),
-                      details: (item['remarks'] ?? 'No remarks').toString(),
-                    ),
-                  ),
-                const SizedBox(height: 24),
-                _buildSectionTitle('Admin Responses'),
-                const SizedBox(height: 8),
-                if (adminResponses.isEmpty)
-                  _buildEmptyMessage('No admin responses yet.')
-                else
-                  ...adminResponses.map(
-                    (item) => _TimelineCard(
-                      title: ((item['user'] as Map<String, dynamic>?)?['name'] ??
-                              'Admin')
-                          .toString(),
-                      subtitle: 'Official update',
-                      details: (item['response'] ?? '').toString(),
-                    ),
-                  ),
-              ],
-            );
-          },
+            },
+          ),
         ),
-      ),
       ),
     );
   }
@@ -274,7 +277,9 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
     }
 
     final baseUri = Uri.parse(ApiConfig.baseUrl);
-    var normalizedPath = trimmed.startsWith('/') ? trimmed.substring(1) : trimmed;
+    var normalizedPath = trimmed.startsWith('/')
+        ? trimmed.substring(1)
+        : trimmed;
     if (normalizedPath.startsWith('public/')) {
       normalizedPath = normalizedPath.substring('public/'.length);
     }
@@ -305,9 +310,9 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
   }
 
   void _showSnack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Widget _buildGlassSection({required Widget child}) {
@@ -319,13 +324,13 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white.withOpacity(0.16)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                Colors.white.withOpacity(0.18),
-                Colors.white.withOpacity(0.08),
+                Colors.white.withValues(alpha: 0.18),
+                Colors.white.withValues(alpha: 0.08),
               ],
             ),
           ),
@@ -351,13 +356,13 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
+        color: Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Text(
         message,
-        style: TextStyle(color: Colors.white.withOpacity(0.72)),
+        style: TextStyle(color: Colors.white.withValues(alpha: 0.72)),
       ),
     );
   }
@@ -397,10 +402,7 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
 }
 
 class _DetailRow extends StatelessWidget {
-  const _DetailRow({
-    required this.label,
-    required this.value,
-  });
+  const _DetailRow({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -425,7 +427,7 @@ class _DetailRow extends StatelessWidget {
           Expanded(
             child: Text(
               value,
-              style: TextStyle(color: Colors.white.withOpacity(0.78)),
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.78)),
             ),
           ),
         ],
@@ -451,9 +453,9 @@ class _TimelineCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -468,12 +470,12 @@ class _TimelineCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             subtitle,
-            style: TextStyle(color: Colors.white.withOpacity(0.62)),
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.62)),
           ),
           const SizedBox(height: 8),
           Text(
             details,
-            style: TextStyle(color: Colors.white.withOpacity(0.78)),
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.78)),
           ),
         ],
       ),
@@ -497,9 +499,9 @@ class _InfoBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.14),
+        color: color.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.34)),
+        border: Border.all(color: color.withValues(alpha: 0.34)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -521,9 +523,7 @@ class _InfoBadge extends StatelessWidget {
 }
 
 class _ImageAttachmentCard extends StatelessWidget {
-  const _ImageAttachmentCard({
-    required this.imageUrl,
-  });
+  const _ImageAttachmentCard({required this.imageUrl});
 
   final String? imageUrl;
 
@@ -534,14 +534,12 @@ class _ImageAttachmentCard extends StatelessWidget {
       child: Container(
         width: 180,
         height: 148,
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         child: imageUrl == null
             ? Center(
                 child: Text(
                   'Invalid image path',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.72),
-                  ),
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.72)),
                 ),
               )
             : Image.network(
@@ -557,7 +555,7 @@ class _ImageAttachmentCard extends StatelessWidget {
                     ),
                   );
                 },
-                errorBuilder: (_, __, ___) {
+                errorBuilder: (_, _, _) {
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(12),
@@ -565,7 +563,7 @@ class _ImageAttachmentCard extends StatelessWidget {
                         'Unable to load image',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.72),
+                          color: Colors.white.withValues(alpha: 0.72),
                         ),
                       ),
                     ),
@@ -578,10 +576,7 @@ class _ImageAttachmentCard extends StatelessWidget {
 }
 
 class _VideoAttachmentCard extends StatelessWidget {
-  const _VideoAttachmentCard({
-    required this.fileName,
-    required this.onOpen,
-  });
+  const _VideoAttachmentCard({required this.fileName, required this.onOpen});
 
   final String fileName;
   final VoidCallback? onOpen;
@@ -594,8 +589,8 @@ class _VideoAttachmentCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
-        color: Colors.white.withOpacity(0.10),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        color: Colors.white.withValues(alpha: 0.10),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -3,6 +3,7 @@ backend/citizen-feedback-api/vendor/
 backend/citizen-feedback-api/node_modules/
 backend/citizen-feedback-api/.env
 backend/citizen-feedback-api/storage/*.key
+backend/citizen-feedback-api/tests/cache/
 
 # Flutter
 mobile/citizen-feedback-app/.dart_tool/

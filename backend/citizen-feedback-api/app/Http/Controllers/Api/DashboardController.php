@@ -100,8 +100,11 @@ class DashboardController extends Controller
             })
             ->values();
 
+        $monthExpression = $this->monthExpression('created_at');
+        $resolvedMonthExpression = $this->monthExpression('COALESCE(resolved_at, created_at)');
+
         $monthlyCounts = (clone $baseQuery)
-            ->selectRaw('DATE_FORMAT(created_at, "%Y-%m") as month_key, COUNT(*) as total')
+            ->selectRaw("{$monthExpression} as month_key, COUNT(*) as total")
             ->where('created_at', '>=', now()->subMonths(5)->startOfMonth())
             ->groupBy('month_key')
             ->orderBy('month_key')
@@ -109,7 +112,7 @@ class DashboardController extends Controller
             ->pluck('total', 'month_key');
 
         $monthlyResolvedCounts = (clone $baseQuery)
-            ->selectRaw('DATE_FORMAT(COALESCE(resolved_at, created_at), "%Y-%m") as month_key, COUNT(*) as total')
+            ->selectRaw("{$resolvedMonthExpression} as month_key, COUNT(*) as total")
             ->where('status', 'Resolved')
             ->where(function ($query) {
                 $query->where('resolved_at', '>=', now()->subMonths(5)->startOfMonth())
@@ -202,5 +205,12 @@ class DashboardController extends Controller
         }
 
         return $query;
+    }
+
+    private function monthExpression(string $column): string
+    {
+        return DB::getDriverName() === 'sqlite'
+            ? "strftime('%Y-%m', {$column})"
+            : "DATE_FORMAT({$column}, '%Y-%m')";
     }
 }

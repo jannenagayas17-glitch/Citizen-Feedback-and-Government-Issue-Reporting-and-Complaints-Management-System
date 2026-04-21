@@ -28,15 +28,10 @@ class CitizenFeedbackController extends Controller
         if (($user->role ?? 'citizen') === 'citizen') {
             $query->where('user_id', $user->id);
         } elseif (($user->role ?? null) === 'admin') {
-            $department = trim((string) ($user->department ?? ''));
-
-            if ($department === '') {
-                $query->whereRaw('1 = 0');
-            } else {
-                $query->whereHas('office', function ($officeQuery) use ($department) {
-                    $officeQuery->where('name', $department);
-                });
-            }
+            $this->ensureDepartmentHead($user);
+            $this->scopeToUserDepartment($query, $user);
+        } elseif (($user->role ?? null) !== 'super_admin') {
+            abort(403, 'Unauthorized action.');
         }
 
         if ($request->filled('type')) {
@@ -64,6 +59,10 @@ class CitizenFeedbackController extends Controller
 
     public function store(Request $request)
     {
+        if (($request->user()->role ?? null) !== 'citizen') {
+            abort(403, 'Only citizens can submit feedback.');
+        }
+
         $validated = $request->validate([
             'office_id' => ['required', 'exists:offices,id'],
             'report_id' => ['nullable', 'exists:reports,id'],
@@ -81,6 +80,10 @@ class CitizenFeedbackController extends Controller
                 ->where('id', $validated['report_id'])
                 ->where('user_id', $request->user()->id)
                 ->firstOrFail();
+
+            if ((int) $report->office_id !== (int) $validated['office_id']) {
+                abort(422, 'The selected department does not match this report.');
+            }
         } else {
             $report = Report::query()
                 ->where('user_id', $request->user()->id)
@@ -125,10 +128,8 @@ class CitizenFeedbackController extends Controller
             ->latest();
 
         if (($request->user()->role ?? null) === 'admin') {
-            $department = trim((string) ($request->user()->department ?? ''));
-            $query->whereHas('office', function ($officeQuery) use ($department) {
-                $officeQuery->where('name', $department);
-            });
+            $this->ensureDepartmentHead($request->user());
+            $this->scopeToUserDepartment($query, $request->user());
         }
 
         if ($request->filled('type')) {
@@ -186,5 +187,26 @@ class CitizenFeedbackController extends Controller
             'Content-Type' => 'text/csv; charset=UTF-8',
             'Cache-Control' => 'no-store, no-cache',
         ]);
+    }
+
+    private function ensureDepartmentHead($user): void
+    {
+        if (! $user->isDepartmentHead()) {
+            abort(403, 'Only the department head can view citizen feedback for this department.');
+        }
+    }
+
+    private function scopeToUserDepartment($query, $user): void
+    {
+        $department = trim((string) ($user->department ?? ''));
+
+        if ($department === '') {
+            $query->whereRaw('1 = 0');
+            return;
+        }
+
+        $query->whereHas('office', function ($officeQuery) use ($department) {
+            $officeQuery->where('name', $department);
+        });
     }
 }

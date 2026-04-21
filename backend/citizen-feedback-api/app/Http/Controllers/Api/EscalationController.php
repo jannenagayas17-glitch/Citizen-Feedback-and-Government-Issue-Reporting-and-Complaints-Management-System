@@ -88,10 +88,10 @@ class EscalationController extends Controller
             ],
             'summary' => [
                 'total' => $items->count(),
-                'open' => $items->where('escalation.status', 'Open')->count(),
-                'acknowledged' => $items->where('escalation.status', 'Acknowledged')->count(),
-                'intervened' => $items->where('escalation.status', 'Intervened')->count(),
-                'dismissed' => $items->where('escalation.status', 'Dismissed')->count(),
+                'open' => $this->countEscalationsByStatus($items, 'Open'),
+                'acknowledged' => $this->countEscalationsByStatus($items, 'Acknowledged'),
+                'intervened' => $this->countEscalationsByStatus($items, 'Intervened'),
+                'dismissed' => $this->countEscalationsByStatus($items, 'Dismissed'),
             ],
             'items' => $items->all(),
         ]);
@@ -149,5 +149,12 @@ class EscalationController extends Controller
         $setting = SystemSetting::query()->where('key', self::SETTINGS_KEY)->first();
 
         return array_replace_recursive($defaults, $setting?->value ?? []);
+    }
+
+    private function countEscalationsByStatus($items, string $status): int
+    {
+        return $items
+            ->filter(fn (array $item) => data_get($item, 'escalation.status') === $status)
+            ->count();
     }
 }
