@@ -4,6 +4,7 @@ namespace Tests\Feature\Auth;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -138,6 +139,39 @@ class AdminAccountManagementTest extends TestCase
                 'id' => $citizen->id,
                 'role' => 'citizen',
             ]);
+    }
+
+    public function test_super_admin_can_create_citizen_account_from_account_management(): void
+    {
+        $superAdmin = User::create([
+            'name' => 'Super Admin',
+            'email' => 'create-citizen-super@test.com',
+            'password' => 'password123',
+            'role' => 'super_admin',
+            'is_active' => true,
+        ]);
+
+        Sanctum::actingAs($superAdmin);
+
+        $this->postJson('/api/admin/users', [
+            'name' => 'New Citizen Account',
+            'email' => 'new-citizen-account@test.com',
+            'mobile_number' => '09171234567',
+            'password' => 'citizen123',
+            'password_confirmation' => 'citizen123',
+            'role' => 'citizen',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('user.role', 'citizen')
+            ->assertJsonPath('user.is_active', true);
+
+        $citizen = User::query()
+            ->where('email', 'new-citizen-account@test.com')
+            ->firstOrFail();
+
+        $this->assertNull($citizen->department);
+        $this->assertNull($citizen->job_title);
+        $this->assertTrue(Hash::check('citizen123', $citizen->password));
     }
 
     public function test_super_admin_user_list_includes_archived_accounts_until_permanent_delete(): void

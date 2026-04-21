@@ -197,6 +197,12 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
     );
 
     if (created == true) {
+      setState(() {
+        _selectedAccountGroup = 'Citizen Accounts';
+        _selectedRoleFilter = 'All Role';
+        _selectedDepartmentFilter = 'All Department';
+        _selectedAvailabilityFilter = 'Account Status';
+      });
       await _refresh();
     }
   }

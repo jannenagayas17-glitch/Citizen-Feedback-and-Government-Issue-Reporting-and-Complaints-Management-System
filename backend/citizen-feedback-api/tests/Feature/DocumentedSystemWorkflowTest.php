@@ -375,6 +375,38 @@ class DocumentedSystemWorkflowTest extends TestCase
             ]);
     }
 
+    public function test_tc_ri_citizen_submitted_report_is_visible_to_super_admin_and_matching_department_admin(): void
+    {
+        [$citizen, $office, $category] = $this->seedCitizenReportDependencies();
+        $departmentAdmin = $this->makeUser('Matching Admin', 'matching-admin@example.com', 'admin', [
+            'department' => $office->name,
+        ]);
+        $otherAdmin = $this->makeUser('Other Admin', 'other-admin@example.com', 'admin', [
+            'department' => 'Other Department',
+        ]);
+        $superAdmin = $this->makeUser('Report Super Admin', 'report-super@example.com', 'super_admin');
+
+        Sanctum::actingAs($citizen);
+        $reportId = $this->postJson('/api/reports', $this->validReportPayload($office, $category))
+            ->assertCreated()
+            ->json('report.id');
+
+        Sanctum::actingAs($superAdmin);
+        $this->getJson('/api/admin/reports')
+            ->assertOk()
+            ->assertJsonFragment(['id' => $reportId, 'office_id' => $office->id]);
+
+        Sanctum::actingAs($departmentAdmin);
+        $this->getJson('/api/admin/reports')
+            ->assertOk()
+            ->assertJsonFragment(['id' => $reportId, 'office_id' => $office->id]);
+
+        Sanctum::actingAs($otherAdmin);
+        $this->getJson('/api/admin/reports')
+            ->assertOk()
+            ->assertJsonMissing(['id' => $reportId, 'office_id' => $office->id]);
+    }
+
     public function test_tc_adm_rpt_006_admin_can_update_report_status(): void
     {
         [$office] = $this->seedTwoOfficesWithReports();
