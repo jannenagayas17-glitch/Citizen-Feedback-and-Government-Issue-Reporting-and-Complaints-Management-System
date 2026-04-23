@@ -331,6 +331,37 @@ class DocumentedSystemWorkflowTest extends TestCase
             ->assertJsonFragment(['title' => 'Broken road']);
     }
 
+    public function test_tc_cd_citizen_dashboard_counts_only_logged_in_citizen_reports(): void
+    {
+        [$citizen, $office, $category] = $this->seedCitizenReportDependencies();
+        $otherCitizen = $this->makeUser('Other Citizen', 'other-dashboard@example.com', 'citizen');
+
+        Report::create(array_merge($this->validReportPayload($office, $category), [
+            'user_id' => $citizen->id,
+            'status' => 'New',
+        ]));
+
+        Report::create([
+            'user_id' => $otherCitizen->id,
+            'office_id' => $office->id,
+            'category_id' => $category->id,
+            'title' => 'Other user dashboard report',
+            'description' => 'Should not be counted in citizen dashboard',
+            'location' => 'Other Location',
+            'barangay' => 'Barangay 9',
+            'status' => 'Resolved',
+            'priority' => 'Normal',
+        ]);
+
+        Sanctum::actingAs($citizen);
+
+        $this->getJson('/api/dashboard')
+            ->assertOk()
+            ->assertJsonPath('total_reports', 1)
+            ->assertJsonPath('new', 1)
+            ->assertJsonPath('resolved', 0);
+    }
+
     public function test_tc_ad_01_admin_dashboard_reports_are_scoped_to_assigned_office(): void
     {
         [$officeA, , $category] = $this->seedTwoOfficesWithReports();

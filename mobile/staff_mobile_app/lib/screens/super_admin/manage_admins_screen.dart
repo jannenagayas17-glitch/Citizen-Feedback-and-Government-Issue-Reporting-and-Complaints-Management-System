@@ -380,7 +380,8 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
         return false;
       }
 
-      if (_selectedAccountGroup == 'Citizen Accounts' && row.role != 'citizen') {
+      if (_selectedAccountGroup == 'Citizen Accounts' &&
+          row.role != 'citizen') {
         return false;
       }
 
@@ -714,10 +715,14 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
             : _departmentLabel(currentUser);
         final allAccessibleUsers = _staffUsers(payload);
         final adminAccountCount = allAccessibleUsers
-            .where((user) => (user['role'] ?? '').toString().trim() != 'citizen')
+            .where(
+              (user) => (user['role'] ?? '').toString().trim() != 'citizen',
+            )
             .length;
         final citizenCount = allAccessibleUsers
-            .where((user) => (user['role'] ?? '').toString().trim() == 'citizen')
+            .where(
+              (user) => (user['role'] ?? '').toString().trim() == 'citizen',
+            )
             .length;
         final activeCount = rows
             .where((row) => row.user['is_active'] != false)
@@ -1106,7 +1111,8 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
     return LayoutBuilder(
       builder: (context, constraints) {
         const minSearchWidth = 260.0;
-        final showDepartmentFilter = _selectedAccountGroup != 'Citizen Accounts';
+        final showDepartmentFilter =
+            _selectedAccountGroup != 'Citizen Accounts';
         final fixedControlsWidth =
             170.0 +
             (showDepartmentFilter ? 220.0 : 0.0) +
@@ -1225,7 +1231,9 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
                   child: Text(
                     '${tab.count}',
                     style: TextStyle(
-                      color: selected ? const Color(0xFFBFDBFE) : colors.mutedText,
+                      color: selected
+                          ? const Color(0xFFBFDBFE)
+                          : colors.mutedText,
                       fontSize: 12,
                       fontWeight: FontWeight.w800,
                     ),
@@ -1716,14 +1724,17 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
   bool _validName(String value) {
     final trimmed = value.trim();
     if (trimmed.isEmpty) return false;
-    return RegExp(r"^[A-Za-z]+(?:[.'-][A-Za-z]+)*\.?$").hasMatch(trimmed);
+    return RegExp(
+      r"^[A-Za-z]+(?:[.'-][A-Za-z]+)*\.?(?:\s+[A-Za-z]+(?:[.'-][A-Za-z]+)*\.?)*$",
+    ).hasMatch(trimmed);
   }
 
   bool _validEmail(String value) {
     return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value.trim());
   }
 
-  bool get _isCitizenAccount => widget.accountKind == _ManagedAccountKind.citizen;
+  bool get _isCitizenAccount =>
+      widget.accountKind == _ManagedAccountKind.citizen;
 
   String get _selectedRole => _isCitizenAccount ? 'citizen' : 'pending_admin';
 

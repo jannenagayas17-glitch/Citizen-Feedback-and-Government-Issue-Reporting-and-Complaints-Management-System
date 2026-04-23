@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../services/report_service.dart';
 import '../../utils/admin_theme.dart';
+import '../../utils/department_issue_types.dart';
 import '../../utils/file_download.dart';
 import '../../utils/tacloban_barangays.dart';
 
@@ -124,6 +125,17 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
       (report['barangay'] ?? '').toString().trim();
   String _status(Map<String, dynamic> report) =>
       (report['status'] ?? 'New').toString();
+  String _statusBucket(Map<String, dynamic> report) {
+    final status = _status(report).trim().toLowerCase();
+    if (status == 'new' || status == 'pending') return 'Pending';
+    if (status == 'in progress' || status == 'in_progress') {
+      return 'In Progress';
+    }
+    if (status == 'resolved' || status == 'closed') return 'Resolved';
+    if (status == 'rejected') return 'Rejected';
+    return _status(report);
+  }
+
   DateTime? _createdAt(Map<String, dynamic> report) =>
       DateTime.tryParse((report['created_at'] ?? '').toString())?.toLocal();
 
@@ -165,11 +177,29 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
   }
 
   List<String> _categoryOptions(_Payload payload) {
+    final selectedDepartments = _department == 'All Departments'
+        ? [
+            ...payload.offices.map(
+              (office) => (office['name'] ?? '').toString(),
+            ),
+            ...payload.reports.map(_officeName),
+          ]
+        : [_department];
+    final mappedIssueTypes = issueTypesForDepartments(selectedDepartments);
+    final scopedReportCategories = payload.reports
+        .where((report) {
+          if (_department == 'All Departments') return true;
+          return _officeName(report).toLowerCase() == _department.toLowerCase();
+        })
+        .map(_categoryName);
+
     return _options([
-      ...payload.categories.map(
-        (category) => (category['name'] ?? '').toString(),
-      ),
-      ...payload.reports.map(_categoryName),
+      ...mappedIssueTypes,
+      ...scopedReportCategories,
+      if (mappedIssueTypes.isEmpty)
+        ...payload.categories.map(
+          (category) => (category['name'] ?? '').toString(),
+        ),
     ], 'All Categories');
   }
 
@@ -237,14 +267,16 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
       final end = DateTime(range.end.year, range.end.month, range.end.day);
       if (date.isBefore(start) || date.isAfter(end)) return false;
       if (_department != 'All Departments' &&
-          _officeName(report) != _department) {
+          _officeName(report).toLowerCase() != _department.toLowerCase()) {
         return false;
       }
       if (_barangay != 'All Barangays' &&
           !_matchesBarangay(_barangayName(report), _barangay)) {
         return false;
       }
-      if (_category != 'All Categories' && _categoryName(report) != _category) {
+      if (_category != 'All Categories' &&
+          normalizeIssueTypeKey(_categoryName(report)) !=
+              normalizeIssueTypeKey(_category)) {
         return false;
       }
       return true;
@@ -253,7 +285,7 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
 
   Map<String, int> _counts(List<Map<String, dynamic>> reports) {
     int countStatus(String value) =>
-        reports.where((r) => _status(r) == value).length;
+        reports.where((r) => _statusBucket(r) == value).length;
     return {
       'total': reports.length,
       'pending': countStatus('Pending'),
@@ -306,10 +338,12 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
         _Bucket(
           label: '${start.month}/${start.day}',
           total: items.length,
-          pending: items.where((r) => _status(r) == 'Pending').length,
-          progress: items.where((r) => _status(r) == 'In Progress').length,
-          resolved: items.where((r) => _status(r) == 'Resolved').length,
-          rejected: items.where((r) => _status(r) == 'Rejected').length,
+          pending: items.where((r) => _statusBucket(r) == 'Pending').length,
+          progress: items
+              .where((r) => _statusBucket(r) == 'In Progress')
+              .length,
+          resolved: items.where((r) => _statusBucket(r) == 'Resolved').length,
+          rejected: items.where((r) => _statusBucket(r) == 'Rejected').length,
         ),
       );
     }
@@ -413,13 +447,19 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
               }
               final payload = snapshot.data!;
               final departments = _departmentOptions(payload);
-              final barangays = _barangayOptions(payload);
-              final categories = _categoryOptions(payload);
               if (!departments.contains(_department)) {
                 _department = departments.first;
               }
+              final barangays = _barangayOptions(payload);
+              final categories = _categoryOptions(payload);
               if (!barangays.contains(_barangay)) _barangay = barangays.first;
               if (!categories.contains(_category)) _category = categories.first;
+              if (_category != 'All Categories' &&
+                  !categories
+                      .map((item) => item.toLowerCase())
+                      .contains(_category.toLowerCase())) {
+                _category = 'All Categories';
+              }
               final reports = _filtered(payload);
               final counts = _counts(reports);
               final spanDays = _range.end.difference(_range.start).inDays + 1;
@@ -601,7 +641,10 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                                 child: _dropdown(
                                   _department,
                                   departments,
-                                  (v) => setState(() => _department = v!),
+                                  (v) => setState(() {
+                                    _department = v!;
+                                    _category = 'All Categories';
+                                  }),
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -634,7 +677,10 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                               _dropdown(
                                 _department,
                                 departments,
-                                (v) => setState(() => _department = v!),
+                                (v) => setState(() {
+                                  _department = v!;
+                                  _category = 'All Categories';
+                                }),
                                 width: 240,
                               ),
                               _dropdown(
@@ -1005,6 +1051,12 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    Icon(
+                      Icons.schedule_rounded,
+                      color: AdminThemeColors.of(context).mutedText,
+                      size: 14,
+                    ),
+                    const SizedBox(width: 6),
                     Text(
                       trailing,
                       style: TextStyle(
@@ -1012,12 +1064,6 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      color: AdminThemeColors.of(context).mutedText,
-                      size: 16,
                     ),
                   ],
                 ),
@@ -1198,22 +1244,20 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
 
     return Column(
       children: [
-        Row(
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
           children: const [
             _TrendLegend('Total', Color(0xFF557DFF)),
-            SizedBox(width: 12),
             _TrendLegend('Pending', Color(0xFFF4B04F)),
-            SizedBox(width: 12),
             _TrendLegend('In Progress', Color(0xFFD19A43)),
-            SizedBox(width: 12),
             _TrendLegend('Resolved', Color(0xFF76D0B6)),
-            SizedBox(width: 12),
             _TrendLegend('Rejected', Color(0xFFE16A74)),
           ],
         ),
         const SizedBox(height: 16),
         SizedBox(
-          height: 250,
+          height: 280,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -1500,6 +1544,8 @@ class _TrendChartPainter extends CustomPainter {
       final linePaint = Paint()
         ..color = color
         ..strokeWidth = 2.2
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
         ..style = PaintingStyle.stroke;
 
       for (var i = 0; i < values.length; i++) {
@@ -1514,6 +1560,22 @@ class _TrendChartPainter extends CustomPainter {
           path.lineTo(x, y);
         }
       }
+      if (s == 0 && values.isNotEmpty) {
+        final areaPath = Path.from(path)
+          ..lineTo(size.width, size.height)
+          ..lineTo(0, size.height)
+          ..close();
+        final areaPaint = Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              color.withValues(alpha: 0.18),
+              color.withValues(alpha: 0.02),
+            ],
+          ).createShader(Offset.zero & size);
+        canvas.drawPath(areaPath, areaPaint);
+      }
       canvas.drawPath(path, linePaint);
 
       for (var i = 0; i < values.length; i++) {
@@ -1522,7 +1584,12 @@ class _TrendChartPainter extends CustomPainter {
             : size.width * (i / (values.length - 1));
         final normalized = maxValue <= 0 ? 0.0 : values[i] / maxValue;
         final y = size.height - (normalized * (size.height - 10)) - 5;
-        canvas.drawCircle(Offset(x, y), 3.5, dotPaint);
+        canvas.drawCircle(
+          Offset(x, y),
+          s == 0 ? 5 : 3.5,
+          Paint()..color = color.withValues(alpha: s == 0 ? 0.18 : 0.0),
+        );
+        canvas.drawCircle(Offset(x, y), s == 0 ? 3.8 : 3.0, dotPaint);
       }
     }
   }

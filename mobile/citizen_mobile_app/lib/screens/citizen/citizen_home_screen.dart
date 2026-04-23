@@ -107,7 +107,9 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
     final isDark = Theme.of(context).colorScheme.brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0B1322) : const Color(0xFFF6F8FC),
+      backgroundColor: isDark
+          ? const Color(0xFF0B1322)
+          : const Color(0xFFF6F8FC),
       body: DecoratedBox(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -131,8 +133,10 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
             onRefresh: _refresh,
             child: FutureBuilder<Map<String, dynamic>>(
               future: _payloadFuture,
+              initialData: CitizenDataCache.cachedHomePayload,
               builder: (context, snapshot) {
-                if (snapshot.connectionState != ConnectionState.done) {
+                if (snapshot.connectionState != ConnectionState.done &&
+                    !snapshot.hasData) {
                   return _buildLoadingState();
                 }
 
@@ -317,44 +321,54 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
     final profileName = (user['name'] ?? 'Citizen').toString().trim();
     final isDark = Theme.of(context).colorScheme.brightness == Brightness.dark;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        CitizenAvatar(
-          name: profileName,
-          size: 40,
-          backgroundColor: isDark
-              ? const Color(0xFF2D447B)
-              : const Color(0xFFE0EAFF),
-          textColor: isDark
-              ? const Color(0xFFC6D6FF)
-              : const Color(0xFF1D4ED8),
-          borderColor: isDark
-              ? Colors.white.withValues(alpha: 0.22)
-              : const Color(0xFFBFDBFE),
-          borderWidth: 1.5,
-          fontSize: 18,
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            profileName.isEmpty ? 'Citizen' : profileName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: isDark ? Colors.white : const Color(0xFF12213A),
-              fontSize: 15.5,
-              fontWeight: FontWeight.w800,
-              height: 1.35,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compactHeader = constraints.maxWidth < 370;
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            CitizenAvatar(
+              name: profileName,
+              size: compactHeader ? 38 : 40,
+              backgroundColor: isDark
+                  ? const Color(0xFF2D447B)
+                  : const Color(0xFFE0EAFF),
+              textColor: isDark
+                  ? const Color(0xFFC6D6FF)
+                  : const Color(0xFF1D4ED8),
+              borderColor: isDark
+                  ? Colors.white.withValues(alpha: 0.22)
+                  : const Color(0xFFBFDBFE),
+              borderWidth: 1.5,
+              fontSize: compactHeader ? 17 : 18,
             ),
-          ),
-        ),
-        const ThemeModeToggle(compact: true),
-        const SizedBox(width: 8),
-        _HeaderPill(icon: Icons.location_on, label: 'Tacloban', onTap: () {}),
-        const SizedBox(width: 8),
-        _BellButton(count: notificationCount, onTap: _openNotifications),
-      ],
+            SizedBox(width: compactHeader ? 8 : 10),
+            Expanded(
+              child: Text(
+                profileName.isEmpty ? 'Citizen' : profileName,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: isDark ? Colors.white : const Color(0xFF12213A),
+                  fontSize: compactHeader ? 14.5 : 15.5,
+                  fontWeight: FontWeight.w800,
+                  height: 1.18,
+                ),
+              ),
+            ),
+            const ThemeModeToggle(compact: true),
+            SizedBox(width: compactHeader ? 6 : 8),
+            _HeaderPill(
+              icon: Icons.location_on,
+              label: compactHeader ? null : 'Tacloban',
+              onTap: () {},
+            ),
+            SizedBox(width: compactHeader ? 6 : 8),
+            _BellButton(count: notificationCount, onTap: _openNotifications),
+          ],
+        );
+      },
     );
   }
 
@@ -744,7 +758,7 @@ class _HeaderPill extends StatelessWidget {
   });
 
   final IconData icon;
-  final String label;
+  final String? label;
   final VoidCallback onTap;
 
   @override
@@ -755,7 +769,7 @@ class _HeaderPill extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(18),
       child: Tooltip(
-        message: label,
+        message: label ?? 'Tacloban',
         child: Container(
           width: 34,
           height: 34,

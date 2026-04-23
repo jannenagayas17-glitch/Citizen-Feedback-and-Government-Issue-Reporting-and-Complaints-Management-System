@@ -96,7 +96,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (trimmed.isEmpty) {
       return false;
     }
-    final partRegex = RegExp(r"^[A-Za-z]+(?:[.'-][A-Za-z]+)*\.?$");
+    final partRegex = RegExp(
+      r"^[A-Za-z]+(?:[.'-][A-Za-z]+)*\.?(?:\s+[A-Za-z]+(?:[.'-][A-Za-z]+)*\.?)*$",
+    );
     return partRegex.hasMatch(trimmed);
   }
 

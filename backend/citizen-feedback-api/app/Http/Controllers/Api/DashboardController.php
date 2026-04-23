@@ -11,9 +11,9 @@ use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $query = Report::query();
+        $query = $this->scopedReports($request);
 
         return response()->json([
             'total_reports' => (clone $query)->count(),
@@ -191,8 +191,11 @@ class DashboardController extends Controller
     private function scopedReports(Request $request)
     {
         $query = Report::query();
+        $role = $request->user()->role ?? 'citizen';
 
-        if (($request->user()->role ?? null) === 'admin') {
+        if ($role === 'citizen') {
+            $query->where('user_id', $request->user()->id);
+        } elseif ($role === 'admin') {
             $department = trim((string) ($request->user()->department ?? ''));
 
             if ($department === '') {

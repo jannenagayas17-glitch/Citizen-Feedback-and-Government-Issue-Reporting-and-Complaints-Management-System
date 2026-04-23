@@ -27,42 +27,48 @@ class CitizenAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<String?>(
-      future: CitizenAvatarService.getAvatarBase64(),
-      builder: (context, snapshot) {
-        final avatarBase64 = snapshot.data;
-        final imageBytes = _decodeImageBytes(avatarBase64);
-        final initial = name.trim().isEmpty
-            ? 'C'
-            : name.trim()[0].toUpperCase();
+    return ValueListenableBuilder<int>(
+      valueListenable: CitizenAvatarService.revision,
+      builder: (context, _, _) {
+        return FutureBuilder<String?>(
+          future: CitizenAvatarService.getAvatarBase64(),
+          initialData: CitizenAvatarService.cachedAvatarBase64,
+          builder: (context, snapshot) {
+            final avatarBase64 = snapshot.data;
+            final imageBytes = _decodeImageBytes(avatarBase64);
+            final initial = name.trim().isEmpty
+                ? 'C'
+                : name.trim()[0].toUpperCase();
 
-        return Container(
-          width: size,
-          height: size,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: backgroundColor,
-            border: borderColor == null
-                ? null
-                : Border.all(color: borderColor!, width: borderWidth),
-            image: imageBytes == null
-                ? null
-                : DecorationImage(
-                    image: MemoryImage(imageBytes),
-                    fit: BoxFit.cover,
-                  ),
-          ),
-          child: imageBytes == null
-              ? Text(
-                  initial,
-                  style: TextStyle(
-                    color: textColor,
-                    fontSize: fontSize ?? (size * 0.46),
-                    fontWeight: FontWeight.w700,
-                  ),
-                )
-              : null,
+            return Container(
+              width: size,
+              height: size,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: backgroundColor,
+                border: borderColor == null
+                    ? null
+                    : Border.all(color: borderColor!, width: borderWidth),
+                image: imageBytes == null
+                    ? null
+                    : DecorationImage(
+                        image: MemoryImage(imageBytes),
+                        fit: BoxFit.cover,
+                      ),
+              ),
+              child: imageBytes == null
+                  ? Text(
+                      initial,
+                      style: TextStyle(
+                        color: textColor,
+                        fontSize: fontSize ?? (size * 0.46),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    )
+                  : null,
+            );
+          },
         );
       },
     );

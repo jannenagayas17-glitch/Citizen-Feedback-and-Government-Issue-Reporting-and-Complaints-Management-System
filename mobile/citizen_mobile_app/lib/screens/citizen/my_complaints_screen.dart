@@ -118,8 +118,10 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
         onRefresh: _refresh,
         child: FutureBuilder<List<dynamic>>(
           future: _reportsFuture,
+          initialData: CitizenDataCache.cachedReports,
           builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
+            if (snapshot.connectionState != ConnectionState.done &&
+                !snapshot.hasData) {
               return ListView(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                 children: List.generate(
@@ -848,10 +850,7 @@ class _SectionCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               subtitle!,
-              style: TextStyle(
-                color: citizenBodyColor(context),
-                fontSize: 12,
-              ),
+              style: TextStyle(color: citizenBodyColor(context), fontSize: 12),
             ),
           ],
           const SizedBox(height: 12),
@@ -1113,10 +1112,7 @@ class _EmptyMessage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       message,
-      style: TextStyle(
-        color: citizenBodyColor(context),
-        height: 1.45,
-      ),
+      style: TextStyle(color: citizenBodyColor(context), height: 1.45),
     );
   }
 }

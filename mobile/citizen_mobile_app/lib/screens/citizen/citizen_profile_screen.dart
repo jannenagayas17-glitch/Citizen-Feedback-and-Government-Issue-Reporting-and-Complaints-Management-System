@@ -1,4 +1,7 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -169,23 +172,23 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
   }
 
   Future<void> _pickProfileImage() async {
-    setState(() => _isSavingAvatar = true);
-
     try {
       final file = await _imagePicker.pickImage(
         source: ImageSource.gallery,
         imageQuality: 80,
       );
 
-      if (file == null) {
-        if (mounted) {
-          setState(() => _isSavingAvatar = false);
-        }
-        return;
-      }
+      if (file == null) return;
 
       final bytes = await file.readAsBytes();
-      await CitizenAvatarService.saveAvatarBytes(bytes);
+      if (!mounted) return;
+
+      final croppedBytes = await _openAvatarCropper(bytes);
+      if (croppedBytes == null) return;
+
+      setState(() => _isSavingAvatar = true);
+
+      await CitizenAvatarService.saveAvatarBytes(croppedBytes);
 
       if (!mounted) return;
       setState(() => _isSavingAvatar = false);
@@ -199,6 +202,216 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
         SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
       );
     }
+  }
+
+  Future<Uint8List?> _openAvatarCropper(Uint8List imageBytes) {
+    final boundaryKey = GlobalKey();
+    final transformController = TransformationController();
+    var saving = false;
+
+    return showDialog<Uint8List>(
+      context: context,
+      barrierDismissible: !saving,
+      builder: (dialogContext) {
+        final isDark =
+            Theme.of(dialogContext).colorScheme.brightness == Brightness.dark;
+        final titleColor = isDark ? Colors.white : const Color(0xFF12213A);
+        final bodyColor = isDark
+            ? Colors.white.withValues(alpha: 0.70)
+            : const Color(0xFF64748B);
+        final screenWidth = MediaQuery.sizeOf(dialogContext).width;
+        final cropSize = (screenWidth - 96).clamp(196.0, 232.0).toDouble();
+
+        Future<void> saveCrop(StateSetter setDialogState) async {
+          setDialogState(() => saving = true);
+
+          try {
+            final boundary =
+                boundaryKey.currentContext?.findRenderObject()
+                    as RenderRepaintBoundary?;
+            if (boundary == null) {
+              throw Exception('Unable to prepare cropped image.');
+            }
+
+            final pixelRatio = View.of(
+              dialogContext,
+            ).devicePixelRatio.clamp(1.0, 1.6).toDouble();
+            final image = await boundary.toImage(pixelRatio: pixelRatio);
+            final byteData = await image.toByteData(
+              format: ui.ImageByteFormat.png,
+            );
+            final bytes = byteData?.buffer.asUint8List();
+
+            if (bytes == null || bytes.isEmpty) {
+              throw Exception('Unable to crop selected image.');
+            }
+
+            if (dialogContext.mounted) {
+              Navigator.of(dialogContext).pop(bytes);
+            }
+          } catch (e) {
+            if (!dialogContext.mounted) return;
+            setDialogState(() => saving = false);
+            ScaffoldMessenger.of(dialogContext).showSnackBar(
+              SnackBar(
+                content: Text(e.toString().replaceFirst('Exception: ', '')),
+              ),
+            );
+          }
+        }
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Dialog(
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 18,
+                vertical: 24,
+              ),
+              backgroundColor: Colors.transparent,
+              child: Container(
+                width: 360,
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF111C2F) : Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.12)
+                        : const Color(0xFFD8E3F7),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.24),
+                      blurRadius: 28,
+                      offset: const Offset(0, 18),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Crop profile photo',
+                            style: TextStyle(
+                              color: titleColor,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: saving
+                              ? null
+                              : () => Navigator.of(context).pop(),
+                          icon: Icon(Icons.close_rounded, color: bodyColor),
+                          tooltip: 'Close',
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Drag to reposition. Pinch or double tap to zoom before saving.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: bodyColor, fontSize: 12),
+                    ),
+                    const SizedBox(height: 18),
+                    Container(
+                      width: cropSize,
+                      height: cropSize,
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF60A5FA), Color(0xFF2563EB)],
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(
+                              0xFF2563EB,
+                            ).withValues(alpha: 0.25),
+                            blurRadius: 22,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      child: ClipOval(
+                        child: RepaintBoundary(
+                          key: boundaryKey,
+                          child: ColoredBox(
+                            color: isDark
+                                ? const Color(0xFF0C1727)
+                                : const Color(0xFFEFF5FF),
+                            child: GestureDetector(
+                              onDoubleTap: () {
+                                final currentScale = transformController.value
+                                    .getMaxScaleOnAxis();
+                                transformController.value = currentScale > 1.2
+                                    ? Matrix4.identity()
+                                    : Matrix4.diagonal3Values(1.8, 1.8, 1);
+                              },
+                              child: InteractiveViewer(
+                                transformationController: transformController,
+                                minScale: 1,
+                                maxScale: 4,
+                                boundaryMargin: const EdgeInsets.all(90),
+                                child: Image.memory(
+                                  imageBytes,
+                                  width: cropSize,
+                                  height: cropSize,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: saving
+                                ? null
+                                : () {
+                                    transformController.value =
+                                        Matrix4.identity();
+                                  },
+                            child: const Text('Reset'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: saving
+                                ? null
+                                : () => saveCrop(setDialogState),
+                            icon: saving
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Icon(Icons.check_rounded, size: 18),
+                            label: Text(saving ? 'Saving...' : 'Save'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    ).whenComplete(transformController.dispose);
   }
 
   Future<void> _openHome() async {
@@ -249,10 +462,14 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
     final isDark = Theme.of(context).colorScheme.brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0C1727) : const Color(0xFFF6F8FC),
+      backgroundColor: isDark
+          ? const Color(0xFF0C1727)
+          : const Color(0xFFF6F8FC),
       appBar: AppBar(
         title: const Text('Profile'),
-        backgroundColor: isDark ? const Color(0xFF0C1727) : const Color(0xFFF6F8FC),
+        backgroundColor: isDark
+            ? const Color(0xFF0C1727)
+            : const Color(0xFFF6F8FC),
         foregroundColor: isDark ? Colors.white : const Color(0xFF12213A),
         actions: const [
           Padding(
@@ -897,12 +1114,8 @@ class _ActionTile extends StatelessWidget {
           fontWeight: FontWeight.w700,
         ),
       ),
-      subtitle: Text(
-        subtitle,
-        style: TextStyle(color: mutedColor),
-      ),
-      trailing:
-          trailing ?? Icon(Icons.chevron_right, color: chevronColor),
+      subtitle: Text(subtitle, style: TextStyle(color: mutedColor)),
+      trailing: trailing ?? Icon(Icons.chevron_right, color: chevronColor),
       onTap: onTap,
     );
   }

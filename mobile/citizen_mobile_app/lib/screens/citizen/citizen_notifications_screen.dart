@@ -95,8 +95,10 @@ class _CitizenNotificationsScreenState
         onRefresh: _refresh,
         child: FutureBuilder<List<dynamic>>(
           future: _reportsFuture,
+          initialData: CitizenDataCache.cachedReports,
           builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
+            if (snapshot.connectionState != ConnectionState.done &&
+                !snapshot.hasData) {
               return ListView(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                 children: List.generate(
@@ -425,10 +427,7 @@ class _NotificationsEmptyState extends StatelessWidget {
       ),
       child: Text(
         'No complaint updates yet. Submit a report first so status changes appear here.',
-        style: TextStyle(
-          color: citizenBodyColor(context),
-          height: 1.5,
-        ),
+        style: TextStyle(color: citizenBodyColor(context), height: 1.5),
       ),
     );
   }

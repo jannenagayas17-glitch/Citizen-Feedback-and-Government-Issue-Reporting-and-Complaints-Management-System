@@ -234,16 +234,25 @@ class ReportController extends Controller
                 fwrite($handle, $value);
             };
 
-            $cell = static function ($value): string {
-                return '<td>' . e((string) ($value ?? '-')) . '</td>';
+            $cell = static function ($value, string $class = ''): string {
+                $classAttribute = $class === '' ? '' : ' class="' . e($class) . '"';
+
+                return '<td' . $classAttribute . '>' . e((string) ($value ?? '-')) . '</td>';
             };
 
             $headerCell = static function (string $value): string {
                 return '<th>' . e($value) . '</th>';
             };
 
-            $writeTable = static function (array $headers, iterable $rows, ?string $emptyMessage = null) use ($write, $cell, $headerCell): void {
-                $write('<table>');
+            $writeTable = static function (array $headers, iterable $rows, ?string $emptyMessage = null, string $class = 'data-table', array $widths = []) use ($write, $cell, $headerCell): void {
+                $write('<table class="' . e($class) . '">');
+                if ($widths !== []) {
+                    $write('<colgroup>');
+                    foreach ($widths as $width) {
+                        $write('<col style="width:' . e((string) $width) . ';">');
+                    }
+                    $write('</colgroup>');
+                }
                 $write('<thead><tr>');
                 foreach ($headers as $header) {
                     $write($headerCell($header));
@@ -269,46 +278,60 @@ class ReportController extends Controller
 
             $write('<!doctype html><html><head><meta charset="UTF-8">');
             $write('<style>
-                body { font-family: Arial, sans-serif; color: #111827; }
-                h1 { font-size: 22px; margin: 0 0 8px; }
-                h2 { font-size: 17px; margin: 24px 0 8px; color: #1D4ED8; }
-                .meta { color: #4B5563; margin-bottom: 16px; }
-                table { border-collapse: collapse; width: 100%; margin-bottom: 18px; }
-                th { background: #1D4ED8; color: #FFFFFF; font-weight: 700; }
-                th, td { border: 1px solid #CBD5E1; padding: 8px; vertical-align: top; mso-number-format: "\\@"; }
+                body { font-family: Arial, sans-serif; color: #111827; background: #FFFFFF; }
+                h1 { font-size: 24px; margin: 0 0 6px; color: #0F172A; font-weight: 800; }
+                h2 { font-size: 17px; margin: 26px 0 8px; color: #1D4ED8; font-weight: 800; }
+                .meta { color: #4B5563; margin-bottom: 4px; font-size: 12px; }
+                .note { color: #64748B; margin: 8px 0 14px; font-size: 12px; }
+                table { border-collapse: collapse; margin-bottom: 18px; table-layout: fixed; }
+                th { background: #1D4ED8; color: #FFFFFF; font-weight: 700; white-space: nowrap; }
+                th, td { border: 1px solid #CBD5E1; padding: 7px 8px; vertical-align: top; mso-number-format: "\\@"; }
+                td { color: #111827; background: #FFFFFF; }
                 tbody tr:nth-child(even) td { background: #F8FAFC; }
+                .summary { width: 720px; }
                 .summary th { background: #0F172A; }
-                .summary td { font-weight: 700; font-size: 14px; }
+                .summary td { font-weight: 700; font-size: 13px; }
+                .summary .label { color: #475569; font-weight: 700; }
+                .breakdown { width: 620px; }
+                .records { width: 1880px; }
+                .records th { background: #0F172A; }
+                .wrap { white-space: normal; }
+                .center { text-align: center; }
+                .right { text-align: right; }
             </style>');
             $write('</head><body>');
             $write('<h1>CityTrack PH Reports and Analytics Export</h1>');
             $write('<div class="meta">Scope: ' . e($request->user()->role === 'super_admin' ? 'All Departments' : ($request->user()->department ?: 'Assigned Department')) . '</div>');
             $write('<div class="meta">Generated: ' . e(now()->format('Y-m-d H:i:s')) . '</div>');
+            $write('<div class="meta">Rows exported: ' . e((string) $reports->count()) . '</div>');
 
             $write('<h2>Analytics Summary</h2>');
-            $write('<table class="summary"><thead><tr>');
+            $summaryRows = [];
             foreach ($analytics['summary'] as $label => $value) {
-                $write($headerCell($label));
+                $summaryRows[] = [$label, $value];
             }
-            $write('</tr></thead><tbody><tr>');
-            foreach ($analytics['summary'] as $value) {
-                $write($cell($value));
-            }
-            $write('</tr></tbody></table>');
+            $writeTable(
+                ['Metric', 'Value'],
+                $summaryRows,
+                null,
+                'summary',
+                ['360px', '160px']
+            );
 
             $write('<h2>Reports by Department</h2>');
-            $writeTable(['Department', 'Total Reports'], $analytics['departments'], 'No department data available.');
+            $writeTable(['Department', 'Total Reports'], $analytics['departments'], 'No department data available.', 'breakdown', ['420px', '140px']);
 
             $write('<h2>Reports by Category</h2>');
-            $writeTable(['Category', 'Total Reports'], $analytics['categories'], 'No category data available.');
+            $writeTable(['Category', 'Total Reports'], $analytics['categories'], 'No category data available.', 'breakdown', ['420px', '140px']);
 
             $write('<h2>Reports by Barangay</h2>');
-            $writeTable(['Barangay', 'Total Reports'], $analytics['barangays'], 'No barangay data available.');
+            $writeTable(['Barangay', 'Total Reports'], $analytics['barangays'], 'No barangay data available.', 'breakdown', ['420px', '140px']);
 
             $write('<h2>Reports by Status</h2>');
-            $writeTable(['Status', 'Total Reports'], $analytics['statuses'], 'No status data available.');
+            $writeTable(['Status', 'Total Reports'], $analytics['statuses'], 'No status data available.', 'breakdown', ['260px', '140px']);
 
             $write('<h2>All Report Records</h2>');
+            $write('<div class="note">Detailed records include the routing department, issue type, citizen location, assignment, latest admin remark, and key dates.</div>');
             $reportRows = [];
             foreach ($reports as $report) {
                 $latestResponse = $report->adminResponses->first();
@@ -316,19 +339,19 @@ class ReportController extends Controller
                 $reportRows[] = [
                     $report->id,
                     'RPT-' . str_pad((string) $report->id, 5, '0', STR_PAD_LEFT),
-                    $report->title ?? 'Untitled report',
-                    $report->description ?? '-',
+                    optional($report->created_at)?->format('Y-m-d H:i') ?? '-',
                     optional($report->office)->name ?? 'Unassigned office',
                     optional($report->category)->name ?? 'General',
                     $report->status ?? 'New',
                     $report->priority ?? 'Normal',
-                    $report->location ?? '-',
                     $report->barangay ?? '-',
+                    $report->location ?? '-',
                     optional($report->assignedAdmin)->name ?? 'Unassigned',
-                    $latestResponse?->response ?? '-',
                     optional($report->user)->name ?? '-',
                     optional($report->user)->email ?? '-',
-                    optional($report->created_at)?->format('Y-m-d H:i:s') ?? '-',
+                    $report->title ?? 'Untitled report',
+                    $report->description ?? '-',
+                    $latestResponse?->response ?? '-',
                     optional($report->resolved_at)?->format('Y-m-d H:i:s') ?? '-',
                 ];
             }
@@ -336,21 +359,38 @@ class ReportController extends Controller
             $writeTable([
                 'Report ID',
                 'Tracking Code',
-                'Title',
-                'Description',
+                'Submitted',
                 'Department',
                 'Category',
                 'Status',
                 'Priority',
-                'Location',
                 'Barangay',
+                'Location',
                 'Assigned Staff',
-                'Latest Admin Remark',
                 'Reporter Name',
                 'Reporter Email',
-                'Created Date',
+                'Title',
+                'Description',
+                'Latest Admin Remark',
                 'Resolved Date',
-            ], $reportRows, 'No reports available for this export.');
+            ], $reportRows, 'No reports available for this export.', 'records', [
+                '90px',
+                '130px',
+                '145px',
+                '260px',
+                '220px',
+                '110px',
+                '100px',
+                '210px',
+                '260px',
+                '180px',
+                '180px',
+                '240px',
+                '330px',
+                '460px',
+                '360px',
+                '150px',
+            ]);
 
             $write('</body></html>');
 

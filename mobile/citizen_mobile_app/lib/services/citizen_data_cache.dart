@@ -21,6 +21,11 @@ class CitizenDataCache {
   static List<dynamic>? get cachedReports => _reports;
   static List<dynamic>? get cachedCategories => _categories;
   static List<dynamic>? get cachedOffices => _offices;
+  static Map<String, dynamic>? get cachedHomePayload {
+    if (_user == null || _dashboard == null || _reports == null) return null;
+
+    return {'user': _user!, 'dashboard': _dashboard!, 'reports': _reports!};
+  }
 
   static Future<Map<String, dynamic>> getUser({bool refresh = false}) async {
     if (!refresh && _user != null) return _user!;
@@ -75,11 +80,13 @@ class CitizenDataCache {
       getDashboard(refresh: refresh),
       getReports(refresh: refresh),
     ]);
+    final reports = values[2] as List<dynamic>;
+    _dashboard = _dashboardFromReports(reports);
 
     return {
       'user': values[0] as Map<String, dynamic>,
-      'dashboard': values[1] as Map<String, dynamic>,
-      'reports': values[2] as List<dynamic>,
+      'dashboard': _dashboard!,
+      'reports': reports,
     };
   }
 
@@ -91,6 +98,7 @@ class CitizenDataCache {
     final reportId = _extractId(report);
     if (reportId != null) _reportDetails[reportId] = report;
     _reports = [report, ...?_reports];
+    _dashboard = _dashboardFromReports(_reports!);
   }
 
   static void invalidateReports() {
@@ -111,5 +119,44 @@ class CitizenDataCache {
   static int? _extractId(Map<String, dynamic> report) {
     final rawId = report['id'];
     return rawId is int ? rawId : int.tryParse('$rawId');
+  }
+
+  static Map<String, dynamic> _dashboardFromReports(List<dynamic> reports) {
+    var newCount = 0;
+    var pendingCount = 0;
+    var inProgressCount = 0;
+    var resolvedCount = 0;
+    var rejectedCount = 0;
+
+    for (final item in reports) {
+      if (item is! Map<String, dynamic>) continue;
+
+      switch ((item['status'] ?? 'New').toString()) {
+        case 'New':
+          newCount++;
+          break;
+        case 'Pending':
+          pendingCount++;
+          break;
+        case 'In Progress':
+          inProgressCount++;
+          break;
+        case 'Resolved':
+          resolvedCount++;
+          break;
+        case 'Rejected':
+          rejectedCount++;
+          break;
+      }
+    }
+
+    return {
+      'total_reports': reports.length,
+      'new': newCount,
+      'pending': pendingCount,
+      'in_progress': inProgressCount,
+      'resolved': resolvedCount,
+      'rejected': rejectedCount,
+    };
   }
 }

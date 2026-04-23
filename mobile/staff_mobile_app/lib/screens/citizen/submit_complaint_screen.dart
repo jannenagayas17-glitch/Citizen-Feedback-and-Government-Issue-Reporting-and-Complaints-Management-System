@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../services/report_service.dart';
+import '../../utils/department_issue_types.dart';
 
 class SubmitComplaintScreen extends StatefulWidget {
   const SubmitComplaintScreen({super.key});
@@ -29,6 +30,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   late Future<List<dynamic>> _officesFuture;
   int? _selectedCategoryId;
   int? _selectedOfficeId;
+  String? _selectedCategoryName;
   String _selectedPriority = 'Normal';
   bool _isSubmitting = false;
   final List<_SelectedMediaItem> _selectedMedia = [];
@@ -97,6 +99,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   void _reloadFormSources() {
     setState(() {
       _selectedCategoryId = null;
+      _selectedCategoryName = null;
       _selectedOfficeId = null;
       _categoryError = null;
       _officeError = null;
@@ -172,14 +175,20 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     try {
       final categories = await _categoriesFuture.catchError((_) => <dynamic>[]);
       final selectedCategory = _selectedCategory(categories);
+      final selectedCategoryId = selectedCategory == null
+          ? _selectedCategoryId
+          : _categoryIdOf(selectedCategory);
+      final selectedCategoryName =
+          _selectedCategoryName ??
+          (selectedCategory == null
+              ? null
+              : (selectedCategory['name'] ?? '').toString());
 
       final response = await _reportService.createReport(
-        categoryId: selectedCategory == null
-            ? _selectedCategoryId
-            : _categoryIdOf(selectedCategory),
-        categoryName: selectedCategory == null
+        categoryId: selectedCategoryId == null || selectedCategoryId < 1
             ? null
-            : (selectedCategory['name'] ?? '').toString(),
+            : selectedCategoryId,
+        categoryName: selectedCategoryName,
         officeId: _selectedOfficeId,
         title: title,
         description: description,
@@ -281,8 +290,19 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
             final offices = data.length > 1
                 ? data[1] as List<dynamic>
                 : const [];
+            final categoryOptions = _categoryOptionsForSelectedOffice(
+              categories,
+              offices,
+            );
+            if (_selectedCategoryId != null &&
+                !categoryOptions.any(
+                  (item) => _categoryIdOf(item) == _selectedCategoryId,
+                )) {
+              _selectedCategoryId = null;
+              _selectedCategoryName = null;
+            }
             final selectedOffice = _selectedOffice(offices);
-            final selectedCategory = _selectedCategory(categories);
+            final selectedCategory = _selectedCategory(categoryOptions);
 
             return ListView(
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -332,7 +352,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                       _buildLabel('Category'),
                       const SizedBox(height: 8),
                       _buildCategoryDropdown(
-                        categories,
+                        categoryOptions,
                         errorText: _categoryError,
                       ),
                       const SizedBox(height: 16),
@@ -626,6 +646,39 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     return rawId is int ? rawId : int.tryParse('$rawId');
   }
 
+  List<Map<String, dynamic>> _categoryOptionsForSelectedOffice(
+    List<dynamic> categories,
+    List<dynamic> offices,
+  ) {
+    final categoryRecords = categories
+        .whereType<Map<String, dynamic>>()
+        .map(Map<String, dynamic>.from)
+        .toList();
+    final selectedOffice = _selectedOffice(offices);
+    final officeName = (selectedOffice?['name'] ?? '').toString().trim();
+    final mappedIssueTypes = issueTypesForDepartment(officeName);
+
+    if (mappedIssueTypes.isEmpty) return categoryRecords;
+
+    final categoriesByName = <String, Map<String, dynamic>>{};
+    for (final category in categoryRecords) {
+      final name = (category['name'] ?? '').toString().trim();
+      if (name.isEmpty) continue;
+      categoriesByName.putIfAbsent(normalizeIssueTypeKey(name), () => category);
+    }
+
+    return mappedIssueTypes.asMap().entries.map((entry) {
+      final name = entry.value;
+      final existing = categoriesByName[normalizeIssueTypeKey(name)];
+      if (existing != null) return existing;
+      return <String, dynamic>{
+        'id': -(entry.key + 1),
+        'name': name,
+        'description': '$name reports for $officeName',
+      };
+    }).toList();
+  }
+
   Widget _buildSelectedCategoryCard(Map<String, dynamic> category) {
     final categoryName = (category['name'] ?? 'Unnamed').toString();
     final icon = _categoryIcon(categoryName);
@@ -763,8 +816,15 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
           .toList(),
       onChanged: (value) {
         if (value == null) return;
+        final selected = categories
+            .whereType<Map<String, dynamic>>()
+            .firstWhere(
+              (category) => _categoryIdOf(category) == value,
+              orElse: () => const <String, dynamic>{},
+            );
         setState(() {
           _selectedCategoryId = value;
+          _selectedCategoryName = (selected['name'] ?? '').toString();
           _categoryError = null;
         });
       },
@@ -880,6 +940,8 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
         if (value == null) return;
         setState(() {
           _selectedOfficeId = value;
+          _selectedCategoryId = null;
+          _selectedCategoryName = null;
           _officeError = null;
         });
       },

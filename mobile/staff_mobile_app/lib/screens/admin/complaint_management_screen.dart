@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../services/report_service.dart';
 import '../../utils/admin_theme.dart';
+import '../../utils/department_issue_types.dart';
 import '../../utils/file_download.dart';
 import '../citizen/complaint_detail_screen.dart';
 
@@ -320,11 +321,29 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
   }
 
   List<String> _categoryOptions(_ReportsPayload payload) {
+    final selectedDepartments = _selectedOffice == 'All Departments'
+        ? [
+            ...payload.offices.whereType<Map<String, dynamic>>().map(
+              (office) => (office['name'] ?? '').toString(),
+            ),
+            ...payload.reports.map(_office),
+          ]
+        : [_selectedOffice];
+    final mappedIssueTypes = issueTypesForDepartments(selectedDepartments);
+    final scopedReportCategories = payload.reports
+        .where((report) {
+          if (_selectedOffice == 'All Departments') return true;
+          return _office(report).toLowerCase() == _selectedOffice.toLowerCase();
+        })
+        .map(_category);
+
     return _options([
-      ...payload.categories.whereType<Map<String, dynamic>>().map(
-        (category) => (category['name'] ?? '').toString(),
-      ),
-      ...payload.reports.map(_category),
+      ...mappedIssueTypes,
+      ...scopedReportCategories,
+      if (mappedIssueTypes.isEmpty)
+        ...payload.categories.whereType<Map<String, dynamic>>().map(
+          (category) => (category['name'] ?? '').toString(),
+        ),
     ], 'All Categories');
   }
 
@@ -391,11 +410,12 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
         return false;
       }
       if (_selectedCategory != 'All Categories' &&
-          _category(report) != _selectedCategory) {
+          normalizeIssueTypeKey(_category(report)) !=
+              normalizeIssueTypeKey(_selectedCategory)) {
         return false;
       }
       if (_selectedOffice != 'All Departments' &&
-          _office(report) != _selectedOffice) {
+          _office(report).toLowerCase() != _selectedOffice.toLowerCase()) {
         return false;
       }
       if (_selectedBarangay != 'All Barangays' &&
@@ -621,8 +641,11 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
               final payload = snapshot.data!;
               final superAdmin = _isSuperAdmin(payload.user);
               final reports = payload.reports;
-              final categories = _categoryOptions(payload);
               final offices = _departmentOptions(payload);
+              if (!offices.contains(_selectedOffice)) {
+                _selectedOffice = offices.first;
+              }
+              final categories = _categoryOptions(payload);
               final barangays = _barangayOptions(payload);
               const statuses = [
                 'All Status',
@@ -634,9 +657,6 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
               ];
               if (!categories.contains(_selectedCategory)) {
                 _selectedCategory = categories.first;
-              }
-              if (!offices.contains(_selectedOffice)) {
-                _selectedOffice = offices.first;
               }
               if (!barangays.contains(_selectedBarangay)) {
                 _selectedBarangay = barangays.first;
@@ -688,7 +708,10 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                             width: 210,
                             onChanged: (value) {
                               if (value == null) return;
-                              setState(() => _selectedOffice = value);
+                              setState(() {
+                                _selectedOffice = value;
+                                _selectedCategory = 'All Categories';
+                              });
                             },
                           ),
                           const SizedBox(width: 12),

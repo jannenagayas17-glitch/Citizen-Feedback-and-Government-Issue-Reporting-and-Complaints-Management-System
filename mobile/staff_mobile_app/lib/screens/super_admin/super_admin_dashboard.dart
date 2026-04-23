@@ -39,6 +39,8 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
   final SystemSettingsService _settingsService = SystemSettingsService();
 
   late Future<_SuperDashboardData> _statsFuture;
+  _SuperDashboardData? _cachedDashboardData;
+  bool _refreshingDashboard = false;
   _SuperAdminDesktopSection _desktopSection =
       _SuperAdminDesktopSection.dashboard;
   final Map<_SuperAdminDesktopSection, Widget> _desktopSectionCache = {};
@@ -47,10 +49,10 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
   @override
   void initState() {
     super.initState();
-    _statsFuture = _loadDashboard();
+    _statsFuture = _loadAndCacheDashboard();
   }
 
-  Future<_SuperDashboardData> _loadDashboard() async {
+  Future<_SuperDashboardData> _loadAndCacheDashboard() async {
     final results = await Future.wait([
       _authService.getCurrentUser(),
       _reportService.getAdminReports(),
@@ -73,21 +75,31 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
         .toList();
     final settings = Map<String, dynamic>.from(results[4] as Map);
 
-    return _SuperDashboardData(
+    final data = _SuperDashboardData(
       user: user,
       reports: reports,
       users: users,
       offices: offices,
       settings: settings,
     );
+    _cachedDashboardData = data;
+
+    return data;
   }
 
   Future<void> _refresh() async {
-    final future = _loadDashboard();
+    final future = _loadAndCacheDashboard();
     setState(() {
+      _refreshingDashboard = true;
       _statsFuture = future;
     });
-    await future;
+    try {
+      await future;
+    } finally {
+      if (mounted) {
+        setState(() => _refreshingDashboard = false);
+      }
+    }
   }
 
   bool _isDesktopLayout(BuildContext context) {
@@ -254,6 +266,66 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
   String _reportBarangay(Map<String, dynamic> report) =>
       (report['barangay'] ?? '').toString().trim();
 
+  double? _barangayNumber(String value) {
+    final match = RegExp(
+      r'^barangay\s+(\d+)(?:-([a-z]))?',
+      caseSensitive: false,
+    ).firstMatch(value.trim());
+    if (match == null) return null;
+    final number = double.tryParse(match.group(1)!);
+    if (number == null) return null;
+    final suffix = match.group(2);
+    if (suffix == null) return number;
+    return number + ((suffix.toLowerCase().codeUnitAt(0) - 96) / 10);
+  }
+
+  Offset _heatMapPositionForBarangay(String barangay, int index) {
+    final number = _barangayNumber(barangay);
+    final normalized = barangay.toLowerCase();
+    var x = 0.50;
+    var y = 0.50;
+
+    if (number != null) {
+      if (number <= 30) {
+        x = 0.30;
+        y = 0.30;
+      } else if (number <= 56) {
+        x = 0.42;
+        y = 0.48;
+      } else if (number <= 74) {
+        x = 0.28;
+        y = 0.66;
+      } else if (number <= 90) {
+        x = 0.66;
+        y = 0.68;
+      } else {
+        x = 0.72;
+        y = 0.40;
+      }
+    } else if (normalized.contains('san jose')) {
+      x = 0.70;
+      y = 0.70;
+    } else if (normalized.contains('sagkahan')) {
+      x = 0.36;
+      y = 0.62;
+    } else if (normalized.contains('downtown') || normalized.contains('real')) {
+      x = 0.34;
+      y = 0.36;
+    }
+
+    final hash = barangay.codeUnits.fold<int>(
+      index * 17,
+      (total, code) => total + code,
+    );
+    final jitterX = ((hash % 17) - 8) / 100;
+    final jitterY = (((hash ~/ 17) % 17) - 8) / 100;
+
+    return Offset(
+      (x + jitterX).clamp(0.12, 0.88).toDouble(),
+      (y + jitterY).clamp(0.18, 0.86).toDouble(),
+    );
+  }
+
   Map<String, dynamic> _buildDashboardMetrics(_SuperDashboardData data) {
     final reports = data.reports;
     final offices = data.offices;
@@ -349,12 +421,15 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
             : ratio >= 0.45
             ? 'Medium'
             : 'Low';
+        final position = _heatMapPositionForBarangay(item.key, index);
         return {
           'label': item.key,
           'count': item.value,
           'severity': severity,
-          'x': 0.18 + (index % 4) * 0.2,
-          'y': 0.28 + (index % 3) * 0.18,
+          'share': ((item.value / reports.length.clamp(1, 999999)) * 100)
+              .toStringAsFixed(1),
+          'x': position.dx,
+          'y': position.dy,
         };
       }),
     );
@@ -469,11 +544,14 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
           future: _statsFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done &&
-                !snapshot.hasData) {
+                !snapshot.hasData &&
+                _cachedDashboardData == null) {
               return const Center(child: CircularProgressIndicator());
             }
 
-            if (snapshot.hasError && !snapshot.hasData) {
+            if (snapshot.hasError &&
+                !snapshot.hasData &&
+                _cachedDashboardData == null) {
               return ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
@@ -488,7 +566,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
               );
             }
 
-            final data = snapshot.data;
+            final data = snapshot.data ?? _cachedDashboardData;
             if (data == null) {
               return const Center(child: CircularProgressIndicator());
             }
@@ -509,6 +587,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
                         onProfileTap: _openSettings,
                         adminName: (currentUser['name'] ?? 'Super Admin')
                             .toString(),
+                        isRefreshing: _refreshingDashboard,
                         notificationCount:
                             (metrics['escalations'] as List<dynamic>? ??
                                     const [])
@@ -870,12 +949,14 @@ class _SuperDashboardTopBar extends StatelessWidget {
     required this.onProfileTap,
     required this.adminName,
     required this.notificationCount,
+    required this.isRefreshing,
   });
 
   final VoidCallback onReportsTap;
   final VoidCallback onProfileTap;
   final String adminName;
   final int notificationCount;
+  final bool isRefreshing;
 
   @override
   Widget build(BuildContext context) {
@@ -941,13 +1022,40 @@ class _SuperDashboardTopBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 4),
-          const Text(
-            'Live',
-            style: TextStyle(
-              color: Color(0xFF4ADE80),
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            child: isRefreshing
+                ? Row(
+                    key: const ValueKey('refreshing'),
+                    children: const [
+                      SizedBox(
+                        width: 10,
+                        height: 10,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.8,
+                          color: Color(0xFF93C5FD),
+                        ),
+                      ),
+                      SizedBox(width: 5),
+                      Text(
+                        'Syncing',
+                        style: TextStyle(
+                          color: Color(0xFF93C5FD),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  )
+                : const Text(
+                    'Live',
+                    key: ValueKey('live'),
+                    style: TextStyle(
+                      color: Color(0xFF4ADE80),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
           ),
           const SizedBox(width: 12),
           Stack(
@@ -1458,7 +1566,10 @@ class _EscalationStrip extends StatelessWidget {
                   child: Text(
                     '${report['title'] ?? 'Untitled report'} • ${((report['office'] as Map<String, dynamic>?)?['name'] ?? 'No office')}',
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.82),
+                      color: colors.isDark
+                          ? Colors.white.withValues(alpha: 0.82)
+                          : colors.text,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
@@ -1485,83 +1596,570 @@ class _HeatMapCard extends StatelessWidget {
     }
   }
 
+  int _countOf(Map<String, dynamic> item) {
+    final value = item['count'];
+    return value is num ? value.round() : int.tryParse('$value') ?? 0;
+  }
+
+  double _positionOf(Map<String, dynamic> item, String key, double fallback) {
+    final value = item[key];
+    final parsed = value is num ? value.toDouble() : double.tryParse('$value');
+    return (parsed ?? fallback).clamp(0.08, 0.92).toDouble();
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = AdminThemeColors.of(context);
-    return Column(
-      children: [
-        Container(
-          height: 220,
-          decoration: BoxDecoration(
-            color: colors.input,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: colors.border),
-          ),
-          child: Stack(
+    final rankedItems = [...items]
+      ..sort((a, b) => _countOf(b).compareTo(_countOf(a)));
+    final visibleItems = rankedItems.take(5).toList();
+    final maxCount = visibleItems.isEmpty
+        ? 1
+        : visibleItems.map(_countOf).reduce(math.max).clamp(1, 999999).toInt();
+    final totalCount = rankedItems.fold<int>(
+      0,
+      (sum, item) => sum + _countOf(item),
+    );
+    final topItem = visibleItems.isEmpty ? null : visibleItems.first;
+
+    if (visibleItems.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: colors.input,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: colors.border),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: colors.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(Icons.map_outlined, color: colors.primary, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'No barangay activity yet',
+                    style: TextStyle(
+                      color: colors.text,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Submitted complaints will appear here as heat points.',
+                    style: TextStyle(color: colors.mutedText, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final useSplitLayout = constraints.maxWidth >= 680;
+        final map = _HeatMapSurface(
+          items: visibleItems,
+          maxCount: maxCount,
+          severityColorOf: _severityColor,
+          countOf: _countOf,
+          positionOf: _positionOf,
+        );
+        final list = Column(
+          children: visibleItems
+              .map(
+                (item) => _HeatMapBarangayRow(
+                  item: item,
+                  count: _countOf(item),
+                  maxCount: maxCount,
+                  color: _severityColor((item['severity'] ?? 'Low').toString()),
+                ),
+              )
+              .toList(),
+        );
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _HeatMapSummaryStrip(
+              topItem: topItem,
+              totalCount: totalCount,
+              hotspotCount: visibleItems.length,
+            ),
+            const SizedBox(height: 12),
+            if (useSplitLayout)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(flex: 6, child: map),
+                  const SizedBox(width: 14),
+                  Expanded(flex: 4, child: list),
+                ],
+              )
+            else ...[
+              map,
+              const SizedBox(height: 12),
+              list,
+            ],
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 16,
+              runSpacing: 8,
+              children: const [
+                _MiniLegend(label: 'High complaints', color: Color(0xFFE6616D)),
+                _MiniLegend(label: 'Medium', color: Color(0xFFF0B34C)),
+                _MiniLegend(label: 'Low', color: Color(0xFF61D69F)),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _HeatMapSurface extends StatelessWidget {
+  const _HeatMapSurface({
+    required this.items,
+    required this.maxCount,
+    required this.severityColorOf,
+    required this.countOf,
+    required this.positionOf,
+  });
+
+  final List<Map<String, dynamic>> items;
+  final int maxCount;
+  final Color Function(String severity) severityColorOf;
+  final int Function(Map<String, dynamic> item) countOf;
+  final double Function(Map<String, dynamic> item, String key, double fallback)
+  positionOf;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
+    return Container(
+      height: 250,
+      decoration: BoxDecoration(
+        color: colors.input,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colors.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return Stack(
             children: [
               Positioned.fill(
-                child: Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: List.generate(
-                      4,
-                      (index) => Expanded(
-                        child: Container(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          decoration: BoxDecoration(
-                            color: colors.isDark
-                                ? Colors.white.withValues(alpha: 0.015)
-                                : const Color(0xFFE3ECF8),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
+                child: CustomPaint(
+                  painter: _HeatGridPainter(
+                    lineColor: colors.border.withValues(
+                      alpha: colors.isDark ? 0.32 : 0.56,
                     ),
+                    fillColor: colors.isDark
+                        ? Colors.white.withValues(alpha: 0.015)
+                        : const Color(0xFFEAF2FC),
                   ),
                 ),
               ),
-              ...items.take(5).map((item) {
-                final color = _severityColor(
+              Positioned(
+                left: 16,
+                top: 14,
+                child: Text(
+                  'Tacloban complaint density',
+                  style: TextStyle(
+                    color: colors.mutedText,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              _HeatZoneLabel(label: 'Downtown', left: 18, top: 54),
+              _HeatZoneLabel(label: 'North', right: 18, top: 54),
+              _HeatZoneLabel(label: 'South', right: 18, bottom: 18),
+              ...items.asMap().entries.map((entry) {
+                final item = entry.value;
+                final count = countOf(item);
+                final color = severityColorOf(
                   (item['severity'] ?? 'Low').toString(),
                 );
+                final ratio = (count / maxCount).clamp(0.18, 1.0).toDouble();
+                final size = 42 + (ratio * 36);
+                final x = positionOf(item, 'x', 0.2 + (entry.key % 3) * 0.24);
+                final y = positionOf(item, 'y', 0.28 + (entry.key % 2) * 0.24);
+                final left = (constraints.maxWidth * x - (size / 2))
+                    .clamp(
+                      14.0,
+                      math.max(14.0, constraints.maxWidth - size - 14),
+                    )
+                    .toDouble();
+                final top = (constraints.maxHeight * y - (size / 2))
+                    .clamp(
+                      44.0,
+                      math.max(44.0, constraints.maxHeight - size - 14),
+                    )
+                    .toDouble();
+
                 return Positioned(
-                  left: 30 + 240 * ((item['x'] as num?)?.toDouble() ?? 0.2),
-                  top: 20 + 120 * ((item['y'] as num?)?.toDouble() ?? 0.2),
-                  child: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.14),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: color.withValues(alpha: 0.8)),
-                    ),
-                    child: Text(
-                      (item['severity'] ?? 'Low')
-                          .toString()
-                          .substring(0, 3)
-                          .toUpperCase(),
-                      style: TextStyle(
-                        color: color,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
+                  left: left,
+                  top: top,
+                  child: Tooltip(
+                    message: '${item['label'] ?? 'Barangay'}: $count reports',
+                    child: Container(
+                      width: size,
+                      height: size,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: color.withValues(
+                          alpha: colors.isDark ? 0.18 : 0.16,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: color.withValues(alpha: 0.20),
+                            blurRadius: 22,
+                            spreadRadius: 4,
+                          ),
+                        ],
+                        border: Border.all(
+                          color: color.withValues(alpha: 0.88),
+                          width: 1.4,
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Container(
+                        width: size * 0.58,
+                        height: size * 0.58,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          '$count',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 );
               }),
             ],
-          ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _HeatMapSummaryStrip extends StatelessWidget {
+  const _HeatMapSummaryStrip({
+    required this.topItem,
+    required this.totalCount,
+    required this.hotspotCount,
+  });
+
+  final Map<String, dynamic>? topItem;
+  final int totalCount;
+  final int hotspotCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
+    final topLabel = (topItem?['label'] ?? 'No hotspot').toString();
+    final topCountRaw = topItem?['count'];
+    final topCount = topCountRaw is num
+        ? topCountRaw.round()
+        : int.tryParse('$topCountRaw') ?? 0;
+    final share = (topItem?['share'] ?? '0.0').toString();
+
+    Widget metric({
+      required IconData icon,
+      required String label,
+      required String value,
+      required Color accent,
+    }) {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: colors.panelAlt,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: colors.border),
         ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 16,
-          children: const [
-            _MiniLegend(label: 'High complaints', color: Color(0xFFE6616D)),
-            _MiniLegend(label: 'Medium', color: Color(0xFFF0B34C)),
-            _MiniLegend(label: 'Low', color: Color(0xFF61D69F)),
+        child: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: accent, size: 17),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: colors.text,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: colors.mutedText, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
-      ],
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 620) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              metric(
+                icon: Icons.local_fire_department_outlined,
+                label: 'Top barangay',
+                value: topLabel,
+                accent: const Color(0xFFE6616D),
+              ),
+              const SizedBox(height: 8),
+              metric(
+                icon: Icons.bar_chart_rounded,
+                label: '$share% of reports',
+                value: '$topCount reports',
+                accent: const Color(0xFFF0B34C),
+              ),
+              const SizedBox(height: 8),
+              metric(
+                icon: Icons.location_on_outlined,
+                label: 'Reports mapped',
+                value: '$totalCount reports',
+                accent: const Color(0xFF5F92FF),
+              ),
+            ],
+          );
+        }
+
+        return Row(
+          children: [
+            Expanded(
+              child: metric(
+                icon: Icons.local_fire_department_outlined,
+                label: 'Top barangay',
+                value: topLabel,
+                accent: const Color(0xFFE6616D),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: metric(
+                icon: Icons.bar_chart_rounded,
+                label: '$share% of reports',
+                value: '$topCount reports',
+                accent: const Color(0xFFF0B34C),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: metric(
+                icon: Icons.location_on_outlined,
+                label: '$hotspotCount hotspots shown',
+                value: '$totalCount reports',
+                accent: const Color(0xFF5F92FF),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _HeatZoneLabel extends StatelessWidget {
+  const _HeatZoneLabel({
+    required this.label,
+    this.left,
+    this.right,
+    this.top,
+    this.bottom,
+  });
+
+  final String label;
+  final double? left;
+  final double? right;
+  final double? top;
+  final double? bottom;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
+    return Positioned(
+      left: left,
+      right: right,
+      top: top,
+      bottom: bottom,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: colors.panel.withValues(alpha: colors.isDark ? 0.18 : 0.70),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: colors.border.withValues(alpha: 0.65)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: colors.mutedText,
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeatGridPainter extends CustomPainter {
+  const _HeatGridPainter({required this.lineColor, required this.fillColor});
+
+  final Color lineColor;
+  final Color fillColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final linePaint = Paint()
+      ..color = lineColor
+      ..strokeWidth = 1;
+    final fillPaint = Paint()..color = fillColor;
+
+    for (var row = 0; row < 4; row += 1) {
+      final rect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(16, 48 + (row * 44), size.width - 32, 30),
+        const Radius.circular(10),
+      );
+      canvas.drawRRect(rect, fillPaint);
+    }
+
+    for (var column = 1; column < 4; column += 1) {
+      final x = size.width * (column / 4);
+      canvas.drawLine(Offset(x, 42), Offset(x, size.height - 16), linePaint);
+    }
+    for (var row = 1; row < 4; row += 1) {
+      final y = 42 + ((size.height - 58) * (row / 4));
+      canvas.drawLine(Offset(16, y), Offset(size.width - 16, y), linePaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _HeatGridPainter oldDelegate) {
+    return oldDelegate.lineColor != lineColor ||
+        oldDelegate.fillColor != fillColor;
+  }
+}
+
+class _HeatMapBarangayRow extends StatelessWidget {
+  const _HeatMapBarangayRow({
+    required this.item,
+    required this.count,
+    required this.maxCount,
+    required this.color,
+  });
+
+  final Map<String, dynamic> item;
+  final int count;
+  final int maxCount;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
+    final ratio = (count / maxCount).clamp(0.0, 1.0).toDouble();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: colors.panelAlt,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: colors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    (item['label'] ?? 'Barangay').toString(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: colors.text,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                Text(
+                  '$count',
+                  style: TextStyle(color: color, fontWeight: FontWeight.w900),
+                ),
+              ],
+            ),
+            const SizedBox(height: 9),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: ratio,
+                minHeight: 8,
+                backgroundColor: colors.isDark
+                    ? Colors.white.withValues(alpha: 0.07)
+                    : const Color(0xFFE1EAF7),
+                valueColor: AlwaysStoppedAnimation<Color>(color),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
