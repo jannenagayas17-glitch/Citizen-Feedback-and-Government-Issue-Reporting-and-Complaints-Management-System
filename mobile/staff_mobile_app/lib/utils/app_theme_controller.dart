@@ -6,6 +6,7 @@ class AppThemeController extends ChangeNotifier {
 
   ThemeMode _themeMode = ThemeMode.dark;
   String _scope = 'global';
+  SharedPreferences? _prefs;
 
   ThemeMode get themeMode => _themeMode;
 
@@ -27,7 +28,8 @@ class AppThemeController extends ChangeNotifier {
   }
 
   Future<void> _loadForScope(String scope) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = _prefs ?? await SharedPreferences.getInstance();
+    _prefs = prefs;
     final savedMode =
         prefs.getString(_scopedThemeModeKey(scope)) ??
         prefs.getString(_themeModeKey);
@@ -43,7 +45,8 @@ class AppThemeController extends ChangeNotifier {
     _themeMode = nextMode;
     notifyListeners();
 
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = _prefs ?? await SharedPreferences.getInstance();
+    _prefs = prefs;
     await prefs.setString(
       _scopedThemeModeKey(_scope),
       enabled ? 'dark' : 'light',

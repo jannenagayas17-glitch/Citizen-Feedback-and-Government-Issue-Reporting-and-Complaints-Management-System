@@ -6,6 +6,24 @@ import 'utils/app_theme_controller.dart';
 import 'utils/app_routes.dart';
 import 'utils/session_gate.dart';
 
+final ThemeData _lightTheme = ThemeData(
+  colorScheme: ColorScheme.fromSeed(
+    seedColor: const Color(0xFF2563EB),
+    brightness: Brightness.light,
+  ),
+  useMaterial3: true,
+  scaffoldBackgroundColor: const Color(0xFFF5F8FC),
+);
+
+final ThemeData _darkTheme = ThemeData(
+  colorScheme: ColorScheme.fromSeed(
+    seedColor: const Color(0xFF2E6CF6),
+    brightness: Brightness.dark,
+  ),
+  useMaterial3: true,
+  scaffoldBackgroundColor: const Color(0xFF0C1727),
+);
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -32,22 +50,9 @@ class MyApp extends StatelessWidget {
             debugShowCheckedModeBanner: false,
             title: 'Admin Portal',
             themeMode: themeController.themeMode,
-            theme: ThemeData(
-              colorScheme: ColorScheme.fromSeed(
-                seedColor: const Color(0xFF2563EB),
-                brightness: Brightness.light,
-              ),
-              useMaterial3: true,
-              scaffoldBackgroundColor: const Color(0xFFF5F8FC),
-            ),
-            darkTheme: ThemeData(
-              colorScheme: ColorScheme.fromSeed(
-                seedColor: const Color(0xFF2E6CF6),
-                brightness: Brightness.dark,
-              ),
-              useMaterial3: true,
-              scaffoldBackgroundColor: const Color(0xFF0C1727),
-            ),
+            theme: _lightTheme,
+            darkTheme: _darkTheme,
+            themeAnimationDuration: Duration.zero,
             home: const SessionGate(),
             routes: AppRoutes.routes,
           );

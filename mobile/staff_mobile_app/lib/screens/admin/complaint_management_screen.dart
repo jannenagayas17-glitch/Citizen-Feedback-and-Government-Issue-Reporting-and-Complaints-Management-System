@@ -601,217 +601,216 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
   Widget build(BuildContext context) {
     final colors = AdminThemeColors.of(context);
     final bottomSafeArea = MediaQuery.of(context).padding.bottom;
+    final body = SafeArea(
+      child: RefreshIndicator(
+        onRefresh: _refresh,
+        child: FutureBuilder<_ReportsPayload>(
+          future: _payloadFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  _panel(
+                    child: Text(
+                      snapshot.error.toString().replaceFirst('Exception: ', ''),
+                      style: TextStyle(color: colors.text),
+                    ),
+                  ),
+                ],
+              );
+            }
+
+            final payload = snapshot.data!;
+            final superAdmin = _isSuperAdmin(payload.user);
+            final reports = payload.reports;
+            final offices = _departmentOptions(payload);
+            if (!offices.contains(_selectedOffice)) {
+              _selectedOffice = offices.first;
+            }
+            final categories = _categoryOptions(payload);
+            final barangays = _barangayOptions(payload);
+            const statuses = [
+              'All Status',
+              'New',
+              'Pending',
+              'In Progress',
+              'Resolved',
+              'Rejected',
+            ];
+            if (!categories.contains(_selectedCategory)) {
+              _selectedCategory = categories.first;
+            }
+            if (!barangays.contains(_selectedBarangay)) {
+              _selectedBarangay = barangays.first;
+            }
+            if (!statuses.contains(_selectedStatus)) {
+              _selectedStatus = statuses.first;
+            }
+            final filtered = _filteredReports(payload, reports);
+            final isWide = MediaQuery.of(context).size.width >= 1180;
+
+            final content = [
+              Text(
+                'All Reports',
+                style: TextStyle(
+                  color: colors.text,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                superAdmin
+                    ? 'View and manage all issue reports from across the city.'
+                    : 'View and manage reports assigned to your department.',
+                style: TextStyle(color: colors.mutedText, fontSize: 13),
+              ),
+              const SizedBox(height: 18),
+              _panel(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: _searchField()),
+                        const SizedBox(width: 12),
+                        _filterDropdown(
+                          value: _selectedCategory,
+                          items: categories,
+                          width: 180,
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() => _selectedCategory = value);
+                          },
+                        ),
+                        const SizedBox(width: 12),
+                        _filterDropdown(
+                          value: _selectedOffice,
+                          items: offices,
+                          width: 210,
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() {
+                              _selectedOffice = value;
+                              _selectedCategory = 'All Categories';
+                            });
+                          },
+                        ),
+                        const SizedBox(width: 12),
+                        _filterDropdown(
+                          value: _selectedBarangay,
+                          items: barangays,
+                          width: 180,
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() => _selectedBarangay = value);
+                          },
+                        ),
+                        const SizedBox(width: 12),
+                        _filterDropdown(
+                          value: _selectedStatus,
+                          items: statuses,
+                          width: 160,
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() => _selectedStatus = value);
+                          },
+                        ),
+                        const SizedBox(width: 12),
+                        FilledButton.icon(
+                          onPressed: _exporting ? null : _exportReports,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF2557D6),
+                          ),
+                          icon: _exporting
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.file_download_outlined,
+                                  size: 16,
+                                ),
+                          label: Text(
+                            _exporting ? 'Exporting...' : 'Export Excel',
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      '${filtered.length} Reports${_selectedOffice != 'All Departments'
+                          ? ' - $_selectedOffice'
+                          : _selectedBarangay != 'All Barangays'
+                          ? ' - $_selectedBarangay'
+                          : ''}',
+                      style: TextStyle(color: colors.mutedText, fontSize: 13),
+                    ),
+                    const SizedBox(height: 16),
+                    _tableHeader(),
+                    const SizedBox(height: 6),
+                    if (filtered.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 20),
+                        child: Text(
+                          'No reports match your current filters.',
+                          style: TextStyle(color: colors.mutedText),
+                        ),
+                      )
+                    else
+                      ...filtered.map((report) => _reportRow(report)),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Text(
+                          'Showing ${filtered.isEmpty ? 0 : 1} to ${filtered.length} of ${reports.length} entries',
+                          style: TextStyle(
+                            color: colors.mutedText,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const Spacer(),
+                        _pagerButton('Previous'),
+                        const SizedBox(width: 8),
+                        _pagerIndex('1'),
+                        const SizedBox(width: 8),
+                        _pagerButton('Next'),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ];
+
+            return ListView(
+              padding: EdgeInsets.fromLTRB(20, 18, 20, 24 + bottomSafeArea),
+              children: [if (isWide) ...content else ...content],
+            );
+          },
+        ),
+      ),
+    );
+    if (widget.embedded) {
+      return ColoredBox(color: colors.background, child: body);
+    }
 
     return Scaffold(
       backgroundColor: colors.background,
-      appBar: widget.embedded
-          ? null
-          : AppBar(
-              backgroundColor: colors.background,
-              foregroundColor: colors.text,
-              elevation: 0,
-              title: const Text('All Reports'),
-            ),
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _refresh,
-          child: FutureBuilder<_ReportsPayload>(
-            future: _payloadFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (snapshot.hasError) {
-                return ListView(
-                  padding: const EdgeInsets.all(20),
-                  children: [
-                    _panel(
-                      child: Text(
-                        snapshot.error.toString().replaceFirst(
-                          'Exception: ',
-                          '',
-                        ),
-                        style: TextStyle(color: colors.text),
-                      ),
-                    ),
-                  ],
-                );
-              }
-
-              final payload = snapshot.data!;
-              final superAdmin = _isSuperAdmin(payload.user);
-              final reports = payload.reports;
-              final offices = _departmentOptions(payload);
-              if (!offices.contains(_selectedOffice)) {
-                _selectedOffice = offices.first;
-              }
-              final categories = _categoryOptions(payload);
-              final barangays = _barangayOptions(payload);
-              const statuses = [
-                'All Status',
-                'New',
-                'Pending',
-                'In Progress',
-                'Resolved',
-                'Rejected',
-              ];
-              if (!categories.contains(_selectedCategory)) {
-                _selectedCategory = categories.first;
-              }
-              if (!barangays.contains(_selectedBarangay)) {
-                _selectedBarangay = barangays.first;
-              }
-              if (!statuses.contains(_selectedStatus)) {
-                _selectedStatus = statuses.first;
-              }
-              final filtered = _filteredReports(payload, reports);
-              final isWide = MediaQuery.of(context).size.width >= 1180;
-
-              final content = [
-                Text(
-                  'All Reports',
-                  style: TextStyle(
-                    color: colors.text,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  superAdmin
-                      ? 'View and manage all issue reports from across the city.'
-                      : 'View and manage reports assigned to your department.',
-                  style: TextStyle(color: colors.mutedText, fontSize: 13),
-                ),
-                const SizedBox(height: 18),
-                _panel(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(child: _searchField()),
-                          const SizedBox(width: 12),
-                          _filterDropdown(
-                            value: _selectedCategory,
-                            items: categories,
-                            width: 180,
-                            onChanged: (value) {
-                              if (value == null) return;
-                              setState(() => _selectedCategory = value);
-                            },
-                          ),
-                          const SizedBox(width: 12),
-                          _filterDropdown(
-                            value: _selectedOffice,
-                            items: offices,
-                            width: 210,
-                            onChanged: (value) {
-                              if (value == null) return;
-                              setState(() {
-                                _selectedOffice = value;
-                                _selectedCategory = 'All Categories';
-                              });
-                            },
-                          ),
-                          const SizedBox(width: 12),
-                          _filterDropdown(
-                            value: _selectedBarangay,
-                            items: barangays,
-                            width: 180,
-                            onChanged: (value) {
-                              if (value == null) return;
-                              setState(() => _selectedBarangay = value);
-                            },
-                          ),
-                          const SizedBox(width: 12),
-                          _filterDropdown(
-                            value: _selectedStatus,
-                            items: statuses,
-                            width: 160,
-                            onChanged: (value) {
-                              if (value == null) return;
-                              setState(() => _selectedStatus = value);
-                            },
-                          ),
-                          const SizedBox(width: 12),
-                          FilledButton.icon(
-                            onPressed: _exporting ? null : _exportReports,
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFF2557D6),
-                            ),
-                            icon: _exporting
-                                ? const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Icon(
-                                    Icons.file_download_outlined,
-                                    size: 16,
-                                  ),
-                            label: Text(
-                              _exporting ? 'Exporting...' : 'Export Excel',
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 14),
-                      Text(
-                        '${filtered.length} Reports${_selectedOffice != 'All Departments'
-                            ? ' - $_selectedOffice'
-                            : _selectedBarangay != 'All Barangays'
-                            ? ' - $_selectedBarangay'
-                            : ''}',
-                        style: TextStyle(color: colors.mutedText, fontSize: 13),
-                      ),
-                      const SizedBox(height: 16),
-                      _tableHeader(),
-                      const SizedBox(height: 6),
-                      if (filtered.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 20),
-                          child: Text(
-                            'No reports match your current filters.',
-                            style: TextStyle(color: colors.mutedText),
-                          ),
-                        )
-                      else
-                        ...filtered.map((report) => _reportRow(report)),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Text(
-                            'Showing ${filtered.isEmpty ? 0 : 1} to ${filtered.length} of ${reports.length} entries',
-                            style: TextStyle(
-                              color: colors.mutedText,
-                              fontSize: 12,
-                            ),
-                          ),
-                          const Spacer(),
-                          _pagerButton('Previous'),
-                          const SizedBox(width: 8),
-                          _pagerIndex('1'),
-                          const SizedBox(width: 8),
-                          _pagerButton('Next'),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ];
-
-              return ListView(
-                padding: EdgeInsets.fromLTRB(20, 18, 20, 24 + bottomSafeArea),
-                children: [if (isWide) ...content else ...content],
-              );
-            },
-          ),
-        ),
+      appBar: AppBar(
+        backgroundColor: colors.background,
+        foregroundColor: colors.text,
+        elevation: 0,
+        title: const Text('All Reports'),
       ),
+      body: body,
     );
   }
 

@@ -43,8 +43,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
   bool _refreshingDashboard = false;
   _SuperAdminDesktopSection _desktopSection =
       _SuperAdminDesktopSection.dashboard;
-  final Map<_SuperAdminDesktopSection, Widget> _desktopSectionCache = {};
-  bool _desktopSectionsPreloaded = false;
+  final Set<_SuperAdminDesktopSection> _loadedDesktopSections = {};
 
   @override
   void initState() {
@@ -125,21 +124,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
       return;
     }
 
-    _desktopSectionCache.putIfAbsent(
-      section,
-      () => _buildDesktopSectionContent(section),
-    );
-  }
-
-  void _preloadDesktopSections() {
-    if (_desktopSectionsPreloaded) {
-      return;
-    }
-
-    _desktopSectionsPreloaded = true;
-    for (final section in _SuperAdminDesktopSection.values) {
-      _cacheDesktopSection(section);
-    }
+    _loadedDesktopSections.add(section);
   }
 
   void _showDashboard() {
@@ -578,8 +563,6 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
                 final isWide = constraints.maxWidth >= 1100;
 
                 if (isWide) {
-                  _preloadDesktopSections();
-
                   return Column(
                     children: [
                       _SuperDashboardTopBar(
@@ -890,15 +873,24 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
             ),
           ),
         ),
-        ..._desktopSectionCache.entries.map((entry) {
-          final visible = entry.key == _desktopSection;
-          return Positioned.fill(
-            child: Offstage(
-              offstage: !visible,
-              child: TickerMode(enabled: visible, child: entry.value),
-            ),
-          );
-        }),
+        ..._SuperAdminDesktopSection.values
+            .where(
+              (section) =>
+                  section != _SuperAdminDesktopSection.dashboard &&
+                  _loadedDesktopSections.contains(section),
+            )
+            .map((section) {
+              final visible = section == _desktopSection;
+              return Positioned.fill(
+                child: Offstage(
+                  offstage: !visible,
+                  child: TickerMode(
+                    enabled: visible,
+                    child: _buildDesktopSectionContent(section),
+                  ),
+                ),
+              );
+            }),
       ],
     );
   }
