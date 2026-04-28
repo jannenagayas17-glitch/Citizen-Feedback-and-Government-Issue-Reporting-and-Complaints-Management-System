@@ -76,19 +76,51 @@ const List<int> _transparentImageBytes = <int>[
   0x82,
 ];
 
+ByteData _byteDataFromBytes(List<int> bytes) {
+  return ByteData.view(Uint8List.fromList(bytes).buffer);
+}
+
+ByteData _jsonByteData(String value) {
+  return _byteDataFromBytes(utf8.encode(value));
+}
+
+final ByteData _emptyAssetManifest = const StandardMessageCodec()
+    .encodeMessage(<String, Object?>{})!;
+
 void setupWidgetTestEnvironment() {
   TestWidgetsFlutterBinding.ensureInitialized();
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   messenger.setMockMessageHandler('flutter/assets', (message) async {
-    final key = const StringCodec().decodeMessage(message);
-    if (key != null && key.endsWith('.svg')) {
+    final String key = const StringCodec().decodeMessage(message)!;
+    if (key == 'AssetManifest.bin') {
+      return _emptyAssetManifest;
+    }
+    if (key == 'AssetManifest.json') {
+      return _jsonByteData('{}');
+    }
+    if (key == 'FontManifest.json') {
+      return _jsonByteData('[]');
+    }
+    if (key == 'NOTICES.Z') {
+      return ByteData(0);
+    }
+    if (key.endsWith('.svg')) {
       final svg = utf8.encode(
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"></svg>',
       );
-      return ByteData.view(Uint8List.fromList(svg).buffer);
+      return _byteDataFromBytes(svg);
     }
-    return ByteData.view(Uint8List.fromList(_transparentImageBytes).buffer);
+    return _byteDataFromBytes(_transparentImageBytes);
+  });
+}
+
+void configureTestViewport(WidgetTester tester) {
+  tester.view.devicePixelRatio = 1.0;
+  tester.view.physicalSize = const Size(1440, 2200);
+  addTearDown(() {
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
   });
 }
 

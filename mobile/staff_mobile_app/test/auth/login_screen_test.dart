@@ -13,6 +13,7 @@ void main() {
   });
 
   Future<void> pumpLoginScreen(WidgetTester tester) async {
+    configureTestViewport(tester);
     await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
     await tester.pumpAndSettle();
   }
@@ -22,6 +23,7 @@ void main() {
   ) async {
     await pumpLoginScreen(tester);
 
+    await tester.ensureVisible(find.widgetWithText(ElevatedButton, 'Login'));
     await tester.tap(find.widgetWithText(ElevatedButton, 'Login'));
     await tester.pump();
 
@@ -44,6 +46,13 @@ void main() {
     await tester.tap(find.text('Super Admin').last);
     await tester.pumpAndSettle();
 
-    expect(find.text('superadmin@gmail.com'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is EditableText &&
+            widget.controller.text == 'superadmin@gmail.com',
+      ),
+      findsOneWidget,
+    );
   });
 }

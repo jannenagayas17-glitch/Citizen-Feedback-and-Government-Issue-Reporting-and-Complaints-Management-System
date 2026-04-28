@@ -70,7 +70,6 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _login() async {
-    final themeController = AppThemeScope.of(context);
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
@@ -117,6 +116,7 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
+      final themeController = AppThemeScope.of(context);
       await TokenStorage.saveLastEmailForRole(role: 'citizen', email: email);
       await themeController.loadForUser(user);
 
@@ -138,7 +138,6 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _loginWithGoogle() async {
-    final themeController = AppThemeScope.of(context);
     setState(() => _isGoogleLoading = true);
 
     try {
@@ -177,6 +176,7 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
+      final themeController = AppThemeScope.of(context);
       await TokenStorage.saveLastEmailForRole(
         role: 'citizen',
         email: user.email ?? '',
@@ -566,20 +566,25 @@ class _LoginScreenState extends State<LoginScreen> {
                 height: 20,
                 child: CircularProgressIndicator(strokeWidth: 2.4),
               )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SvgPicture.asset(
-                    'assets/images/google_logo.svg',
-                    width: 20,
-                    height: 20,
-                  ),
-                  const SizedBox(width: 10),
-                  const Text(
-                    'Sign in with Google',
-                    style: TextStyle(color: Colors.white, fontSize: 16),
-                  ),
-                ],
+            : FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SvgPicture.asset(
+                      'assets/images/google_logo.svg',
+                      width: 20,
+                      height: 20,
+                    ),
+                    const SizedBox(width: 10),
+                    const Text(
+                      'Sign in with Google',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                  ],
+                ),
               ),
       ),
     );
