@@ -9,7 +9,9 @@ if (! is_dir($cachePath)) {
 $staleCacheFiles = [
     'config.php',
     'events.php',
+    'packages.php',
     'routes.php',
+    'services.php',
 ];
 
 foreach ($staleCacheFiles as $file) {

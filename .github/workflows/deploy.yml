@@ -1,0 +1,64 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  mobile-artifacts:
+    name: Build APK (${{ matrix.label }})
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Citizen App
+            app_directory: mobile/citizen_mobile_app
+            artifact_name: citizen-mobile-app-debug-apk
+          - label: Staff App
+            app_directory: mobile/staff_mobile_app
+            artifact_name: staff-mobile-app-debug-apk
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ matrix.app_directory }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Restore Flutter packages
+        run: flutter pub get
+
+      - name: Build debug APK
+        run: flutter build apk --debug --no-pub
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.app_directory }}/build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 14

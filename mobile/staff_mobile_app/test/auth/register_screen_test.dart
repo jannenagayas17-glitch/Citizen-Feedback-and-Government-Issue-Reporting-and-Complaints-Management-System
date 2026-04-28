@@ -43,6 +43,7 @@ void main() {
     WidgetTester tester, {
     required AuthService authService,
   }) async {
+    configureTestViewport(tester);
     await tester.pumpWidget(
       MaterialApp(
         home: RegisterScreen(authService: authService),
@@ -76,13 +77,18 @@ void main() {
   testWidgets('submits when admin register form is valid', (tester) async {
     final authService = _FakeStaffAuthService();
     await pumpRegisterScreen(tester, authService: authService);
+    final dropdowns = find.byWidgetPredicate((widget) => widget is DropdownButton);
+    final officeDropdown = dropdowns.at(0);
+    final adminTypeDropdown = dropdowns.at(1);
 
-    await tester.tap(find.text('Select office'));
+    await tester.ensureVisible(officeDropdown);
+    await tester.tap(officeDropdown);
     await tester.pumpAndSettle();
     await tester.tap(find.text("City Engineer's Office").last);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Select admin type'));
+    await tester.ensureVisible(adminTypeDropdown);
+    await tester.tap(adminTypeDropdown);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Office Head').last);
     await tester.pumpAndSettle();

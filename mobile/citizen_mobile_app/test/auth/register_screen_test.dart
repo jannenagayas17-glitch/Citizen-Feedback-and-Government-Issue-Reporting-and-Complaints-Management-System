@@ -36,6 +36,7 @@ void main() {
     WidgetTester tester, {
     AuthService? authService,
   }) async {
+    configureTestViewport(tester);
     await tester.pumpWidget(
       MaterialApp(
         home: RegisterScreen(authService: authService),
