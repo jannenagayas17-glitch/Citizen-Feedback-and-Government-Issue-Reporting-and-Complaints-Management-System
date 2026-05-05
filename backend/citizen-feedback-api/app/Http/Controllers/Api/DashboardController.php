@@ -74,7 +74,7 @@ class DashboardController extends Controller
             ->where('barangay', '!=', '')
             ->groupBy('barangay')
             ->orderByDesc('total')
-            ->limit(6)
+            ->limit(5)
             ->get()
             ->map(function ($row) {
                 return [
@@ -82,6 +82,7 @@ class DashboardController extends Controller
                     'count' => (int) $row->total,
                 ];
             })
+            ->sortByDesc('count')
             ->values();
 
         $locationBreakdown = (clone $baseQuery)
@@ -181,6 +182,7 @@ class DashboardController extends Controller
             'priority_breakdown' => $priorityBreakdown,
             'category_breakdown' => $categoryBreakdown,
             'barangay_breakdown' => $barangayBreakdown,
+            'top_barangays' => $barangayBreakdown,
             'location_breakdown' => $locationBreakdown,
             'staff_performance' => $staffPerformance,
             'monthly_trend' => $monthlyTrend,

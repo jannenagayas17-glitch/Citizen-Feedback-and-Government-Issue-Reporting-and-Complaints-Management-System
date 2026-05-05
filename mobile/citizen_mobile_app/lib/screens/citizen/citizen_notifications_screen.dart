@@ -268,9 +268,8 @@ class _CitizenNotificationsScreenState
   String _normalizedStatus(String raw) {
     switch (raw) {
       case 'New':
-        return 'Submitted';
       case 'Pending':
-        return 'Under Review';
+        return 'Submitted';
       default:
         return raw;
     }
@@ -281,8 +280,6 @@ class _CitizenNotificationsScreenState
     switch (status) {
       case 'Submitted':
         return 'Submitted on $dateLabel and waiting for office review.';
-      case 'Under Review':
-        return 'Validated by the office. Review update posted on $dateLabel.';
       case 'In Progress':
         return 'Your complaint is now being handled by the assigned office.';
       case 'Resolved':
@@ -295,13 +292,13 @@ class _CitizenNotificationsScreenState
   Color _statusColor(String status) {
     switch (status) {
       case 'Submitted':
-        return const Color(0xFF22C55E);
-      case 'Under Review':
         return const Color(0xFFF59E0B);
       case 'In Progress':
         return const Color(0xFF4B82F7);
       case 'Resolved':
-        return const Color(0xFF64748B);
+        return const Color(0xFF22C55E);
+      case 'Rejected':
+        return const Color(0xFFEF4444);
       default:
         return const Color(0xFF64748B);
     }

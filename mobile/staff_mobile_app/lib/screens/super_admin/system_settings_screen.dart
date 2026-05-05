@@ -67,6 +67,18 @@ class _SystemSettingsScreenState extends State<SystemSettingsScreen> {
     }
   }
 
+  Future<void> _changePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    await _authService.changePassword(
+      currentPassword: currentPassword,
+      newPassword: newPassword,
+      newPasswordConfirmation: confirmPassword,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = _SettingsColors.of(context);
@@ -98,6 +110,7 @@ class _SystemSettingsScreenState extends State<SystemSettingsScreen> {
           initialSettings: settings,
           isSaving: _isSaving,
           onSave: _save,
+          onChangePassword: _changePassword,
         );
       },
     );
@@ -126,6 +139,7 @@ class _SettingsContent extends StatefulWidget {
     required this.initialSettings,
     required this.isSaving,
     required this.onSave,
+    required this.onChangePassword,
   });
 
   final bool embedded;
@@ -133,6 +147,12 @@ class _SettingsContent extends StatefulWidget {
   final Map<String, dynamic> initialSettings;
   final bool isSaving;
   final Future<void> Function(Map<String, dynamic> settings) onSave;
+  final Future<void> Function({
+    required String currentPassword,
+    required String newPassword,
+    required String confirmPassword,
+  })
+  onChangePassword;
 
   @override
   State<_SettingsContent> createState() => _SettingsContentState();
@@ -162,11 +182,31 @@ class _SettingsContentState extends State<_SettingsContent> {
   late int _triggerTimeHours;
   late String _notificationChannel;
   late String _priority;
+  final TextEditingController _currentPasswordController =
+      TextEditingController();
+  final TextEditingController _newPasswordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
+  bool _isChangingPassword = false;
+  bool _obscureCurrentPassword = true;
+  bool _obscureNewPassword = true;
+  bool _obscureConfirmPassword = true;
+  String? _currentPasswordError;
+  String? _newPasswordError;
+  String? _confirmPasswordError;
 
   @override
   void initState() {
     super.initState();
     _hydrate();
+  }
+
+  @override
+  void dispose() {
+    _currentPasswordController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
   }
 
   @override
@@ -235,6 +275,12 @@ class _SettingsContentState extends State<_SettingsContent> {
     return options.contains(value) ? value : fallback;
   }
 
+  void _clearPasswordErrors() {
+    _currentPasswordError = null;
+    _newPasswordError = null;
+    _confirmPasswordError = null;
+  }
+
   Future<void> _submit() async {
     final payload = <String, dynamic>{
       'notifications': <String, dynamic>{
@@ -254,6 +300,70 @@ class _SettingsContentState extends State<_SettingsContent> {
     };
 
     await widget.onSave(payload);
+  }
+
+  Future<void> _submitPasswordChange() async {
+    final currentPassword = _currentPasswordController.text.trim();
+    final newPassword = _newPasswordController.text.trim();
+    final confirmPassword = _confirmPasswordController.text.trim();
+
+    setState(() {
+      _clearPasswordErrors();
+      if (currentPassword.isEmpty) {
+        _currentPasswordError = 'Enter your current password.';
+      }
+      if (newPassword.isEmpty) {
+        _newPasswordError = 'Enter a new password.';
+      } else if (newPassword.length < 8) {
+        _newPasswordError = 'New password must be at least 8 characters.';
+      } else if (newPassword == currentPassword) {
+        _newPasswordError =
+            'New password must be different from the current password.';
+      }
+      if (confirmPassword.isEmpty) {
+        _confirmPasswordError = 'Confirm your new password.';
+      } else if (confirmPassword != newPassword) {
+        _confirmPasswordError = 'Password confirmation does not match.';
+      }
+    });
+
+    if (_currentPasswordError != null ||
+        _newPasswordError != null ||
+        _confirmPasswordError != null) {
+      return;
+    }
+
+    setState(() => _isChangingPassword = true);
+    try {
+      await widget.onChangePassword(
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+        confirmPassword: confirmPassword,
+      );
+      if (!mounted) return;
+      _currentPasswordController.clear();
+      _newPasswordController.clear();
+      _confirmPasswordController.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password updated successfully.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final message = e.toString().replaceFirst('Exception: ', '');
+      setState(() {
+        if (message.toLowerCase().contains('current password')) {
+          _currentPasswordError = message;
+        } else if (message.toLowerCase().contains('confirm')) {
+          _confirmPasswordError = message;
+        } else {
+          _newPasswordError = message;
+        }
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isChangingPassword = false);
+      }
+    }
   }
 
   @override
@@ -308,6 +418,54 @@ class _SettingsContentState extends State<_SettingsContent> {
                   SizedBox(
                     width: panelWidth,
                     child: _AccountCard(name: name, email: email),
+                  ),
+                  SizedBox(
+                    width: panelWidth,
+                    child: _PasswordSettingsCard(
+                      currentPasswordController: _currentPasswordController,
+                      newPasswordController: _newPasswordController,
+                      confirmPasswordController: _confirmPasswordController,
+                      currentPasswordError: _currentPasswordError,
+                      newPasswordError: _newPasswordError,
+                      confirmPasswordError: _confirmPasswordError,
+                      isSaving: _isChangingPassword,
+                      obscureCurrentPassword: _obscureCurrentPassword,
+                      obscureNewPassword: _obscureNewPassword,
+                      obscureConfirmPassword: _obscureConfirmPassword,
+                      onCurrentPasswordChanged: () {
+                        if (_currentPasswordError != null) {
+                          setState(() => _currentPasswordError = null);
+                        }
+                      },
+                      onNewPasswordChanged: () {
+                        if (_newPasswordError != null) {
+                          setState(() => _newPasswordError = null);
+                        }
+                      },
+                      onConfirmPasswordChanged: () {
+                        if (_confirmPasswordError != null) {
+                          setState(() => _confirmPasswordError = null);
+                        }
+                      },
+                      onToggleCurrentPassword: () {
+                        setState(
+                          () => _obscureCurrentPassword =
+                              !_obscureCurrentPassword,
+                        );
+                      },
+                      onToggleNewPassword: () {
+                        setState(
+                          () => _obscureNewPassword = !_obscureNewPassword,
+                        );
+                      },
+                      onToggleConfirmPassword: () {
+                        setState(
+                          () => _obscureConfirmPassword =
+                              !_obscureConfirmPassword,
+                        );
+                      },
+                      onSubmit: _submitPasswordChange,
+                    ),
                   ),
                   SizedBox(
                     width: panelWidth,
@@ -613,6 +771,181 @@ class _AccountCard extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PasswordSettingsCard extends StatelessWidget {
+  const _PasswordSettingsCard({
+    required this.currentPasswordController,
+    required this.newPasswordController,
+    required this.confirmPasswordController,
+    required this.currentPasswordError,
+    required this.newPasswordError,
+    required this.confirmPasswordError,
+    required this.isSaving,
+    required this.obscureCurrentPassword,
+    required this.obscureNewPassword,
+    required this.obscureConfirmPassword,
+    required this.onCurrentPasswordChanged,
+    required this.onNewPasswordChanged,
+    required this.onConfirmPasswordChanged,
+    required this.onToggleCurrentPassword,
+    required this.onToggleNewPassword,
+    required this.onToggleConfirmPassword,
+    required this.onSubmit,
+  });
+
+  final TextEditingController currentPasswordController;
+  final TextEditingController newPasswordController;
+  final TextEditingController confirmPasswordController;
+  final String? currentPasswordError;
+  final String? newPasswordError;
+  final String? confirmPasswordError;
+  final bool isSaving;
+  final bool obscureCurrentPassword;
+  final bool obscureNewPassword;
+  final bool obscureConfirmPassword;
+  final VoidCallback onCurrentPasswordChanged;
+  final VoidCallback onNewPasswordChanged;
+  final VoidCallback onConfirmPasswordChanged;
+  final VoidCallback onToggleCurrentPassword;
+  final VoidCallback onToggleNewPassword;
+  final VoidCallback onToggleConfirmPassword;
+  final VoidCallback onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = _SettingsColors.of(context);
+
+    InputDecoration inputDecoration({
+      required String label,
+      String? errorText,
+      required bool obscureText,
+      required VoidCallback onToggleVisibility,
+    }) {
+      return InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: colors.mutedText),
+        errorText: errorText,
+        filled: true,
+        fillColor: colors.input,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: colors.border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: colors.border),
+        ),
+        focusedBorder: const OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(14)),
+          borderSide: BorderSide(color: Color(0xFF2E62FF), width: 1.4),
+        ),
+        suffixIcon: IconButton(
+          onPressed: onToggleVisibility,
+          icon: Icon(
+            obscureText ? Icons.visibility_off_outlined : Icons.visibility,
+            color: colors.mutedText,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: colors.softPanel,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Change Password',
+            style: TextStyle(
+              color: colors.text,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Use a secure password with at least 8 characters.',
+            style: TextStyle(color: colors.mutedText, fontSize: 13),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: currentPasswordController,
+            obscureText: obscureCurrentPassword,
+            style: TextStyle(color: colors.text),
+            onChanged: (_) => onCurrentPasswordChanged(),
+            decoration: inputDecoration(
+              label: 'Current password',
+              errorText: currentPasswordError,
+              obscureText: obscureCurrentPassword,
+              onToggleVisibility: onToggleCurrentPassword,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: newPasswordController,
+            obscureText: obscureNewPassword,
+            style: TextStyle(color: colors.text),
+            onChanged: (_) => onNewPasswordChanged(),
+            decoration: inputDecoration(
+              label: 'New password',
+              errorText: newPasswordError,
+              obscureText: obscureNewPassword,
+              onToggleVisibility: onToggleNewPassword,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: confirmPasswordController,
+            obscureText: obscureConfirmPassword,
+            style: TextStyle(color: colors.text),
+            onChanged: (_) => onConfirmPasswordChanged(),
+            decoration: inputDecoration(
+              label: 'Confirm new password',
+              errorText: confirmPasswordError,
+              obscureText: obscureConfirmPassword,
+              onToggleVisibility: onToggleConfirmPassword,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton(
+              onPressed: isSaving ? null : onSubmit,
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF163FCB),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 14,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: isSaving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text(
+                      'Update Password',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+            ),
           ),
         ],
       ),

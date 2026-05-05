@@ -21,7 +21,7 @@ class ReportController extends Controller
 
     public function index(Request $request)
     {
-        $query = Report::with(['user', 'category', 'office', 'images'])->latest();
+        $query = Report::with($this->listRelations())->latest();
 
         if (($request->user()->role ?? 'citizen') === 'citizen') {
             $query->where('user_id', $request->user()->id);
@@ -129,14 +129,7 @@ class ReportController extends Controller
 
     public function show(Request $request, $id)
     {
-        $report = Report::with([
-            'user',
-            'category',
-            'office',
-            'images',
-            'statusHistories.user',
-            'adminResponses.user'
-        ])->findOrFail($id);
+        $report = Report::with($this->detailRelations())->findOrFail($id);
 
         $this->authorizeReportAccess($request, $report);
 
@@ -149,7 +142,7 @@ class ReportController extends Controller
             abort(403, 'Unauthorized action.');
         }
 
-        $query = $this->scopedAdminReports($request)->with(['user', 'category', 'office', 'images']);
+        $query = $this->scopedAdminReports($request)->with($this->listRelations());
 
         if ($request->has('status')) {
             $query->where('status', $request->status);
@@ -196,7 +189,7 @@ class ReportController extends Controller
 
         return response()->json([
             'message' => 'Report status updated successfully',
-            'report' => $report->load(['user', 'category', 'office', 'images']),
+            'report' => $report->load($this->detailRelations()),
         ]);
     }
 
@@ -535,7 +528,37 @@ class ReportController extends Controller
             'priority' => $validated['priority'] ?? 'Normal',
         ]);
 
-        return $report->load(['category', 'office']);
+        return $report->load($this->detailRelations());
+    }
+
+    private function listRelations(): array
+    {
+        return [
+            'user',
+            'category',
+            'office',
+            'images',
+            'latestStatusHistory.user',
+            'latestAdminResponse.user',
+        ];
+    }
+
+    private function detailRelations(): array
+    {
+        return [
+            'user',
+            'category',
+            'office',
+            'images',
+            'statusHistories' => function ($query) {
+                $query->with('user')->latest();
+            },
+            'adminResponses' => function ($query) {
+                $query->with('user')->latest();
+            },
+            'latestStatusHistory.user',
+            'latestAdminResponse.user',
+        ];
     }
 
     private function verificationCacheKey(int $userId): string

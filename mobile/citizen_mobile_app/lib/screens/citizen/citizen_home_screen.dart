@@ -741,9 +741,8 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
     final raw = (report['status'] ?? 'Submitted').toString();
     switch (raw) {
       case 'New':
-        return 'New';
       case 'Pending':
-        return 'Pending';
+        return 'Submitted';
       default:
         return raw;
     }
@@ -1035,9 +1034,8 @@ class _IssueCard extends StatelessWidget {
   String _displayStatus(String raw) {
     switch (raw) {
       case 'New':
-        return 'New';
       case 'Pending':
-        return 'Pending';
+        return 'Submitted';
       default:
         return raw;
     }
@@ -1049,10 +1047,10 @@ class _IssueCard extends StatelessWidget {
         return const Color(0xFF4ADE80);
       case 'In Progress':
         return const Color(0xFF60A5FA);
-      case 'Pending':
-        return const Color(0xFFFBBF24);
-      case 'New':
+      case 'Submitted':
         return const Color(0xFFFB7185);
+      case 'Rejected':
+        return const Color(0xFFF87171);
       default:
         return Colors.white70;
     }

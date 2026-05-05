@@ -43,7 +43,7 @@ class CitizenDataCache {
 
   static Future<List<dynamic>> getReports({bool refresh = false}) async {
     if (!refresh && _reports != null) return _reports!;
-    _reports = await _reportService.getReports();
+    _reports = _dedupeReports(await _reportService.getReports());
     return _reports!;
   }
 
@@ -80,7 +80,8 @@ class CitizenDataCache {
       getDashboard(refresh: refresh),
       getReports(refresh: refresh),
     ]);
-    final reports = values[2] as List<dynamic>;
+    final reports = _dedupeReports(values[2] as List<dynamic>);
+    _reports = reports;
     _dashboard = _dashboardFromReports(reports);
 
     return {
@@ -97,7 +98,7 @@ class CitizenDataCache {
   static void prependReport(Map<String, dynamic> report) {
     final reportId = _extractId(report);
     if (reportId != null) _reportDetails[reportId] = report;
-    _reports = [report, ...?_reports];
+    _reports = _dedupeReports([report, ...?_reports]);
     _dashboard = _dashboardFromReports(_reports!);
   }
 
@@ -119,6 +120,30 @@ class CitizenDataCache {
   static int? _extractId(Map<String, dynamic> report) {
     final rawId = report['id'];
     return rawId is int ? rawId : int.tryParse('$rawId');
+  }
+
+  static List<dynamic> _dedupeReports(List<dynamic> reports) {
+    final orderedReports = <dynamic>[];
+    final seenIds = <int>{};
+
+    for (final item in reports) {
+      if (item is! Map<String, dynamic>) {
+        orderedReports.add(item);
+        continue;
+      }
+
+      final reportId = _extractId(item);
+      if (reportId == null) {
+        orderedReports.add(Map<String, dynamic>.from(item));
+        continue;
+      }
+
+      if (seenIds.add(reportId)) {
+        orderedReports.add(Map<String, dynamic>.from(item));
+      }
+    }
+
+    return orderedReports;
   }
 
   static Map<String, dynamic> _dashboardFromReports(List<dynamic> reports) {

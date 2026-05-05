@@ -50,6 +50,11 @@ class Report extends Model
         return $this->hasMany(StatusHistory::class);
     }
 
+    public function latestStatusHistory()
+    {
+        return $this->hasOne(StatusHistory::class)->latestOfMany();
+    }
+
     public function assignedAdmin()
     {
         return $this->belongsTo(User::class, 'assigned_to');
@@ -58,6 +63,11 @@ class Report extends Model
     public function adminResponses()
     {
         return $this->hasMany(AdminResponse::class);
+    }
+
+    public function latestAdminResponse()
+    {
+        return $this->hasOne(AdminResponse::class)->latestOfMany();
     }
 
     public function feedbackEntries()

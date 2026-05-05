@@ -13,6 +13,7 @@ class SubmitComplaintScreen extends StatefulWidget {
 }
 
 class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
+  static const int _maxAttachments = 3;
   static final RegExp _emojiRegex = RegExp(
     r'[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]',
     unicode: true,
@@ -55,16 +56,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
       final files = await _imagePicker.pickMultiImage(imageQuality: 80);
       if (files.isEmpty) return;
 
-      setState(() {
-        final remainingSlots = 3 - _selectedMedia.length;
-        _selectedMedia.addAll(
-          files
-              .take(remainingSlots)
-              .map(
-                (file) => _SelectedMediaItem(file: file, mediaType: 'image'),
-              ),
-        );
-      });
+      await _addSelectedMedia(files, mediaType: 'image');
     } catch (e) {
       _showSnack(
         'Unable to select images: ${e.toString().replaceFirst('Exception: ', '')}',
@@ -72,23 +64,42 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     }
   }
 
-  Future<void> _pickVideo() async {
-    try {
-      if (_selectedMedia.length >= 3) {
-        _showSnack('You can upload up to 3 attachments only.');
-        return;
+  Future<void> _addSelectedMedia(
+    List<XFile> files, {
+    required String mediaType,
+  }) async {
+    final remainingSlots = _maxAttachments - _selectedMedia.length;
+    if (remainingSlots <= 0) {
+      _showSnack('You can upload up to 3 attachments only.');
+      return;
+    }
+
+    final pendingSelection = files.take(remainingSlots).toList();
+    final acceptedItems = <_SelectedMediaItem>[];
+    var oversizedCount = 0;
+
+    for (final file in pendingSelection) {
+      final fileSize = await file.length();
+      if (fileSize > ReportService.maxAttachmentBytes) {
+        oversizedCount++;
+        continue;
       }
 
-      final file = await _imagePicker.pickVideo(source: ImageSource.gallery);
-      if (file == null) return;
+      acceptedItems.add(_SelectedMediaItem(file: file, mediaType: mediaType));
+    }
 
-      setState(() {
-        _selectedMedia.add(_SelectedMediaItem(file: file, mediaType: 'video'));
-      });
-    } catch (e) {
-      _showSnack(
-        'Unable to select video: ${e.toString().replaceFirst('Exception: ', '')}',
-      );
+    if (!mounted) return;
+
+    if (acceptedItems.isNotEmpty) {
+      setState(() => _selectedMedia.addAll(acceptedItems));
+    }
+
+    if (files.length > remainingSlots) {
+      _showSnack('You can upload up to 3 attachments only.');
+    }
+
+    if (oversizedCount > 0) {
+      _showSnack('Attachments must be 50MB or smaller.');
     }
   }
 
@@ -330,7 +341,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Choose the office that should receive your complaint, then attach photo or video evidence if available.',
+                        'Choose the office that should receive your complaint, then attach photo evidence if available.',
                         style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.72),
                           fontSize: 13,
@@ -451,26 +462,18 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                         runSpacing: 10,
                         children: [
                           OutlinedButton.icon(
-                            onPressed: _selectedMedia.length >= 3
+                            onPressed: _selectedMedia.length >= _maxAttachments
                                 ? null
                                 : _pickImages,
                             style: _attachmentButtonStyle(),
                             icon: const Icon(Icons.photo_library_outlined),
                             label: const Text('Add photos'),
                           ),
-                          OutlinedButton.icon(
-                            onPressed: _selectedMedia.length >= 3
-                                ? null
-                                : _pickVideo,
-                            style: _attachmentButtonStyle(),
-                            icon: const Icon(Icons.videocam_outlined),
-                            label: const Text('Add video'),
-                          ),
                         ],
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'You can upload up to 3 files total.',
+                        'You can upload up to 3 photos total.',
                         style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.64),
                           fontSize: 12,

@@ -287,6 +287,30 @@ class AuthService {
     throw Exception(_extractErrorMessage(data, 'Failed to update profile'));
   }
 
+  Future<Map<String, dynamic>> changePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String newPasswordConfirmation,
+  }) async {
+    final response = await http.put(
+      _buildUri('/user/password'),
+      headers: await _headers(authRequired: true),
+      body: jsonEncode({
+        'current_password': currentPassword,
+        'new_password': newPassword,
+        'new_password_confirmation': newPasswordConfirmation,
+      }),
+    );
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+    if (response.statusCode == 200) {
+      return data;
+    }
+
+    throw Exception(_extractErrorMessage(data, 'Failed to change password'));
+  }
+
   Future<List<dynamic>> getAdminUsers() async {
     final response = await http.get(
       _buildUri('/admin/users'),

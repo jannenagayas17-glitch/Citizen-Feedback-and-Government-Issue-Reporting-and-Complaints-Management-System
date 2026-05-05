@@ -16,6 +16,7 @@ class SubmitComplaintScreen extends StatefulWidget {
 }
 
 class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
+  static const int _maxAttachments = 3;
   static final RegExp _emojiRegex = RegExp(
     r'[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]',
     unicode: true,
@@ -157,28 +158,46 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     final files = await _imagePicker.pickMultiImage(imageQuality: 80);
     if (files.isEmpty) return;
 
-    setState(() {
-      final remaining = 3 - _selectedMedia.length;
-      _selectedMedia.addAll(
-        files
-            .take(remaining)
-            .map((file) => _SelectedMediaItem(file: file, mediaType: 'image')),
-      );
-    });
+    await _addSelectedMedia(files, mediaType: 'image');
   }
 
-  Future<void> _pickVideo() async {
-    if (_selectedMedia.length >= 3) {
+  Future<void> _addSelectedMedia(
+    List<XFile> files, {
+    required String mediaType,
+  }) async {
+    final remainingSlots = _maxAttachments - _selectedMedia.length;
+    if (remainingSlots <= 0) {
       _showSnack('You can upload up to 3 attachments only.');
       return;
     }
 
-    final file = await _imagePicker.pickVideo(source: ImageSource.gallery);
-    if (file == null) return;
+    final pendingSelection = files.take(remainingSlots).toList();
+    final acceptedItems = <_SelectedMediaItem>[];
+    var oversizedCount = 0;
 
-    setState(() {
-      _selectedMedia.add(_SelectedMediaItem(file: file, mediaType: 'video'));
-    });
+    for (final file in pendingSelection) {
+      final fileSize = await file.length();
+      if (fileSize > ReportService.maxAttachmentBytes) {
+        oversizedCount++;
+        continue;
+      }
+
+      acceptedItems.add(_SelectedMediaItem(file: file, mediaType: mediaType));
+    }
+
+    if (!mounted) return;
+
+    if (acceptedItems.isNotEmpty) {
+      setState(() => _selectedMedia.addAll(acceptedItems));
+    }
+
+    if (files.length > remainingSlots) {
+      _showSnack('You can upload up to 3 attachments only.');
+    }
+
+    if (oversizedCount > 0) {
+      _showSnack('Attachments must be 50MB or smaller.');
+    }
   }
 
   Future<void> _showMediaPickerOptions() async {
@@ -206,7 +225,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Choose image or video evidence for this report.',
+                  'Choose photo evidence for this report.',
                   style: TextStyle(
                     color: citizenBodyColor(context),
                     fontSize: 13,
@@ -220,16 +239,6 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                   onTap: () {
                     Navigator.pop(context);
                     _pickImages();
-                  },
-                ),
-                const SizedBox(height: 12),
-                _buildMediaOptionTile(
-                  icon: Icons.videocam_outlined,
-                  title: 'Add video',
-                  subtitle: 'Upload one MP4 video',
-                  onTap: () {
-                    Navigator.pop(context);
-                    _pickVideo();
                   },
                 ),
               ],
@@ -433,11 +442,6 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
 
       await _showSubmissionResult(report);
       if (!mounted) return;
-      if (report != null) {
-        CitizenDataCache.prependReport(report);
-      } else {
-        CitizenDataCache.invalidateReports();
-      }
       Navigator.pop(context, report);
     } catch (e) {
       if (!mounted) return;
@@ -977,9 +981,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                 height: 40,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: isSelected
-                      ? palette.fill
-                      : citizenInputColor(context),
+                  color: isSelected ? palette.fill : citizenInputColor(context),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: isSelected
@@ -1043,11 +1045,13 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   Widget _buildEvidenceCard() {
     final isDark = citizenIsDark(context);
     final attachmentText = _selectedMedia.isEmpty
-        ? 'Tap to upload image or video'
-        : '${_selectedMedia.length} attachment${_selectedMedia.length == 1 ? '' : 's'} selected';
+        ? 'Tap to upload photos'
+        : '${_selectedMedia.length} photo${_selectedMedia.length == 1 ? '' : 's'} selected';
 
     return InkWell(
-      onTap: _selectedMedia.length >= 3 ? null : _showMediaPickerOptions,
+      onTap: _selectedMedia.length >= _maxAttachments
+          ? null
+          : _showMediaPickerOptions,
       borderRadius: BorderRadius.circular(14),
       child: Container(
         width: double.infinity,
@@ -1085,12 +1089,9 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              'Max 50MB . JPG, PNG, MP4',
+              'Up to 3 photos . Max 50MB . JPG, PNG',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: citizenMutedColor(context),
-                fontSize: 12,
-              ),
+              style: TextStyle(color: citizenMutedColor(context), fontSize: 12),
             ),
           ],
         ),

@@ -743,8 +743,8 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
                   Expanded(
                     flex: 6,
                     child: _DashboardPanel(
-                      title: 'Complaint Heat Map',
-                      trailing: 'Tacloban City',
+                      title: 'Top 5 Barangays by Complaints',
+                      trailing: 'Sorted by report count',
                       child: _HeatMapCard(
                         items: barangays.cast<Map<String, dynamic>>(),
                       ),
@@ -768,8 +768,8 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
               )
             else ...[
               _DashboardPanel(
-                title: 'Complaint Heat Map',
-                trailing: 'Tacloban City',
+                title: 'Top 5 Barangays by Complaints',
+                trailing: 'Sorted by report count',
                 child: _HeatMapCard(
                   items: barangays.cast<Map<String, dynamic>>(),
                 ),
@@ -1648,7 +1648,7 @@ class _HeatMapCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Submitted complaints will appear here as heat points.',
+                    'Top barangays will appear here as reports are submitted.',
                     style: TextStyle(color: colors.mutedText, fontSize: 12),
                   ),
                 ],
@@ -1941,7 +1941,7 @@ class _HeatMapSummaryStrip extends StatelessWidget {
             children: [
               metric(
                 icon: Icons.local_fire_department_outlined,
-                label: 'Top barangay',
+                label: 'Highest complaints',
                 value: topLabel,
                 accent: const Color(0xFFE6616D),
               ),
@@ -1955,7 +1955,7 @@ class _HeatMapSummaryStrip extends StatelessWidget {
               const SizedBox(height: 8),
               metric(
                 icon: Icons.location_on_outlined,
-                label: 'Reports mapped',
+                label: 'Top 5 shown',
                 value: '$totalCount reports',
                 accent: const Color(0xFF5F92FF),
               ),
@@ -1968,7 +1968,7 @@ class _HeatMapSummaryStrip extends StatelessWidget {
             Expanded(
               child: metric(
                 icon: Icons.local_fire_department_outlined,
-                label: 'Top barangay',
+                label: 'Highest complaints',
                 value: topLabel,
                 accent: const Color(0xFFE6616D),
               ),
@@ -1986,7 +1986,7 @@ class _HeatMapSummaryStrip extends StatelessWidget {
             Expanded(
               child: metric(
                 icon: Icons.location_on_outlined,
-                label: '$hotspotCount hotspots shown',
+                label: '$hotspotCount of 5 barangays shown',
                 value: '$totalCount reports',
                 accent: const Color(0xFF5F92FF),
               ),

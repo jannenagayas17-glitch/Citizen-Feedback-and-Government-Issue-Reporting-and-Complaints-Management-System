@@ -386,7 +386,7 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
   }
 
   List<Widget> _buildStepItems(String status) {
-    const steps = ['Submitted', 'Under Review', 'In Progress', 'Resolved'];
+    const steps = ['Submitted', 'In Progress', 'Resolved'];
     final currentIndex = steps.indexOf(status);
 
     return List<Widget>.generate(steps.length, (index) {
@@ -437,8 +437,6 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
     switch (step) {
       case 'Submitted':
         return 'Your complaint was received and assigned a tracking ID.';
-      case 'Under Review':
-        return 'The selected office is reviewing the details of your complaint.';
       case 'In Progress':
         return 'The office is actively working on the concern.';
       case 'Resolved':
@@ -451,9 +449,8 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
   String _normalizedStatus(String status) {
     switch (status) {
       case 'New':
-        return 'Submitted';
       case 'Pending':
-        return 'Under Review';
+        return 'Submitted';
       default:
         return status;
     }

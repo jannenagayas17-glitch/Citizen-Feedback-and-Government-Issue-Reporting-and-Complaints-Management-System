@@ -261,7 +261,12 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
                   adminResponses,
                   statusHistories,
                 );
-                final adminRemark = _resolveAdminRemark(adminResponses, status);
+                final adminRemark = _resolveAdminRemark(
+                  report,
+                  adminResponses,
+                  statusHistories,
+                  status,
+                );
 
                 return ListView(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
@@ -397,20 +402,9 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
         completed: true,
       ),
       _TimelineEntry(
-        title: 'Validated',
-        caption: status == 'Submitted'
-            ? 'Awaiting...'
-            : _nextPhaseCaption(createdAt, 1),
-        active: status == 'Under Review',
-        completed:
-            status == 'Under Review' ||
-            status == 'In Progress' ||
-            status == 'Resolved',
-      ),
-      _TimelineEntry(
         title: 'In Progress',
         caption: status == 'In Progress' || status == 'Resolved'
-            ? _nextPhaseCaption(createdAt, 2)
+            ? _nextPhaseCaption(createdAt, 1)
             : 'Awaiting...',
         active: status == 'In Progress',
         completed: status == 'In Progress' || status == 'Resolved',
@@ -418,7 +412,7 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
       _TimelineEntry(
         title: 'Resolved',
         caption: status == 'Resolved'
-            ? _nextPhaseCaption(createdAt, 3)
+            ? _nextPhaseCaption(createdAt, 2)
             : 'Awaiting...',
         active: status == 'Resolved',
         completed: status == 'Resolved',
@@ -429,13 +423,19 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
     return steps.map((entry) => _TimelineItem(entry: entry)).toList();
   }
 
-  String _resolveAdminRemark(List<dynamic> adminResponses, String status) {
-    if (adminResponses.isNotEmpty) {
-      final response = adminResponses.first as Map<String, dynamic>;
-      final message = (response['response'] ?? '').toString().trim();
-      if (message.isNotEmpty) {
-        return message;
-      }
+  String _resolveAdminRemark(
+    Map<String, dynamic> report,
+    List<dynamic> adminResponses,
+    List<dynamic> statusHistories,
+    String status,
+  ) {
+    final latestUpdate = _latestUpdateMessage(
+      report,
+      adminResponses: adminResponses,
+      statusHistories: statusHistories,
+    );
+    if (latestUpdate != null) {
+      return latestUpdate;
     }
 
     switch (status) {
@@ -443,8 +443,8 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
         return 'The assigned department is currently working on your report.';
       case 'Resolved':
         return 'The report was marked resolved by the assigned department.';
-      case 'Under Review':
-        return 'Your report is currently being reviewed and validated by the office.';
+      case 'Rejected':
+        return 'The assigned office closed this report without resolving it.';
       default:
         return 'Your report has been received and is waiting for action from the assigned office.';
     }
@@ -518,12 +518,68 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
   static String _normalizedStatus(String raw) {
     switch (raw) {
       case 'New':
-        return 'Submitted';
       case 'Pending':
-        return 'Under Review';
+        return 'Submitted';
       default:
         return raw;
     }
+  }
+
+  static String? _latestUpdateMessage(
+    Map<String, dynamic> report, {
+    List<dynamic>? adminResponses,
+    List<dynamic>? statusHistories,
+  }) {
+    final latestAdminResponse = _stringValue(
+      _mapValue(report['latest_admin_response'])?['response'] ??
+          _mapValue(report['latestAdminResponse'])?['response'],
+    );
+    if (latestAdminResponse != null) {
+      return latestAdminResponse;
+    }
+
+    final responseList =
+        adminResponses ??
+        (report['admin_responses'] as List<dynamic>? ??
+            report['adminResponses'] as List<dynamic>? ??
+            const []);
+    for (final item in responseList) {
+      final response = _stringValue(_mapValue(item)?['response']);
+      if (response != null) {
+        return response;
+      }
+    }
+
+    final latestStatusRemark = _stringValue(
+      _mapValue(report['latest_status_history'])?['remarks'] ??
+          _mapValue(report['latestStatusHistory'])?['remarks'],
+    );
+    if (latestStatusRemark != null) {
+      return latestStatusRemark;
+    }
+
+    final historyList =
+        statusHistories ??
+        (report['status_histories'] as List<dynamic>? ??
+            report['statusHistories'] as List<dynamic>? ??
+            const []);
+    for (final item in historyList) {
+      final remarks = _stringValue(_mapValue(item)?['remarks']);
+      if (remarks != null) {
+        return remarks;
+      }
+    }
+
+    return null;
+  }
+
+  static Map<String, dynamic>? _mapValue(dynamic value) {
+    return value is Map<String, dynamic> ? value : null;
+  }
+
+  static String? _stringValue(dynamic value) {
+    final text = value?.toString().trim() ?? '';
+    return text.isEmpty ? null : text;
   }
 
   String _compactLocation(String location) {
@@ -649,6 +705,7 @@ class _ReportSelectorCard extends StatelessWidget {
     final createdAt = DateTime.tryParse(
       (report['created_at'] ?? '').toString(),
     );
+    final latestUpdate = _MyComplaintsScreenState._latestUpdateMessage(report);
 
     return InkWell(
       onTap: onTap,
@@ -709,6 +766,19 @@ class _ReportSelectorCard extends StatelessWidget {
                       fontSize: 12,
                     ),
                   ),
+                  if (latestUpdate != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Latest update: ${_compactText(latestUpdate, limit: 64)}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: citizenBodyColor(context),
+                        fontSize: 12,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -720,9 +790,9 @@ class _ReportSelectorCard extends StatelessWidget {
     );
   }
 
-  static String _compactText(String value) {
-    if (value.length <= 30) return value;
-    return '${value.substring(0, 30)}...';
+  static String _compactText(String value, {int limit = 30}) {
+    if (value.length <= limit) return value;
+    return '${value.substring(0, limit)}...';
   }
 
   static String _reportDate(DateTime? date) {
@@ -977,8 +1047,11 @@ class _StatusPill extends StatelessWidget {
       case 'In Progress':
         color = const Color(0xFF4B82F7);
         break;
-      case 'Under Review':
+      case 'Submitted':
         color = const Color(0xFFF59E0B);
+        break;
+      case 'Rejected':
+        color = const Color(0xFFEF4444);
         break;
       default:
         color = const Color(0xFF64748B);
@@ -1057,7 +1130,7 @@ class _EmptySummaryCard extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          const _StatusPill(status: 'Pending'),
+          const _StatusPill(status: 'Submitted'),
         ],
       ),
     );
@@ -1072,12 +1145,6 @@ class _EmptyTimeline extends StatelessWidget {
     const entries = [
       _TimelineEntry(
         title: 'Submitted',
-        caption: 'Awaiting...',
-        active: false,
-        completed: false,
-      ),
-      _TimelineEntry(
-        title: 'Validated',
         caption: 'Awaiting...',
         active: false,
         completed: false,

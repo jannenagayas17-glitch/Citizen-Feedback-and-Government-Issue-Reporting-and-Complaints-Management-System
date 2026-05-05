@@ -1,11 +1,15 @@
 import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
+import 'package:mime/mime.dart';
 import '../config/api_config.dart';
 import '../utils/token_storage.dart';
 import 'api_client.dart';
 
 class ReportService {
+  static const int maxAttachmentBytes = 50 * 1024 * 1024;
+
   final ApiClient _apiClient = ApiClient();
 
   Future<List<dynamic>> getCategories() async {
@@ -219,6 +223,14 @@ class ReportService {
     required XFile mediaFile,
   }) async {
     final token = await TokenStorage.getToken();
+    if (token == null || token.isEmpty) {
+      throw Exception('Please log in again before uploading attachments.');
+    }
+
+    final fileSize = await mediaFile.length();
+    if (fileSize > maxAttachmentBytes) {
+      throw Exception('Attachments must be 50MB or smaller.');
+    }
 
     final request = http.MultipartRequest(
       'POST',
@@ -229,24 +241,47 @@ class ReportService {
     request.headers['Authorization'] = 'Bearer $token';
 
     final bytes = await mediaFile.readAsBytes();
+    final detectedMimeType =
+        lookupMimeType(mediaFile.name, headerBytes: bytes.take(32).toList()) ??
+        'application/octet-stream';
     request.files.add(
-      http.MultipartFile.fromBytes('media', bytes, filename: mediaFile.name),
+      http.MultipartFile.fromBytes(
+        'media',
+        bytes,
+        filename: mediaFile.name,
+        contentType: MediaType.parse(detectedMimeType),
+      ),
     );
 
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
-
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final data = _decodeMapResponse(response.body);
 
     if (response.statusCode == 200 || response.statusCode == 201) {
-      return data;
+      return data ?? <String, dynamic>{};
     }
 
     throw Exception(
-      data['message']?.toString() ??
-          (data['errors'] != null
-              ? data['errors'].toString()
-              : 'Failed to upload attachment'),
+      data == null
+          ? 'Failed to upload attachment (HTTP ${response.statusCode})'
+          : data['message']?.toString() ??
+                (data['errors'] != null
+                    ? data['errors'].toString()
+                    : 'Failed to upload attachment'),
     );
+  }
+
+  Map<String, dynamic>? _decodeMapResponse(String responseBody) {
+    final trimmedBody = responseBody.trim();
+    if (trimmedBody.isEmpty) {
+      return null;
+    }
+
+    try {
+      final decoded = jsonDecode(trimmedBody);
+      return decoded is Map<String, dynamic> ? decoded : null;
+    } on FormatException {
+      return null;
+    }
   }
 }

@@ -270,20 +270,25 @@ class AuthController extends Controller
     {
         $user = $request->user();
 
-        $request->validate([
-            'current_password' => 'required',
-            'new_password' => 'required|string|min:8|confirmed',
-        ]);
+        $validated = $request->validate([
+            'current_password' => ['required', 'string', 'not_regex:' . self::EMOJI_REGEX],
+            'new_password' => ['required', 'string', 'min:8', 'confirmed', 'different:current_password', 'not_regex:' . self::EMOJI_REGEX],
+        ], $this->validationMessages());
 
-        if (!Hash::check($request->current_password, $user->password)) {
-            return response()->json([
-                'message' => 'Current password is incorrect'
-            ], 422);
+        if (! Hash::check($validated['current_password'], $user->password)) {
+            throw ValidationException::withMessages([
+                'current_password' => ['The current password is incorrect.'],
+            ]);
         }
 
-        $user->update([
-            'password' => Hash::make($request->new_password),
-        ]);
+        $user->forceFill([
+            'password' => $validated['new_password'],
+        ])->save();
+
+        $currentToken = $request->user()->currentAccessToken();
+        if ($currentToken !== null) {
+            $user->tokens()->whereKeyNot($currentToken->id)->delete();
+        }
 
         return response()->json([
             'message' => 'Password changed successfully',
@@ -587,6 +592,9 @@ class AuthController extends Controller
             'email.not_regex' => 'Emoji characters are not allowed.',
             'password.not_regex' => 'Emoji characters are not allowed.',
             'password.confirmed' => 'Password confirmation does not match.',
+            'new_password.not_regex' => 'Emoji characters are not allowed.',
+            'new_password.confirmed' => 'Password confirmation does not match.',
+            'new_password.different' => 'New password must be different from the current password.',
             'department.not_regex' => 'Emoji characters are not allowed.',
             'department.exists' => 'Please select a valid government office.',
             'job_title.not_regex' => 'Emoji characters are not allowed.',

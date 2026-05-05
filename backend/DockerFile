@@ -14,15 +14,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 RUN docker-php-ext-install \
-    pdo \
     pdo_mysql \
     pdo_sqlite \
-    sqlite3 \
     mbstring \
     exif \
     pcntl \
     bcmath \
     gd
+
+RUN { \
+      echo 'upload_max_filesize=50M'; \
+      echo 'post_max_size=55M'; \
+      echo 'max_file_uploads=10'; \
+      echo 'max_execution_time=120'; \
+    } > /usr/local/etc/php/conf.d/uploads.ini
 
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
