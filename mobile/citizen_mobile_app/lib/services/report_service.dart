@@ -1,8 +1,10 @@
 import 'dart:convert';
-import 'package:image_picker/image_picker.dart';
+
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:mime/mime.dart';
+
 import '../config/api_config.dart';
 import '../utils/token_storage.dart';
 import 'api_client.dart';
@@ -39,25 +41,39 @@ class ReportService {
     String? priority,
     double? latitude,
     double? longitude,
+    List<XFile> mediaFiles = const <XFile>[],
   }) async {
+    if (mediaFiles.isNotEmpty) {
+      return _createMultipartReport(
+        categoryId: categoryId,
+        categoryName: categoryName,
+        officeId: officeId,
+        title: title,
+        description: description,
+        location: location,
+        barangay: barangay,
+        priority: priority,
+        latitude: latitude,
+        longitude: longitude,
+        mediaFiles: mediaFiles,
+      );
+    }
+
     final response = await _apiClient.post(
       '/reports',
       authRequired: true,
-      body: {
-        'category_id': ?categoryId,
-        if (categoryName != null && categoryName.trim().isNotEmpty)
-          'category_name': categoryName.trim(),
-        'office_id': ?officeId,
-        'title': title,
-        'description': description,
-        'location': location,
-        if (barangay != null && barangay.trim().isNotEmpty)
-          'barangay': barangay.trim(),
-        if (priority != null && priority.trim().isNotEmpty)
-          'priority': priority.trim(),
-        'latitude': ?latitude,
-        'longitude': ?longitude,
-      },
+      body: _buildReportPayload(
+        categoryId: categoryId,
+        categoryName: categoryName,
+        officeId: officeId,
+        title: title,
+        description: description,
+        location: location,
+        barangay: barangay,
+        priority: priority,
+        latitude: latitude,
+        longitude: longitude,
+      ),
     );
 
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -89,21 +105,18 @@ class ReportService {
     final response = await _apiClient.post(
       '/reports/request-verification',
       authRequired: true,
-      body: {
-        'category_id': ?categoryId,
-        if (categoryName != null && categoryName.trim().isNotEmpty)
-          'category_name': categoryName.trim(),
-        'office_id': ?officeId,
-        'title': title,
-        'description': description,
-        'location': location,
-        if (barangay != null && barangay.trim().isNotEmpty)
-          'barangay': barangay.trim(),
-        if (priority != null && priority.trim().isNotEmpty)
-          'priority': priority.trim(),
-        'latitude': ?latitude,
-        'longitude': ?longitude,
-      },
+      body: _buildReportPayload(
+        categoryId: categoryId,
+        categoryName: categoryName,
+        officeId: officeId,
+        title: title,
+        description: description,
+        location: location,
+        barangay: barangay,
+        priority: priority,
+        latitude: latitude,
+        longitude: longitude,
+      ),
     );
 
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -196,28 +209,6 @@ class ReportService {
     return jsonDecode(response.body);
   }
 
-  List<dynamic> _decodeListResponse(
-    http.Response response, {
-    required String fallbackMessage,
-  }) {
-    final decoded = jsonDecode(response.body);
-
-    if (response.statusCode == 200 && decoded is List<dynamic>) {
-      return decoded;
-    }
-
-    if (decoded is Map<String, dynamic>) {
-      throw Exception(
-        decoded['message']?.toString() ??
-            (decoded['errors'] != null
-                ? decoded['errors'].toString()
-                : fallbackMessage),
-      );
-    }
-
-    throw Exception(fallbackMessage);
-  }
-
   Future<Map<String, dynamic>> uploadMedia({
     required int reportId,
     required XFile mediaFile,
@@ -269,6 +260,139 @@ class ReportService {
                     ? data['errors'].toString()
                     : 'Failed to upload attachment'),
     );
+  }
+
+  Future<Map<String, dynamic>> _createMultipartReport({
+    int? categoryId,
+    String? categoryName,
+    int? officeId,
+    required String title,
+    required String description,
+    required String location,
+    String? barangay,
+    String? priority,
+    double? latitude,
+    double? longitude,
+    required List<XFile> mediaFiles,
+  }) async {
+    final token = await TokenStorage.getToken();
+    if (token == null || token.isEmpty) {
+      throw Exception('Please log in again before submitting a report.');
+    }
+
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('${ApiConfig.baseUrl}/reports'),
+    );
+
+    request.headers['Accept'] = 'application/json';
+    request.headers['Authorization'] = 'Bearer $token';
+    request.fields.addAll(
+      _buildReportPayload(
+        categoryId: categoryId,
+        categoryName: categoryName,
+        officeId: officeId,
+        title: title,
+        description: description,
+        location: location,
+        barangay: barangay,
+        priority: priority,
+        latitude: latitude,
+        longitude: longitude,
+      ).map((key, value) => MapEntry(key, value.toString())),
+    );
+
+    for (final mediaFile in mediaFiles) {
+      final fileSize = await mediaFile.length();
+      if (fileSize > maxAttachmentBytes) {
+        throw Exception('Attachments must be 50MB or smaller.');
+      }
+
+      final bytes = await mediaFile.readAsBytes();
+      final detectedMimeType =
+          lookupMimeType(
+            mediaFile.name,
+            headerBytes: bytes.take(32).toList(),
+          ) ??
+          'application/octet-stream';
+
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'media[]',
+          bytes,
+          filename: mediaFile.name,
+          contentType: MediaType.parse(detectedMimeType),
+        ),
+      );
+    }
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+    final data = _decodeMapResponse(response.body);
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return data ?? <String, dynamic>{};
+    }
+
+    throw Exception(
+      data == null
+          ? 'Failed to create report (HTTP ${response.statusCode})'
+          : data['message']?.toString() ??
+                (data['errors'] != null
+                    ? data['errors'].toString()
+                    : 'Failed to create report'),
+    );
+  }
+
+  Map<String, dynamic> _buildReportPayload({
+    int? categoryId,
+    String? categoryName,
+    int? officeId,
+    required String title,
+    required String description,
+    required String location,
+    String? barangay,
+    String? priority,
+    double? latitude,
+    double? longitude,
+  }) {
+    return <String, dynamic>{
+      'category_id': ?categoryId,
+      if (categoryName != null && categoryName.trim().isNotEmpty)
+        'category_name': categoryName.trim(),
+      'office_id': ?officeId,
+      'title': title,
+      'description': description,
+      'location': location,
+      if (barangay != null && barangay.trim().isNotEmpty)
+        'barangay': barangay.trim(),
+      if (priority != null && priority.trim().isNotEmpty)
+        'priority': priority.trim(),
+      'latitude': ?latitude,
+      'longitude': ?longitude,
+    };
+  }
+
+  List<dynamic> _decodeListResponse(
+    http.Response response, {
+    required String fallbackMessage,
+  }) {
+    final decoded = jsonDecode(response.body);
+
+    if (response.statusCode == 200 && decoded is List<dynamic>) {
+      return decoded;
+    }
+
+    if (decoded is Map<String, dynamic>) {
+      throw Exception(
+        decoded['message']?.toString() ??
+            (decoded['errors'] != null
+                ? decoded['errors'].toString()
+                : fallbackMessage),
+      );
+    }
+
+    throw Exception(fallbackMessage);
   }
 
   Map<String, dynamic>? _decodeMapResponse(String responseBody) {

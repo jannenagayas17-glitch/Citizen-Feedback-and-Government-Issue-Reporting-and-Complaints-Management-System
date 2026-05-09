@@ -117,6 +117,41 @@ class ReportImageUploadTest extends TestCase
             ->assertHeader('content-type', 'image/png');
     }
 
+    public function test_citizen_can_create_a_report_with_photos_in_a_single_request(): void
+    {
+        Storage::fake('public');
+
+        $citizen = $this->makeUser('Inline Upload Citizen', 'inline-upload@example.com', 'citizen');
+        $office = Office::create(['name' => "City Engineer's Office", 'is_active' => true]);
+        $category = Category::create(['name' => 'Drainage']);
+
+        Sanctum::actingAs($citizen);
+
+        $response = $this->post('/api/reports', array_merge(
+            $this->validReportPayload($office, $category),
+            [
+                'media' => [
+                    $this->fakePngUpload('inline-evidence-1.png'),
+                    $this->fakePngUpload('inline-evidence-2.png'),
+                ],
+            ]
+        ));
+
+        $response
+            ->assertCreated()
+            ->assertJsonCount(2, 'report.images')
+            ->assertJsonPath('report.images.0.media_type', 'image')
+            ->assertJsonPath('report.images.1.media_type', 'image');
+
+        $imagePaths = $response->json('report.images.*.image_path');
+
+        foreach ($imagePaths as $imagePath) {
+            Storage::disk('public')->assertExists($imagePath);
+        }
+
+        $this->assertDatabaseCount('report_images', 2);
+    }
+
     private function seedCitizenReport(): array
     {
         $citizen = $this->makeUser('Report Owner', 'report-owner@example.com', 'citizen');
@@ -148,10 +183,23 @@ class ReportImageUploadTest extends TestCase
         ]);
     }
 
-    private function fakePngUpload(): UploadedFile
+    private function validReportPayload(Office $office, Category $category): array
+    {
+        return [
+            'office_id' => $office->id,
+            'category_id' => $category->id,
+            'title' => 'Drainage issue',
+            'description' => 'Standing water near the road.',
+            'location' => 'Barangay 7, Tacloban City',
+            'barangay' => 'Barangay 7',
+            'priority' => 'Normal',
+        ];
+    }
+
+    private function fakePngUpload(string $fileName = 'evidence.png'): UploadedFile
     {
         return UploadedFile::fake()->createWithContent(
-            'evidence.png',
+            $fileName,
             base64_decode(self::TINY_PNG_BASE64, true) ?: ''
         );
     }

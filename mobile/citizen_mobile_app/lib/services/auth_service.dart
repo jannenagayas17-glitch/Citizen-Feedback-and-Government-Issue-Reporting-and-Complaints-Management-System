@@ -101,7 +101,11 @@ class AuthService {
       final response = await http.post(
         _buildUri('/auth/google-login'),
         headers: await _headers(),
-        body: jsonEncode({'id_token': idToken, 'email': ?email, 'name': ?name}),
+        body: jsonEncode({
+          'id_token': idToken,
+          if (email != null && email.trim().isNotEmpty) 'email': email.trim(),
+          if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
+        }),
       );
 
       final data = jsonDecode(response.body) as Map<String, dynamic>;

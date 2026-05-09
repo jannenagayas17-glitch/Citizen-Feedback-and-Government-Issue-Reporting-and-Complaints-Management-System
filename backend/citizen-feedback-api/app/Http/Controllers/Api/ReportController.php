@@ -8,10 +8,15 @@ use App\Models\Category;
 use App\Models\Office;
 use App\Models\Report;
 use App\Models\StatusHistory;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Validation\Rules\File;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReportController extends Controller
@@ -41,7 +46,33 @@ class ReportController extends Controller
     public function store(Request $request)
     {
         $validated = $this->validateReportPayload($request);
-        $report = $this->createReportFromValidatedPayload($request->user()->id, $validated);
+        $mediaFiles = $this->validatedMediaFiles($request);
+        $storedPaths = [];
+
+        try {
+            $report = DB::transaction(function () use ($request, $validated, $mediaFiles, &$storedPaths) {
+                $report = $this->createReportFromValidatedPayload($request->user()->id, $validated);
+
+                foreach ($mediaFiles as $mediaFile) {
+                    $path = $mediaFile->store('report_images', 'public');
+                    $storedPaths[] = $path;
+
+                    $report->images()->create([
+                        'image_path' => $path,
+                        'media_type' => 'image',
+                        'original_name' => $mediaFile->getClientOriginalName(),
+                    ]);
+                }
+
+                return $report->fresh()->load($this->detailRelations());
+            });
+        } catch (\Throwable $exception) {
+            foreach ($storedPaths as $storedPath) {
+                Storage::disk('public')->delete($storedPath);
+            }
+
+            throw $exception;
+        }
 
         return response()->json([
             'message' => 'Report created successfully',
@@ -491,6 +522,44 @@ class ReportController extends Controller
             'barangay.required' => 'Barangay is required.',
             'location.required' => 'Location is required.',
         ]);
+    }
+
+    /**
+     * @return array<int, UploadedFile>
+     */
+    private function validatedMediaFiles(Request $request): array
+    {
+        $rawFiles = $request->allFiles()['media'] ?? $request->allFiles()['media[]'] ?? [];
+
+        if ($rawFiles instanceof UploadedFile) {
+            $mediaFiles = [$rawFiles];
+        } elseif (is_array($rawFiles)) {
+            $mediaFiles = array_values(
+                array_filter(
+                    $rawFiles,
+                    static fn ($file): bool => $file instanceof UploadedFile
+                )
+            );
+        } else {
+            $mediaFiles = [];
+        }
+
+        Validator::make(
+            ['media' => $mediaFiles],
+            [
+                'media' => ['nullable', 'array', 'max:3'],
+                'media.*' => [
+                    File::types(['jpg', 'jpeg', 'png'])->max(50 * 1024),
+                ],
+            ],
+            [
+                'media.max' => 'You can upload up to 3 attachments only.',
+                'media.*.types' => 'Attachments must be JPG or PNG photos only.',
+                'media.*.max' => 'Attachments must be 50MB or smaller.',
+            ]
+        )->validate();
+
+        return $mediaFiles;
     }
 
     private function createReportFromValidatedPayload(int $userId, array $validated): Report

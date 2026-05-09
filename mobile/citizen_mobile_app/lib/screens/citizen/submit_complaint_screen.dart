@@ -350,6 +350,10 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   }
 
   Future<void> _submit() async {
+    if (_isSubmitting) {
+      return;
+    }
+
     final description = _descriptionController.text.trim();
     final selectedBarangay = _locationController.text.trim();
     final landmark = _barangayController.text.trim();
@@ -423,22 +427,10 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
         location: location,
         barangay: barangay,
         priority: _selectedPriority,
+        mediaFiles: _selectedMedia.map((media) => media.file).toList(),
       );
 
       final report = response['report'] as Map<String, dynamic>?;
-      final rawReportId = report?['id'];
-      final reportId = rawReportId is int
-          ? rawReportId
-          : int.tryParse('$rawReportId');
-
-      if (reportId != null && _selectedMedia.isNotEmpty) {
-        for (final media in _selectedMedia) {
-          await _reportService.uploadMedia(
-            reportId: reportId,
-            mediaFile: media.file,
-          );
-        }
-      }
 
       await _showSubmissionResult(report);
       if (!mounted) return;

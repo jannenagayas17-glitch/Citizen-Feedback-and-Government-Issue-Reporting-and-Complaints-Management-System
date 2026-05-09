@@ -282,7 +282,7 @@ class AuthController extends Controller
         }
 
         $user->forceFill([
-            'password' => $validated['new_password'],
+            'password' => Hash::make($validated['new_password']),
         ])->save();
 
         $currentToken = $request->user()->currentAccessToken();

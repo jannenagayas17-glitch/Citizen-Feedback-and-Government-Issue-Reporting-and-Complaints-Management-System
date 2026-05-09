@@ -5,6 +5,8 @@ import '../config/api_config.dart';
 import '../utils/token_storage.dart';
 
 class AuthService {
+  static const String _passwordEndpoint = '/user/password';
+
   String _extractErrorMessage(Map<String, dynamic> data, String fallback) {
     final errors = data['errors'];
     if (errors is Map<String, dynamic>) {
@@ -292,23 +294,37 @@ class AuthService {
     required String newPassword,
     required String newPasswordConfirmation,
   }) async {
-    final response = await http.put(
-      _buildUri('/user/password'),
+    final payload = <String, dynamic>{
+      'current_password': currentPassword,
+      'new_password': newPassword,
+      'new_password_confirmation': newPasswordConfirmation,
+    };
+
+    var response = await http.put(
+      _buildUri(_passwordEndpoint),
       headers: await _headers(authRequired: true),
-      body: jsonEncode({
-        'current_password': currentPassword,
-        'new_password': newPassword,
-        'new_password_confirmation': newPasswordConfirmation,
-      }),
+      body: jsonEncode(payload),
     );
+    var data = _decodeMapResponse(response.body);
 
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    if (_shouldRetryPasswordChange(response, data)) {
+      response = await http.post(
+        _buildUri(_passwordEndpoint),
+        headers: await _headers(authRequired: true),
+        body: jsonEncode(payload),
+      );
+      data = _decodeMapResponse(response.body);
+    }
 
-    if (response.statusCode == 200) {
+    if (response.statusCode == 200 && data != null) {
       return data;
     }
 
-    throw Exception(_extractErrorMessage(data, 'Failed to change password'));
+    throw Exception(
+      data == null
+          ? 'Failed to change password'
+          : _extractErrorMessage(data, 'Failed to change password'),
+    );
   }
 
   Future<List<dynamic>> getAdminUsers() async {
@@ -524,5 +540,31 @@ class AuthService {
     } finally {
       await TokenStorage.clearAll();
     }
+  }
+
+  Map<String, dynamic>? _decodeMapResponse(String responseBody) {
+    final trimmedBody = responseBody.trim();
+    if (trimmedBody.isEmpty) {
+      return null;
+    }
+
+    try {
+      final decoded = jsonDecode(trimmedBody);
+      return decoded is Map<String, dynamic> ? decoded : null;
+    } on FormatException {
+      return null;
+    }
+  }
+
+  bool _shouldRetryPasswordChange(
+    http.Response response,
+    Map<String, dynamic>? data,
+  ) {
+    if (response.statusCode == 404 || response.statusCode == 405) {
+      return true;
+    }
+
+    final message = data?['message']?.toString().toLowerCase() ?? '';
+    return message.contains('route') && message.contains('user/password');
   }
 }
