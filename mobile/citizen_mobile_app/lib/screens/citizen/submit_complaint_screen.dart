@@ -161,6 +161,13 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     await _addSelectedMedia(files, mediaType: 'image');
   }
 
+  Future<void> _pickVideo() async {
+    final file = await _imagePicker.pickVideo(source: ImageSource.gallery);
+    if (file == null) return;
+
+    await _addSelectedMedia([file], mediaType: 'video');
+  }
+
   Future<void> _addSelectedMedia(
     List<XFile> files, {
     required String mediaType,
@@ -182,7 +189,22 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
         continue;
       }
 
-      acceptedItems.add(_SelectedMediaItem(file: file, mediaType: mediaType));
+      Uint8List? previewBytes;
+      if (mediaType == 'image') {
+        try {
+          previewBytes = await file.readAsBytes();
+        } catch (_) {
+          previewBytes = null;
+        }
+      }
+
+      acceptedItems.add(
+        _SelectedMediaItem(
+          file: file,
+          mediaType: mediaType,
+          previewBytes: previewBytes,
+        ),
+      );
     }
 
     if (!mounted) return;
@@ -225,7 +247,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Choose photo evidence for this report.',
+                  'Choose photo or video evidence for this report.',
                   style: TextStyle(
                     color: citizenBodyColor(context),
                     fontSize: 13,
@@ -239,6 +261,16 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                   onTap: () {
                     Navigator.pop(context);
                     _pickImages();
+                  },
+                ),
+                const SizedBox(height: 12),
+                _buildMediaOptionTile(
+                  icon: Icons.videocam_outlined,
+                  title: 'Add video',
+                  subtitle: 'Upload MP4 or MOV video evidence',
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickVideo();
                   },
                 ),
               ],
@@ -1037,8 +1069,8 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   Widget _buildEvidenceCard() {
     final isDark = citizenIsDark(context);
     final attachmentText = _selectedMedia.isEmpty
-        ? 'Tap to upload photos'
-        : '${_selectedMedia.length} photo${_selectedMedia.length == 1 ? '' : 's'} selected';
+        ? 'Tap to upload photos or videos'
+        : '${_selectedMedia.length} attachment${_selectedMedia.length == 1 ? '' : 's'} selected';
 
     return InkWell(
       onTap: _selectedMedia.length >= _maxAttachments
@@ -1081,7 +1113,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              'Up to 3 photos . Max 50MB . JPG, PNG',
+              'Up to 3 attachments . Max 50MB . Photos or videos',
               textAlign: TextAlign.center,
               style: TextStyle(color: citizenMutedColor(context), fontSize: 12),
             ),
@@ -1160,10 +1192,15 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
 }
 
 class _SelectedMediaItem {
-  const _SelectedMediaItem({required this.file, required this.mediaType});
+  const _SelectedMediaItem({
+    required this.file,
+    required this.mediaType,
+    this.previewBytes,
+  });
 
   final XFile file;
   final String mediaType;
+  final Uint8List? previewBytes;
 
   bool get isVideo => mediaType == 'video';
 }
@@ -1236,33 +1273,27 @@ class _SelectedMediaChip extends StatelessWidget {
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        FutureBuilder<Uint8List>(
-          future: item.file.readAsBytes(),
-          builder: (context, snapshot) {
-            return Container(
-              width: 92,
-              height: 92,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                color: const Color(0xFFF3F4F6),
-                image: snapshot.hasData
-                    ? DecorationImage(
-                        image: MemoryImage(snapshot.data!),
-                        fit: BoxFit.cover,
-                      )
-                    : null,
-              ),
-              child: snapshot.hasData
-                  ? null
-                  : const Center(
-                      child: SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    ),
-            );
-          },
+        Container(
+          width: 92,
+          height: 92,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            color: const Color(0xFFF3F4F6),
+            image: item.previewBytes != null
+                ? DecorationImage(
+                    image: MemoryImage(item.previewBytes!),
+                    fit: BoxFit.cover,
+                  )
+                : null,
+          ),
+          child: item.previewBytes == null
+              ? Center(
+                  child: Icon(
+                    Icons.image_outlined,
+                    color: citizenMutedColor(context),
+                  ),
+                )
+              : null,
         ),
         Positioned(
           top: -6,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
@@ -170,65 +172,143 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
   final ReportService _reportService = ReportService();
   final AuthService _authService = AuthService();
   final TextEditingController _searchController = TextEditingController();
+  static const int _pageSize = 25;
 
+  _ReportListContext? _contextCache;
   late Future<_ReportsPayload> _payloadFuture;
+  Timer? _searchDebounce;
   bool _exporting = false;
   String _search = '';
   String _selectedCategory = 'All Categories';
   String _selectedBarangay = 'All Barangays';
   String _selectedStatus = 'All Status';
   String _selectedOffice = 'All Departments';
+  int _page = 1;
 
   @override
   void initState() {
     super.initState();
-    _payloadFuture = _loadPayload();
     _selectedOffice = widget.initialOfficeName?.trim().isNotEmpty == true
         ? widget.initialOfficeName!.trim()
         : 'All Departments';
+    _payloadFuture = _loadPayload(refreshContext: true);
     _searchController.addListener(() {
-      setState(() => _search = _searchController.text.trim().toLowerCase());
+      final nextSearch = _searchController.text.trim();
+      _searchDebounce?.cancel();
+      _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+        if (!mounted || nextSearch == _search) {
+          return;
+        }
+
+        setState(() {
+          _search = nextSearch;
+          _page = 1;
+          _payloadFuture = _loadPayload();
+        });
+      });
     });
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
-  Future<_ReportsPayload> _loadPayload() async {
+  Future<_ReportListContext> _loadContext({bool refresh = false}) async {
+    if (!refresh && _contextCache != null) {
+      return _contextCache!;
+    }
+
     final user = await _authService.getCurrentUser();
     final isSuperAdmin = _isSuperAdmin(user);
     final results = await Future.wait<dynamic>([
-      _reportService.getAdminReports(),
       _reportService.getCategories(),
       _authService.getOffices(includeInactive: isSuperAdmin),
     ]);
-    return _ReportsPayload(
-      reports: (results[0] as List)
+
+    final context = _ReportListContext(
+      user: Map<String, dynamic>.from(user),
+      categories: (results[0] as List<dynamic>)
           .whereType<Map<String, dynamic>>()
           .map(Map<String, dynamic>.from)
           .toList(),
-      user: Map<String, dynamic>.from(user),
-      categories: results[1] as List<dynamic>,
-      offices: results[2] as List<dynamic>,
+      offices: (results[1] as List<dynamic>)
+          .whereType<Map<String, dynamic>>()
+          .map(Map<String, dynamic>.from)
+          .toList(),
     );
+    _contextCache = context;
+    return context;
+  }
+
+  Future<_ReportsPayload> _loadPayload({bool refreshContext = false}) async {
+    final context = await _loadContext(refresh: refreshContext);
+    var pageData = await _reportService.getAdminReportsPage(
+      page: _page,
+      perPage: _pageSize,
+      search: _search,
+      status: _selectedStatus == 'All Status' ? null : _selectedStatus,
+      category: _selectedCategory == 'All Categories'
+          ? null
+          : _selectedCategory,
+      barangay: _selectedBarangay == 'All Barangays' ? null : _selectedBarangay,
+      office: _selectedOffice == 'All Departments' ? null : _selectedOffice,
+    );
+
+    if (pageData.reports.isEmpty && pageData.total > 0 && _page > 1) {
+      _page = pageData.lastPage;
+      pageData = await _reportService.getAdminReportsPage(
+        page: _page,
+        perPage: _pageSize,
+        search: _search,
+        status: _selectedStatus == 'All Status' ? null : _selectedStatus,
+        category: _selectedCategory == 'All Categories'
+            ? null
+            : _selectedCategory,
+        barangay: _selectedBarangay == 'All Barangays'
+            ? null
+            : _selectedBarangay,
+        office: _selectedOffice == 'All Departments' ? null : _selectedOffice,
+      );
+    }
+
+    return _ReportsPayload(context: context, page: pageData);
   }
 
   Future<void> _refresh() async {
-    final future = _loadPayload();
+    final future = _loadPayload(refreshContext: true);
     setState(() => _payloadFuture = future);
     await future;
+  }
+
+  Future<void> _goToPage(int page) async {
+    if (page < 1 || page == _page) {
+      return;
+    }
+
+    setState(() {
+      _page = page;
+      _payloadFuture = _loadPayload();
+    });
+    await _payloadFuture;
   }
 
   Future<void> _exportReports() async {
     setState(() => _exporting = true);
     try {
-      final statusParam = _selectedStatus == 'All Status'
-          ? null
-          : _selectedStatus;
-      final file = await _reportService.exportAdminReports(status: statusParam);
+      final file = await _reportService.exportAdminReports(
+        search: _searchController.text.trim(),
+        status: _selectedStatus == 'All Status' ? null : _selectedStatus,
+        category: _selectedCategory == 'All Categories'
+            ? null
+            : _selectedCategory,
+        barangay: _selectedBarangay == 'All Barangays'
+            ? null
+            : _selectedBarangay,
+        office: _selectedOffice == 'All Departments' ? null : _selectedOffice,
+      );
       await downloadFile(
         bytes: file.bytes,
         fileName: file.fileName,
@@ -320,54 +400,37 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
     return [allLabel, ...sortedValues];
   }
 
-  List<String> _categoryOptions(_ReportsPayload payload) {
+  List<String> _categoryOptions(_ReportListContext payload) {
     final selectedDepartments = _selectedOffice == 'All Departments'
-        ? [
-            ...payload.offices.whereType<Map<String, dynamic>>().map(
-              (office) => (office['name'] ?? '').toString(),
-            ),
-            ...payload.reports.map(_office),
-          ]
+        ? payload.offices.map((office) => (office['name'] ?? '').toString())
         : [_selectedOffice];
     final mappedIssueTypes = issueTypesForDepartments(selectedDepartments);
-    final scopedReportCategories = payload.reports
-        .where((report) {
-          if (_selectedOffice == 'All Departments') return true;
-          return _office(report).toLowerCase() == _selectedOffice.toLowerCase();
-        })
-        .map(_category);
 
     return _options([
       ...mappedIssueTypes,
-      ...scopedReportCategories,
       if (mappedIssueTypes.isEmpty)
-        ...payload.categories.whereType<Map<String, dynamic>>().map(
+        ...payload.categories.map(
           (category) => (category['name'] ?? '').toString(),
         ),
     ], 'All Categories');
   }
 
-  List<String> _departmentOptions(_ReportsPayload payload) {
+  List<String> _departmentOptions(_ReportListContext payload) {
     if (!_isSuperAdmin(payload.user)) {
       final department = _departmentLabel(payload.user);
       return department.isEmpty ? ['Assigned Department'] : [department];
     }
 
-    final officeNames = payload.offices.whereType<Map<String, dynamic>>().map(
+    final officeNames = payload.offices.map(
       (office) => (office['name'] ?? '').toString(),
     );
-    final reportOffices = payload.reports
-        .map(_office)
-        .where(
-          (office) => office.trim().isNotEmpty && office != 'Unassigned office',
-        );
 
-    return _options([...officeNames, ...reportOffices], 'All Departments');
+    return _options(officeNames, 'All Departments');
   }
 
-  List<String> _barangayOptions(_ReportsPayload payload) {
+  List<String> _barangayOptions() {
     return _options(
-      [..._taclobanBarangays, ...payload.reports.map(_barangay)],
+      _taclobanBarangays,
       'All Barangays',
       compare: _compareBarangays,
     );
@@ -395,47 +458,6 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
     final suffix = match.group(2);
     if (suffix == null) return number;
     return number + ((suffix.toLowerCase().codeUnitAt(0) - 96) / 10);
-  }
-
-  List<Map<String, dynamic>> _filteredReports(
-    _ReportsPayload payload,
-    List<Map<String, dynamic>> reports,
-  ) {
-    final isSuperAdmin = _isSuperAdmin(payload.user);
-    final assignedDepartment = _departmentLabel(payload.user);
-    return reports.where((report) {
-      if (!isSuperAdmin &&
-          assignedDepartment.isNotEmpty &&
-          _office(report) != assignedDepartment) {
-        return false;
-      }
-      if (_selectedCategory != 'All Categories' &&
-          normalizeIssueTypeKey(_category(report)) !=
-              normalizeIssueTypeKey(_selectedCategory)) {
-        return false;
-      }
-      if (_selectedOffice != 'All Departments' &&
-          _office(report).toLowerCase() != _selectedOffice.toLowerCase()) {
-        return false;
-      }
-      if (_selectedBarangay != 'All Barangays' &&
-          _barangay(report) != _selectedBarangay) {
-        return false;
-      }
-      if (_selectedStatus != 'All Status' &&
-          _status(report) != _selectedStatus) {
-        return false;
-      }
-      if (_search.isEmpty) return true;
-      final reportId = 'CTR-${(report['id'] ?? 0).toString().padLeft(4, '0')}';
-      return [
-        reportId,
-        _category(report),
-        _barangay(report),
-        _location(report),
-        (report['title'] ?? '').toString(),
-      ].any((value) => value.toLowerCase().contains(_search));
-    }).toList();
   }
 
   Future<void> _openStatusDialog(Map<String, dynamic> report) async {
@@ -625,14 +647,16 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
             }
 
             final payload = snapshot.data!;
-            final superAdmin = _isSuperAdmin(payload.user);
-            final reports = payload.reports;
-            final offices = _departmentOptions(payload);
+            final contextData = payload.context;
+            final pageData = payload.page;
+            final superAdmin = _isSuperAdmin(contextData.user);
+            final reports = pageData.reports;
+            final offices = _departmentOptions(contextData);
             if (!offices.contains(_selectedOffice)) {
               _selectedOffice = offices.first;
             }
-            final categories = _categoryOptions(payload);
-            final barangays = _barangayOptions(payload);
+            final categories = _categoryOptions(contextData);
+            final barangays = _barangayOptions();
             const statuses = [
               'All Status',
               'New',
@@ -650,8 +674,12 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
             if (!statuses.contains(_selectedStatus)) {
               _selectedStatus = statuses.first;
             }
-            final filtered = _filteredReports(payload, reports);
             final isWide = MediaQuery.of(context).size.width >= 1180;
+            final rangeLabel = _selectedOffice != 'All Departments'
+                ? ' - $_selectedOffice'
+                : _selectedBarangay != 'All Barangays'
+                ? ' - $_selectedBarangay'
+                : '';
 
             final content = [
               Text(
@@ -684,7 +712,11 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                           width: 180,
                           onChanged: (value) {
                             if (value == null) return;
-                            setState(() => _selectedCategory = value);
+                            setState(() {
+                              _selectedCategory = value;
+                              _page = 1;
+                              _payloadFuture = _loadPayload();
+                            });
                           },
                         ),
                         const SizedBox(width: 12),
@@ -697,6 +729,8 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                             setState(() {
                               _selectedOffice = value;
                               _selectedCategory = 'All Categories';
+                              _page = 1;
+                              _payloadFuture = _loadPayload();
                             });
                           },
                         ),
@@ -707,7 +741,11 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                           width: 180,
                           onChanged: (value) {
                             if (value == null) return;
-                            setState(() => _selectedBarangay = value);
+                            setState(() {
+                              _selectedBarangay = value;
+                              _page = 1;
+                              _payloadFuture = _loadPayload();
+                            });
                           },
                         ),
                         const SizedBox(width: 12),
@@ -717,7 +755,11 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                           width: 160,
                           onChanged: (value) {
                             if (value == null) return;
-                            setState(() => _selectedStatus = value);
+                            setState(() {
+                              _selectedStatus = value;
+                              _page = 1;
+                              _payloadFuture = _loadPayload();
+                            });
                           },
                         ),
                         const SizedBox(width: 12),
@@ -747,17 +789,13 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                     ),
                     const SizedBox(height: 14),
                     Text(
-                      '${filtered.length} Reports${_selectedOffice != 'All Departments'
-                          ? ' - $_selectedOffice'
-                          : _selectedBarangay != 'All Barangays'
-                          ? ' - $_selectedBarangay'
-                          : ''}',
+                      '${pageData.total} Reports$rangeLabel',
                       style: TextStyle(color: colors.mutedText, fontSize: 13),
                     ),
                     const SizedBox(height: 16),
                     _tableHeader(),
                     const SizedBox(height: 6),
-                    if (filtered.isEmpty)
+                    if (reports.isEmpty)
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 20),
                         child: Text(
@@ -766,23 +804,37 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                         ),
                       )
                     else
-                      ...filtered.map((report) => _reportRow(report)),
+                      ...reports.map((report) => _reportRow(report)),
                     const SizedBox(height: 12),
                     Row(
                       children: [
                         Text(
-                          'Showing ${filtered.isEmpty ? 0 : 1} to ${filtered.length} of ${reports.length} entries',
+                          'Showing ${pageData.total == 0 ? 0 : pageData.from} to ${pageData.to} of ${pageData.total} entries',
                           style: TextStyle(
                             color: colors.mutedText,
                             fontSize: 12,
                           ),
                         ),
                         const Spacer(),
-                        _pagerButton('Previous'),
+                        _pagerButton(
+                          'Previous',
+                          enabled: pageData.hasPreviousPage,
+                          onTap: pageData.hasPreviousPage
+                              ? () => _goToPage(pageData.currentPage - 1)
+                              : null,
+                        ),
                         const SizedBox(width: 8),
-                        _pagerIndex('1'),
+                        _pagerIndex(
+                          '${pageData.currentPage}/${pageData.lastPage}',
+                        ),
                         const SizedBox(width: 8),
-                        _pagerButton('Next'),
+                        _pagerButton(
+                          'Next',
+                          enabled: pageData.hasNextPage,
+                          onTap: pageData.hasNextPage
+                              ? () => _goToPage(pageData.currentPage + 1)
+                              : null,
+                        ),
                       ],
                     ),
                   ],
@@ -1100,18 +1152,31 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
     );
   }
 
-  Widget _pagerButton(String label) {
+  Widget _pagerButton(
+    String label, {
+    required bool enabled,
+    VoidCallback? onTap,
+  }) {
     final colors = AdminThemeColors.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: colors.input,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: colors.border),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(color: colors.mutedText, fontSize: 12),
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: enabled ? colors.input : colors.input.withValues(alpha: 0.45),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: colors.border),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: enabled
+                ? colors.mutedText
+                : colors.mutedText.withValues(alpha: 0.45),
+            fontSize: 12,
+          ),
+        ),
       ),
     );
   }
@@ -1133,17 +1198,22 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
 }
 
 class _ReportsPayload {
-  const _ReportsPayload({
-    required this.reports,
+  const _ReportsPayload({required this.context, required this.page});
+
+  final _ReportListContext context;
+  final AdminReportPage page;
+}
+
+class _ReportListContext {
+  const _ReportListContext({
     required this.user,
     required this.categories,
     required this.offices,
   });
 
-  final List<Map<String, dynamic>> reports;
   final Map<String, dynamic> user;
-  final List<dynamic> categories;
-  final List<dynamic> offices;
+  final List<Map<String, dynamic>> categories;
+  final List<Map<String, dynamic>> offices;
 }
 
 class _HeaderCell extends StatelessWidget {

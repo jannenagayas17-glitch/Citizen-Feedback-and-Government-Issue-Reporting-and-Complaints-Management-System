@@ -59,6 +59,14 @@ class _LoginScreenState extends State<LoginScreen> {
     _passwordError = null;
   }
 
+  Future<void> _resetGoogleSession() async {
+    try {
+      await _resolvedGoogleAuthService.signOut();
+    } catch (_) {
+      // Keep the login flow resilient even if Firebase cleanup fails.
+    }
+  }
+
   Future<void> _loadSavedCitizenEmail() async {
     final rememberedEmail = await TokenStorage.getLastEmailForRole('citizen');
 
@@ -147,6 +155,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       if (user == null) {
+        await _resetGoogleSession();
         _showSnackBar('Google sign-in failed');
         return;
       }
@@ -159,6 +168,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final data = await _authService.loginWithGoogle(
         idToken: idToken,
+        roleHint: 'citizen',
         email: user.email,
         name: user.displayName,
       );
@@ -169,6 +179,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       if (role != 'citizen') {
+        await _resetGoogleSession();
         await TokenStorage.clearAll();
         _showSnackBar(
           'This mobile app is for citizen accounts only. Please use the web admin portal for staff access.',
@@ -192,6 +203,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } catch (e) {
       if (!mounted) return;
+      await _resetGoogleSession();
       _showSnackBar(e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) {
@@ -316,7 +328,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               child: ClipOval(
                                 child: SizedBox.expand(
                                   child: Image.asset(
-                                    'assets/images/logo.png',
+                                    'assets/images/logo_splash.png',
                                     fit: BoxFit.cover,
                                   ),
                                 ),
@@ -341,6 +353,16 @@ class _LoginScreenState extends State<LoginScreen> {
                             style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.82),
                               fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'Registered citizen accounts only',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.70),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                           const SizedBox(height: 20),

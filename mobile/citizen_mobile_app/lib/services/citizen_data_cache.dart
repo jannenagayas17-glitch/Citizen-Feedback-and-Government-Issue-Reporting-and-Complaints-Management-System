@@ -1,12 +1,10 @@
 import 'auth_service.dart';
-import 'dashboard_service.dart';
 import 'report_service.dart';
 
 class CitizenDataCache {
   CitizenDataCache._();
 
   static final AuthService _authService = AuthService();
-  static final DashboardService _dashboardService = DashboardService();
   static final ReportService _reportService = ReportService();
 
   static Map<String, dynamic>? _user;
@@ -37,7 +35,8 @@ class CitizenDataCache {
     bool refresh = false,
   }) async {
     if (!refresh && _dashboard != null) return _dashboard!;
-    _dashboard = await _dashboardService.getDashboardStats();
+    final reports = await getReports(refresh: refresh);
+    _dashboard = _dashboardFromReports(reports);
     return _dashboard!;
   }
 
@@ -77,10 +76,9 @@ class CitizenDataCache {
   }) async {
     final values = await Future.wait<dynamic>([
       getUser(refresh: refresh),
-      getDashboard(refresh: refresh),
       getReports(refresh: refresh),
     ]);
-    final reports = _dedupeReports(values[2] as List<dynamic>);
+    final reports = _dedupeReports(values[1] as List<dynamic>);
     _reports = reports;
     _dashboard = _dashboardFromReports(reports);
 

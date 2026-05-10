@@ -10,6 +10,7 @@ use App\Models\Report;
 use App\Models\StatusHistory;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -23,6 +24,8 @@ class ReportController extends Controller
 {
     private const EMOJI_REGEX = '/[\x{1F1E6}-\x{1F1FF}\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}]/u';
     private const OTP_TTL_MINUTES = 10;
+    private const MEDIA_MAX_KB = 50 * 1024;
+    private const MEDIA_TYPES = ['jpg', 'jpeg', 'png', 'mp4', 'mov', 'avi', 'webm', '3gp', 'm4v'];
 
     public function index(Request $request)
     {
@@ -59,7 +62,7 @@ class ReportController extends Controller
 
                     $report->images()->create([
                         'image_path' => $path,
-                        'media_type' => 'image',
+                        'media_type' => $this->mediaTypeForFile($mediaFile),
                         'original_name' => $mediaFile->getClientOriginalName(),
                     ]);
                 }
@@ -173,13 +176,33 @@ class ReportController extends Controller
             abort(403, 'Unauthorized action.');
         }
 
-        $query = $this->scopedAdminReports($request)->with($this->listRelations());
+        $validated = $request->validate([
+            'status' => ['nullable', 'string', 'in:New,Pending,In Progress,Resolved,Rejected'],
+            'search' => ['nullable', 'string', 'max:255'],
+            'category' => ['nullable', 'string', 'max:255'],
+            'barangay' => ['nullable', 'string', 'max:255'],
+            'office' => ['nullable', 'string', 'max:255'],
+            'page' => ['nullable', 'integer', 'min:1'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
 
-        if ($request->has('status')) {
-            $query->where('status', $request->status);
+        $query = $this->scopedAdminReports($request)
+            ->with($this->adminListRelations());
+
+        $this->applyAdminReportFilters($query, $validated);
+
+        $shouldPaginate = $request->boolean('paginate')
+            || $request->filled('page')
+            || $request->filled('per_page');
+
+        if (! $shouldPaginate) {
+            return response()->json($query->get());
         }
 
-        return response()->json($query->get());
+        $perPage = (int) ($validated['per_page'] ?? 25);
+        $reports = $query->paginate($perPage)->appends($request->query());
+
+        return response()->json($reports);
     }
 
     public function updateStatus(Request $request, $id)
@@ -230,6 +253,17 @@ class ReportController extends Controller
             abort(403, 'Unauthorized action.');
         }
 
+        $validated = $request->validate([
+            'status' => ['nullable', 'string', 'in:New,Pending,In Progress,Resolved,Rejected'],
+            'search' => ['nullable', 'string', 'max:255'],
+            'category' => ['nullable', 'string', 'max:255'],
+            'barangay' => ['nullable', 'string', 'max:255'],
+            'office' => ['nullable', 'string', 'max:255'],
+            'date_preset' => ['nullable', 'string', 'in:today,last_7_days,last_30_days,custom'],
+            'start_date' => ['nullable', 'date'],
+            'end_date' => ['nullable', 'date'],
+        ]);
+
         $query = $this->scopedAdminReports($request)->with([
             'user:id,name,email',
             'category:id,name',
@@ -240,9 +274,8 @@ class ReportController extends Controller
             },
         ]);
 
-        if ($request->filled('status')) {
-            $query->where('status', $request->string('status')->toString());
-        }
+        $this->applyAdminReportFilters($query, $validated);
+        $this->applyDateRangeFilter($query, $validated);
 
         $reports = $query->get();
         $analytics = $this->buildReportExportAnalytics($reports);
@@ -464,21 +497,134 @@ class ReportController extends Controller
 
     private function scopedAdminReports(Request $request)
     {
-        $query = Report::query()->latest();
+        $query = Report::query()
+            ->orderByDesc('reports.created_at')
+            ->orderByDesc('reports.id');
 
         if (($request->user()->role ?? null) === 'admin') {
-            $department = trim((string) ($request->user()->department ?? ''));
+            $officeId = data_get($request->user(), 'office.id');
 
-            if ($department === '') {
-                $query->whereRaw('1 = 0');
+            if ($officeId !== null) {
+                $query->where('reports.office_id', $officeId);
             } else {
-                $query->whereHas('office', function ($officeQuery) use ($department) {
-                    $officeQuery->where('name', $department);
-                });
+                $department = trim((string) ($request->user()->department ?? ''));
+
+                if ($department === '') {
+                    $query->whereRaw('1 = 0');
+                } else {
+                    $resolvedOfficeId = Office::query()
+                        ->where('name', $department)
+                        ->value('id');
+
+                    if ($resolvedOfficeId === null) {
+                        $query->whereRaw('1 = 0');
+                    } else {
+                        $query->where('reports.office_id', $resolvedOfficeId);
+                    }
+                }
             }
         }
 
         return $query;
+    }
+
+    private function applyAdminReportFilters($query, array $filters): void
+    {
+        if (! empty($filters['status'])) {
+            $query->where('reports.status', $filters['status']);
+        }
+
+        if (! empty($filters['office'])) {
+            $office = trim((string) $filters['office']);
+            $query->whereHas('office', function ($officeQuery) use ($office) {
+                $officeQuery->whereRaw('LOWER(name) = ?', [mb_strtolower($office)]);
+            });
+        }
+
+        if (! empty($filters['barangay'])) {
+            $barangay = trim((string) $filters['barangay']);
+            $query->whereRaw('LOWER(reports.barangay) = ?', [mb_strtolower($barangay)]);
+        }
+
+        if (! empty($filters['category'])) {
+            $category = trim((string) $filters['category']);
+            $query->whereHas('category', function ($categoryQuery) use ($category) {
+                $categoryQuery->whereRaw('LOWER(name) = ?', [mb_strtolower($category)]);
+            });
+        }
+
+        if (! empty($filters['search'])) {
+            $search = trim((string) $filters['search']);
+            $normalizedSearch = mb_strtolower($search);
+            $trackingId = preg_replace('/[^0-9]/', '', $search) ?? '';
+
+            $query->where(function ($searchQuery) use ($search, $normalizedSearch, $trackingId) {
+                $hasCondition = false;
+
+                if ($trackingId !== '' && ctype_digit($trackingId)) {
+                    $searchQuery->where('reports.id', (int) $trackingId);
+                    $hasCondition = true;
+                }
+
+                $like = '%' . $search . '%';
+
+                $titleMethod = $hasCondition ? 'orWhere' : 'where';
+
+                $searchQuery
+                    ->{$titleMethod}('reports.title', 'like', $like)
+                    ->orWhere('reports.location', 'like', $like)
+                    ->orWhere('reports.barangay', 'like', $like)
+                    ->orWhere('reports.status', 'like', $like)
+                    ->orWhereHas('category', function ($categoryQuery) use ($normalizedSearch) {
+                        $categoryQuery->whereRaw('LOWER(name) like ?', ['%' . $normalizedSearch . '%']);
+                    })
+                    ->orWhereHas('office', function ($officeQuery) use ($normalizedSearch) {
+                        $officeQuery->whereRaw('LOWER(name) like ?', ['%' . $normalizedSearch . '%']);
+                    })
+                    ->orWhereHas('user', function ($userQuery) use ($normalizedSearch) {
+                        $userQuery->whereRaw('LOWER(name) like ?', ['%' . $normalizedSearch . '%']);
+                    });
+            });
+        }
+    }
+
+    private function applyDateRangeFilter($query, array $filters): void
+    {
+        $preset = (string) ($filters['date_preset'] ?? '');
+        $startDate = $filters['start_date'] ?? null;
+        $endDate = $filters['end_date'] ?? null;
+
+        if ($preset === '' && ($startDate === null || $endDate === null)) {
+            return;
+        }
+
+        if ($preset === 'custom') {
+            if ($startDate === null || $endDate === null) {
+                $query->whereRaw('1 = 0');
+                return;
+            }
+
+            $start = Carbon::parse((string) $startDate)->startOfDay();
+            $end = Carbon::parse((string) $endDate)->endOfDay();
+        } else {
+            $today = now()->startOfDay();
+            [$start, $end] = match ($preset) {
+                'today' => [$today->copy(), $today->copy()->endOfDay()],
+                'last_7_days' => [$today->copy()->subDays(6), $today->copy()->endOfDay()],
+                'last_30_days' => [$today->copy()->subDays(29), $today->copy()->endOfDay()],
+                default => [null, null],
+            };
+        }
+
+        if ($start === null || $end === null) {
+            return;
+        }
+
+        if ($start->gt($end)) {
+            [$start, $end] = [$end->copy()->startOfDay(), $start->copy()->endOfDay()];
+        }
+
+        $query->whereBetween('reports.created_at', [$start, $end]);
     }
 
     private function authorizeReportAccess(Request $request, Report $report): void
@@ -549,12 +695,12 @@ class ReportController extends Controller
             [
                 'media' => ['nullable', 'array', 'max:3'],
                 'media.*' => [
-                    File::types(['jpg', 'jpeg', 'png'])->max(50 * 1024),
+                    File::types(self::MEDIA_TYPES)->max(self::MEDIA_MAX_KB),
                 ],
             ],
             [
                 'media.max' => 'You can upload up to 3 attachments only.',
-                'media.*.types' => 'Attachments must be JPG or PNG photos only.',
+                'media.*.types' => 'Attachments must be JPG, PNG, or video files.',
                 'media.*.max' => 'Attachments must be 50MB or smaller.',
             ]
         )->validate();
@@ -606,9 +752,18 @@ class ReportController extends Controller
             'user',
             'category',
             'office',
-            'images',
             'latestStatusHistory.user',
             'latestAdminResponse.user',
+        ];
+    }
+
+    private function adminListRelations(): array
+    {
+        return [
+            'user:id,name',
+            'category:id,name',
+            'office:id,name',
+            'assignedAdmin:id,name',
         ];
     }
 
@@ -633,5 +788,12 @@ class ReportController extends Controller
     private function verificationCacheKey(int $userId): string
     {
         return 'report_submission_otp:' . $userId;
+    }
+
+    private function mediaTypeForFile(UploadedFile $file): string
+    {
+        $mimeType = strtolower((string) $file->getMimeType());
+
+        return str_starts_with($mimeType, 'video/') ? 'video' : 'image';
     }
 }

@@ -2,538 +2,639 @@
 
 namespace Database\Seeders;
 
+use App\Models\AdminResponse;
 use App\Models\Category;
 use App\Models\CitizenFeedback;
 use App\Models\Office;
 use App\Models\Report;
+use App\Models\ReportEscalation;
+use App\Models\ReportImage;
+use App\Models\StatusHistory;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 class DemoVolumeSeeder extends Seeder
 {
     private const ADMIN_PASSWORD = 'AdminDemo123';
+
     private const CITIZEN_PASSWORD = 'CitizenDemo123';
-    private const REPORT_DETAILS = [
-        'Business Permit Application' => [
-            'title' => 'Follow up on delayed business permit application',
-            'description' => 'I submitted the business permit requirements last week, but I have not received a clear update on the next step. Please help check the application status.',
-        ],
-        'Business Permit Renewal' => [
-            'title' => 'Business permit renewal queue is taking too long',
-            'description' => 'The renewal process has been pending for several days even after the documents were completed. I need assistance so the business can continue operating properly.',
-        ],
-        'Licensing Concern' => [
-            'title' => 'Need clarification on licensing requirements',
-            'description' => 'The requirements given at the counter were different from the checklist online. Please confirm the correct documents needed for this license.',
-        ],
-        'Business Inspection' => [
-            'title' => 'Request for business inspection schedule update',
-            'description' => 'Our business inspection has not yet been scheduled. Please provide an update because this is needed for our permit processing.',
-        ],
-        'Permit Release Delay' => [
-            'title' => 'Permit release date has passed with no notice',
-            'description' => 'The expected release date for the permit already passed, but no notice was sent. Please help verify when it can be released.',
-        ],
-        'Agriculture Assistance' => [
-            'title' => 'Request for agriculture assistance follow up',
-            'description' => 'Farmers in our area are requesting support for seeds and basic supplies. Please advise when assistance can be provided.',
-        ],
-        'Farmer Support' => [
-            'title' => 'Farmer support request for damaged crops',
-            'description' => 'Several crops were damaged after heavy rain. We are requesting an assessment and guidance from the agriculture office.',
-        ],
-        'Crop Damage' => [
-            'title' => 'Crop damage needs field validation',
-            'description' => 'The recent weather caused visible crop damage in our sitio. Please send personnel to validate the affected area.',
-        ],
-        'Livestock Concern' => [
-            'title' => 'Livestock health concern reported by residents',
-            'description' => 'Some livestock in the area appear sick and residents are worried it may spread. Please coordinate a checkup or advisory.',
-        ],
-        'Urban Gardening' => [
-            'title' => 'Urban gardening supplies requested',
-            'description' => 'Our neighborhood group would like to request seedlings and technical advice for a small urban gardening project.',
-        ],
-        'Property Assessment' => [
-            'title' => 'Property assessment record needs review',
-            'description' => 'The property assessment details appear outdated compared with the current property condition. Please review the record.',
-        ],
-        'Tax Declaration' => [
-            'title' => 'Tax declaration correction request',
-            'description' => 'There is a spelling error in the tax declaration record. Please help correct the document before we use it for processing.',
-        ],
-        'Real Property Record' => [
-            'title' => 'Real property record copy request delayed',
-            'description' => 'I requested a copy of a real property record, but it has not been released. Please check the status of the request.',
-        ],
-        'Assessment Correction' => [
-            'title' => 'Assessment correction needs verification',
-            'description' => 'The assessed classification seems incorrect. Please verify the record and advise what documents are needed.',
-        ],
-        'Property Valuation' => [
-            'title' => 'Property valuation inquiry for residential lot',
-            'description' => 'I need assistance understanding the latest valuation for a residential lot in our barangay.',
-        ],
-        'Birth Certificate' => [
-            'title' => 'Birth certificate request has incorrect details',
-            'description' => 'The released birth certificate has a detail that does not match the supporting record. Please help verify the correction process.',
-        ],
-        'Marriage Certificate' => [
-            'title' => 'Marriage certificate copy follow up',
-            'description' => 'I requested a copy of a marriage certificate and would like to follow up because it is needed for a pending transaction.',
-        ],
-        'Death Certificate' => [
-            'title' => 'Death certificate registration follow up',
-            'description' => 'The family needs help confirming whether the death certificate registration has been completed.',
-        ],
-        'Civil Registry Correction' => [
-            'title' => 'Civil registry correction guidance needed',
-            'description' => 'There is an incorrect spelling in a civil registry document. Please advise the proper correction steps and requirements.',
-        ],
-        'Delayed Registration' => [
-            'title' => 'Delayed registration requirements clarification',
-            'description' => 'We need clarification on the requirements for delayed registration because the family documents are incomplete.',
-        ],
-        'Emergency Response' => [
-            'title' => 'Emergency response request for unsafe area',
-            'description' => 'Residents noticed an unsafe area after recent rainfall. Please inspect and advise if emergency action is needed.',
-        ],
-        'Flooding' => [
-            'title' => 'Floodwater enters homes during heavy rain',
-            'description' => 'Floodwater reaches several homes whenever it rains hard. Please assess the area and coordinate mitigation support.',
-        ],
-        'Disaster Preparedness' => [
-            'title' => 'Request for disaster preparedness orientation',
-            'description' => 'Our barangay group would like to request an orientation on evacuation planning and emergency preparedness.',
-        ],
-        'Hazard Report' => [
-            'title' => 'Reported hazard near residential area',
-            'description' => 'There is a visible hazard near the roadside that may affect pedestrians and nearby households. Please inspect it.',
-        ],
-        'Rescue Assistance' => [
-            'title' => 'Rescue assistance concern after heavy rain',
-            'description' => 'Residents are requesting clearer rescue coordination because some areas become difficult to access during heavy rain.',
-        ],
-        'Road Damage' => [
-            'title' => 'Potholes causing unsafe travel',
-            'description' => 'Several potholes along the road are causing vehicles to slow down suddenly and may lead to accidents. Please schedule repairs.',
-        ],
-        'Drainage' => [
-            'title' => 'Clogged drainage causing stagnant water',
-            'description' => 'The drainage canal is clogged and stagnant water has started to collect near nearby houses. Please clear the canal.',
-        ],
-        'Street Light' => [
-            'title' => 'Street light not working at night',
-            'description' => 'A street light in the area has not been working for several nights, making the road unsafe for pedestrians.',
-        ],
-        'Sidewalk' => [
-            'title' => 'Damaged sidewalk needs repair',
-            'description' => 'The sidewalk has broken sections that make walking difficult, especially for seniors and children.',
-        ],
-        'Public Works' => [
-            'title' => 'Public facility repair request',
-            'description' => 'A public facility in the area needs minor repair and maintenance. Please inspect and schedule the needed work.',
-        ],
-        'Public Health' => [
-            'title' => 'Public health concern in neighborhood',
-            'description' => 'Residents are concerned about a possible health risk in the area. Please inspect and provide guidance.',
-        ],
-        'Sanitation' => [
-            'title' => 'Sanitation issue near residential block',
-            'description' => 'There is a sanitation concern near several houses that may attract pests. Please coordinate inspection and cleanup.',
-        ],
-        'Medical Assistance' => [
-            'title' => 'Medical assistance inquiry for resident',
-            'description' => 'A resident needs guidance on how to request medical assistance from the city health office.',
-        ],
-        'Health Center Concern' => [
-            'title' => 'Health center service schedule concern',
-            'description' => 'Residents need clearer information about the health center service schedule and available consultation hours.',
-        ],
-        'Disease Prevention' => [
-            'title' => 'Request for disease prevention advisory',
-            'description' => 'Our area needs a disease prevention advisory because residents have reported similar symptoms recently.',
-        ],
-        'Executive Assistance' => [
-            'title' => 'Request for executive assistance follow up',
-            'description' => 'I submitted a request for city assistance and would like to know which office will handle the next step.',
-        ],
-        'Public Service Request' => [
-            'title' => 'Public service request needs assignment',
-            'description' => 'This public service concern has not yet been assigned to a specific office. Please help route it properly.',
-        ],
-        'City Program Concern' => [
-            'title' => 'City program participation concern',
-            'description' => 'Residents are asking for clarification about participation requirements for a city program.',
-        ],
-        'Administrative Complaint' => [
-            'title' => 'Administrative complaint for follow up',
-            'description' => 'I would like to report a concern about how a public transaction was handled and request proper follow up.',
-        ],
-        'General City Concern' => [
-            'title' => 'General city concern for routing',
-            'description' => 'This concern affects residents in the area and needs help from the appropriate city office.',
-        ],
-        'Social Assistance' => [
-            'title' => 'Social assistance application follow up',
-            'description' => 'A resident submitted documents for social assistance and needs an update on the application status.',
-        ],
-        'Family Welfare' => [
-            'title' => 'Family welfare support request',
-            'description' => 'A family in the area needs guidance on available welfare programs and requirements.',
-        ],
-        'Senior Citizen Assistance' => [
-            'title' => 'Senior citizen assistance concern',
-            'description' => 'A senior citizen needs help with assistance processing and document verification.',
-        ],
-        'PWD Assistance' => [
-            'title' => 'PWD assistance requirements inquiry',
-            'description' => 'We need clarification about the requirements for PWD assistance and available city support.',
-        ],
-        'Child Welfare' => [
-            'title' => 'Child welfare concern for assessment',
-            'description' => 'A child welfare concern was reported by neighbors and may need assessment from the proper office.',
-        ],
-        'Tourism Facility' => [
-            'title' => 'Tourism facility maintenance concern',
-            'description' => 'A tourism facility needs maintenance because visitors have reported damaged fixtures in the area.',
-        ],
-        'Visitor Assistance' => [
-            'title' => 'Visitor assistance information request',
-            'description' => 'Visitors need clearer directions and assistance information for a city destination.',
-        ],
-        'Tourism Event' => [
-            'title' => 'Tourism event coordination request',
-            'description' => 'Our group needs coordination guidance for a tourism-related event in the city.',
-        ],
-        'Heritage Site Concern' => [
-            'title' => 'Heritage site area needs inspection',
-            'description' => 'A heritage site area has visible maintenance concerns that may affect visitors.',
-        ],
-        'Promotion Request' => [
-            'title' => 'Request for tourism promotion support',
-            'description' => 'A local group would like to ask about possible support for promoting a community tourism activity.',
-        ],
-        'Payment Concern' => [
-            'title' => 'Payment posting concern',
-            'description' => 'A payment was made but does not appear to be posted yet. Please verify the transaction record.',
-        ],
-        'Receipt Concern' => [
-            'title' => 'Receipt details need verification',
-            'description' => 'The receipt details appear incomplete. Please help verify the correct payment information.',
-        ],
-        'Business Tax' => [
-            'title' => 'Business tax computation inquiry',
-            'description' => 'I need clarification about the business tax computation before completing payment.',
-        ],
-        'Real Property Tax' => [
-            'title' => 'Real property tax payment concern',
-            'description' => 'There is a concern about real property tax payment status. Please check the record.',
-        ],
-        'Collection Issue' => [
-            'title' => 'Collection record needs review',
-            'description' => 'The collection record may not match the payment made. Please review and advise.',
-        ],
-        'Driver Licensing' => [
-            'title' => 'Driver licensing schedule concern',
-            'description' => 'Applicants need clearer information about driver licensing schedules and requirements.',
-        ],
-        'Vehicle Registration' => [
-            'title' => 'Vehicle registration follow up',
-            'description' => 'The vehicle registration process has been delayed and needs status verification.',
-        ],
-        'Road Safety' => [
-            'title' => 'Road safety concern near crossing',
-            'description' => 'Pedestrians are having difficulty crossing safely in this area. Please assess road safety measures.',
-        ],
-        'Transport Regulation' => [
-            'title' => 'Transport regulation concern reported',
-            'description' => 'Residents reported a transport regulation concern that needs checking by the proper office.',
-        ],
-        'Traffic Violation Concern' => [
-            'title' => 'Traffic violation concern needs action',
-            'description' => 'Repeated traffic violations are happening in the area and residents are requesting enforcement.',
-        ],
-        'Traffic Congestion' => [
-            'title' => 'Traffic congestion during peak hours',
-            'description' => 'Traffic becomes heavy during morning and afternoon peak hours. Please review possible traffic management measures.',
-        ],
-        'Illegal Parking' => [
-            'title' => 'Illegal parking blocking the road',
-            'description' => 'Vehicles are often parked illegally and block the flow of traffic. Please conduct enforcement.',
-        ],
-        'Traffic Signal' => [
-            'title' => 'Traffic signal timing concern',
-            'description' => 'The traffic signal timing causes long queues and unsafe crossing behavior. Please inspect the signal timing.',
-        ],
-        'Traffic Enforcement' => [
-            'title' => 'Traffic enforcement request near school',
-            'description' => 'Traffic enforcement is needed near the school during dismissal time to keep students safe.',
-        ],
-        'Road Obstruction' => [
-            'title' => 'Road obstruction affecting vehicles',
-            'description' => 'An obstruction is affecting vehicle flow and may cause accidents. Please clear or coordinate removal.',
-        ],
+
+    private const DEMO_START = [2024, 1, 1];
+
+    private const DEMO_END = [2025, 12, 20];
+
+    private const FIRST_NAMES = [
+        'Vanessa', 'Jericson', 'Jannena', 'Lito', 'Kristine', 'Arnel',
+        'Michelle', 'Noel', 'Rhea', 'Dennis', 'Camille', 'Victor',
+        'Joanna', 'Nestor', 'Clarissa', 'Eric', 'Melanie', 'Jun',
+        'Aileen', 'Rommel', 'Leah', 'Patrick', 'Irene', 'Bryan',
+        'Mylene', 'Richard', 'Hazel', 'Gerald', 'Diana', 'Ronald',
+        'Marielyn', 'Christian', 'Jessa Mae', 'Allan', 'Rochelle',
+        'Julius', 'Angelica', 'Mark Joseph', 'Karen', 'Joshua',
+        'Marites', 'Francis', 'Elaine', 'Rodel', 'Czarina',
+        'Edgar', 'Princess', 'Michael', 'Theresa', 'Renato',
     ];
-    private const FEEDBACK_MESSAGES = [
-        'Suggestion' => [
-            'Please add clearer status updates so citizens know when the next action will happen.',
-            'It would help if the department sends a short message after assigning the report to staff.',
-            'The process is useful, but citizens would benefit from more specific estimated completion dates.',
-        ],
-        'Complaint' => [
-            'The response took longer than expected and I had to follow up several times.',
-            'The report was received, but the update was not detailed enough for residents waiting for action.',
-            'The issue still needs closer checking because the problem returned after the first action.',
-        ],
-        'Praise' => [
-            'The staff handled the concern professionally and gave a clear update.',
-            'Thank you for responding to the report and coordinating with the barangay.',
-            'The department was helpful and the report status was updated properly.',
-        ],
+
+    private const LAST_NAMES = [
+        'Delgado', 'Cupan', 'Gayas', 'Fernandez', 'Dela Cruz', 'Soriano',
+        'Lopez', 'Valdez', 'Dizon', 'De Guzman', 'Ortega', 'Salazar',
+        'Robles', 'Villamor', 'Domingo', 'Bautista', 'Ramos', 'Marquez',
+        'Francisco', 'Reyes', 'Gonzales', 'Medina', 'Santos', 'Aguilar',
+        'Torres', 'Aquino', 'Navarro', 'Castillo', 'Mendoza', 'Flores',
+        'Abad', 'Balagtas', 'Caballero', 'De la Pena', 'Enriquez',
+        'Ferrer', 'Guevarra', 'Hilario', 'Ibanez', 'Javier',
+        'Labadan', 'Mallari', 'Natividad', 'Ocampo', 'Paloma',
+        'Quinones', 'Rivera', 'Tolentino', 'Uy', 'Mercado',
     ];
-    private const ADMIN_NAMES = [
-        'Juan Dela Cruz',
-        'Maria Santos',
-        'Carlos Reyes',
-        'Ana Mae Garcia',
-        'Jose Villanueva',
-        'Lourdes Del Rosario',
-        'Miguel Cruz',
-        'Patricia Mendoza',
-        'Ramon De Leon',
-        'Angela Navarro',
-        'Roberto Tan',
-        'Marites Flores',
-        'Gabriel Aquino',
-        'Elena Bautista',
-        'Francis Lim',
-        'Catherine Yu',
-        'Paolo Gonzales',
-        'Rosa Dela Pena',
-        'Mark Anthony Ramos',
-        'Janine Mercado',
-        'Daniel Castillo',
-        'Sofia Alcantara',
-        'Edwin Salvador',
-        'Grace Manalo',
-        'Anthony Velasco',
-    ];
-    private const CITIZEN_NAMES = [
-        'Vanessa Delgado',
-        'Jericson Cupan',
-        'Jannena Gayas',
-        'Lito Fernandez',
-        'Kristine Dela Cruz',
-        'Arnel Soriano',
-        'Michelle Lopez',
-        'Noel Valdez',
-        'Rhea Dizon',
-        'Dennis De Guzman',
-        'Camille Ortega',
-        'Victor Salazar',
-        'Joanna Robles',
-        'Nestor Villamor',
-        'Clarissa Domingo',
-        'Eric Bautista',
-        'Melanie Ramos',
-        'Jun Marquez',
-        'Aileen Francisco',
-        'Rommel Reyes',
-        'Leah Gonzales',
-        'Patrick Medina',
-        'Irene Santos',
-        'Bryan Aguilar',
-        'Mylene Torres',
-        'Richard Aquino',
-        'Hazel Navarro',
-        'Gerald Castillo',
-        'Diana Mendoza',
-        'Ronald Flores',
-        'Marielyn Abad',
-        'Christian Balagtas',
-        'Jessa Mae Caballero',
-        'Allan Dela Pena',
-        'Rochelle Enriquez',
-        'Julius Ferrer',
-        'Angelica Guevarra',
-        'Mark Joseph Hilario',
-        'Karen Ibanez',
-        'Joshua Javier',
-        'Marites Labadan',
-        'Francis Mallari',
-        'Elaine Natividad',
-        'Rodel Ocampo',
-        'Czarina Paloma',
-        'Edgar Quinones',
-        'Princess Rivera',
-        'Michael Soriano',
-        'Theresa Tolentino',
-        'Renato Uy',
-    ];
-    private const OFFICE_ISSUE_TYPES = [
-        'Business Permit and Licensing Division' => [
-            'Business Permit Application',
-            'Business Permit Renewal',
-            'Licensing Concern',
-            'Business Inspection',
-            'Permit Release Delay',
+
+    private const BARANGAY_PROFILES = [
+        [
+            'barangay' => 'Barangay 1 (Libertad)',
+            'latitude' => 11.2431,
+            'longitude' => 125.0004,
+            'spots' => [
+                'near Libertad Public Market',
+                'beside the barangay hall',
+                'along Justice Romualdez Street',
+            ],
         ],
-        'City Agriculturist Office' => [
-            'Agriculture Assistance',
-            'Farmer Support',
-            'Crop Damage',
-            'Livestock Concern',
-            'Urban Gardening',
+        [
+            'barangay' => 'Barangay 5',
+            'latitude' => 11.2462,
+            'longitude' => 125.0015,
+            'spots' => [
+                'near the elementary school gate',
+                'at the tricycle terminal',
+                'beside the covered court',
+            ],
         ],
-        "City Assessor's Office" => [
-            'Property Assessment',
-            'Tax Declaration',
-            'Real Property Record',
-            'Assessment Correction',
-            'Property Valuation',
+        [
+            'barangay' => 'Barangay 12 (GE Palanog)',
+            'latitude' => 11.2458,
+            'longitude' => 125.0033,
+            'spots' => [
+                'along the drainage canal',
+                'near the sari-sari store row',
+                'close to the day care center',
+            ],
         ],
-        "City Civil Registrar's Office" => [
-            'Birth Certificate',
-            'Marriage Certificate',
-            'Death Certificate',
-            'Civil Registry Correction',
-            'Delayed Registration',
+        [
+            'barangay' => 'Barangay 24',
+            'latitude' => 11.2505,
+            'longitude' => 125.0074,
+            'spots' => [
+                'beside the chapel entrance',
+                'near the public waiting shed',
+                'in front of the rice mill access road',
+            ],
         ],
-        'City Disaster Risk Reduction and Management Office' => [
-            'Emergency Response',
-            'Flooding',
-            'Disaster Preparedness',
-            'Hazard Report',
-            'Rescue Assistance',
+        [
+            'barangay' => 'Barangay 36 (Sabang)',
+            'latitude' => 11.2511,
+            'longitude' => 125.0128,
+            'spots' => [
+                'near the coastal access road',
+                'at the fish landing area',
+                'beside the sea wall section',
+            ],
         ],
-        "City Engineer's Office" => [
-            'Road Damage',
-            'Drainage',
-            'Street Light',
-            'Sidewalk',
-            'Public Works',
+        [
+            'barangay' => 'Barangay 49 (Youngfield)',
+            'latitude' => 11.2584,
+            'longitude' => 125.0155,
+            'spots' => [
+                'near the subdivision gate',
+                'along the inner service road',
+                'in front of the basketball court',
+            ],
         ],
-        'City Health Office' => [
-            'Public Health',
-            'Sanitation',
-            'Medical Assistance',
-            'Health Center Concern',
-            'Disease Prevention',
+        [
+            'barangay' => 'Barangay 60-A (Sagkahan)',
+            'latitude' => 11.2489,
+            'longitude' => 125.0191,
+            'spots' => [
+                'near the creek crossing',
+                'beside the barangay health station',
+                'at the intersection leading to the highway',
+            ],
         ],
-        "City Mayor's Office" => [
-            'Executive Assistance',
-            'Public Service Request',
-            'City Program Concern',
-            'Administrative Complaint',
-            'General City Concern',
+        [
+            'barangay' => 'Barangay 62',
+            'latitude' => 11.2493,
+            'longitude' => 125.0227,
+            'spots' => [
+                'behind the transport terminal',
+                'near the unloading bay',
+                'beside the roadside drainage opening',
+            ],
         ],
-        'City Social Welfare and Development Office' => [
-            'Social Assistance',
-            'Family Welfare',
-            'Senior Citizen Assistance',
-            'PWD Assistance',
-            'Child Welfare',
+        [
+            'barangay' => 'Barangay 68',
+            'latitude' => 11.2554,
+            'longitude' => 125.0278,
+            'spots' => [
+                'near the barangay multipurpose hall',
+                'along the uphill stretch',
+                'by the side street near the waiting shed',
+            ],
         ],
-        'City Tourism Operations Office' => [
-            'Tourism Facility',
-            'Visitor Assistance',
-            'Tourism Event',
-            'Heritage Site Concern',
-            'Promotion Request',
+        [
+            'barangay' => 'Barangay 78 (Marasbaras)',
+            'latitude' => 11.2598,
+            'longitude' => 125.0316,
+            'spots' => [
+                'near the hospital access road',
+                'at the subdivision corner',
+                'beside the drainage outfall',
+            ],
         ],
-        "City Treasurer's Office" => [
-            'Payment Concern',
-            'Receipt Concern',
-            'Business Tax',
-            'Real Property Tax',
-            'Collection Issue',
+        [
+            'barangay' => 'Barangay 83-C (San Jose)',
+            'latitude' => 11.2635,
+            'longitude' => 125.0382,
+            'spots' => [
+                'near the airport road shoulder',
+                'in front of the terminal entrance',
+                'beside the pedestrian crossing',
+            ],
         ],
-        'Land Transportation Office' => [
-            'Driver Licensing',
-            'Vehicle Registration',
-            'Road Safety',
-            'Transport Regulation',
-            'Traffic Violation Concern',
+        [
+            'barangay' => 'Barangay 88',
+            'latitude' => 11.2661,
+            'longitude' => 125.0414,
+            'spots' => [
+                'near the roadside canal',
+                'at the inner neighborhood curve',
+                'beside the loading zone',
+            ],
         ],
-        'TOMECO (Traffic Operation)' => [
-            'Traffic Congestion',
-            'Illegal Parking',
-            'Traffic Signal',
-            'Traffic Enforcement',
-            'Road Obstruction',
+        [
+            'barangay' => 'Barangay 91 (Abucay)',
+            'latitude' => 11.2704,
+            'longitude' => 125.0482,
+            'spots' => [
+                'near the river embankment',
+                'by the evacuation route',
+                'at the low-lying section of the road',
+            ],
+        ],
+        [
+            'barangay' => 'Barangay 95-A (Caibaan)',
+            'latitude' => 11.2736,
+            'longitude' => 125.0534,
+            'spots' => [
+                'beside the public market service road',
+                'near the jeepney stop',
+                'in front of the barangay hall driveway',
+            ],
+        ],
+        [
+            'barangay' => 'Barangay 97-C',
+            'latitude' => 11.2758,
+            'longitude' => 125.0573,
+            'spots' => [
+                'at the entrance to the residential block',
+                'near the drainage catch basin',
+                'beside the roadside food stalls',
+            ],
+        ],
+        [
+            'barangay' => 'Barangay 102',
+            'latitude' => 11.2794,
+            'longitude' => 125.0621,
+            'spots' => [
+                'near the school fence line',
+                'along the inner barangay road',
+                'beside the community pump house',
+            ],
+        ],
+        [
+            'barangay' => 'Barangay 105',
+            'latitude' => 11.2817,
+            'longitude' => 125.0675,
+            'spots' => [
+                'near the newly paved road section',
+                'by the culvert inlet',
+                'in front of the chapel annex',
+            ],
+        ],
+        [
+            'barangay' => 'Barangay 109 (V&G Subdivision)',
+            'latitude' => 11.2848,
+            'longitude' => 125.0711,
+            'spots' => [
+                'near the subdivision rotunda',
+                'along the commercial strip',
+                'beside the park frontage',
+            ],
+        ],
+        [
+            'barangay' => 'Barangay 110',
+            'latitude' => 11.2866,
+            'longitude' => 125.0749,
+            'spots' => [
+                'near the village guardhouse',
+                'at the back road service lane',
+                'beside the drainage line behind the court',
+            ],
+        ],
+        [
+            'barangay' => 'Barangay 112',
+            'latitude' => 11.2889,
+            'longitude' => 125.0793,
+            'spots' => [
+                'near the transport dispatch area',
+                'along the connector road to the highway',
+                'at the roadside near the footbridge',
+            ],
         ],
     ];
 
+    private const ISSUE_PROFILES = [
+        [
+            'category' => 'Road Damage',
+            'offices' => ["City Engineer's Office"],
+            'priority_pool' => ['Normal', 'High', 'High', 'Urgent'],
+            'video_friendly' => true,
+            'title_templates' => [
+                'Deep potholes reported %s',
+                'Broken pavement needs repair %s',
+                'Uneven road surface is damaging vehicles %s',
+            ],
+            'description_templates' => [
+                'Residents reported widening potholes %s. %s %s',
+                'The concrete surface %s has cracked after repeated heavy vehicles passed through. %s %s',
+                'Motorists are swerving to avoid the damaged lane %s. %s %s',
+            ],
+        ],
+        [
+            'category' => 'Drainage / Sewerage',
+            'offices' => ["City Engineer's Office"],
+            'priority_pool' => ['Normal', 'High', 'High', 'Urgent'],
+            'video_friendly' => true,
+            'title_templates' => [
+                'Clogged drainage needs clearing %s',
+                'Sewerage overflow reported %s',
+                'Canal blockage is causing stagnant water %s',
+            ],
+            'description_templates' => [
+                'Residents observed wastewater backing up %s after rainfall. %s %s',
+                'The drainage opening %s is blocked by debris and the water is no longer flowing out. %s %s',
+                'Foul-smelling stagnant water has collected %s because the sewer line appears clogged. %s %s',
+            ],
+        ],
+        [
+            'category' => 'Garbage Collection',
+            'offices' => ['City Health Office', "City Mayor's Office"],
+            'priority_pool' => ['Low', 'Normal', 'High'],
+            'video_friendly' => false,
+            'title_templates' => [
+                'Uncollected garbage piling up %s',
+                'Missed garbage pickup reported %s',
+                'Waste bags left on the roadside %s',
+            ],
+            'description_templates' => [
+                'Residents said garbage was not collected on schedule %s and the pile is growing. %s %s',
+                'Waste bags have remained %s for several days and stray animals are scattering them. %s %s',
+                'There is visible trash accumulation %s and the odor is starting to affect nearby houses. %s %s',
+            ],
+        ],
+        [
+            'category' => 'Street Light Outage',
+            'offices' => ["City Engineer's Office", 'TOMECO (Traffic Operation)'],
+            'priority_pool' => ['Normal', 'High', 'High'],
+            'video_friendly' => true,
+            'title_templates' => [
+                'Street light outage reported %s',
+                'Dark road section needs lighting repair %s',
+                'Multiple lamp posts are not working %s',
+            ],
+            'description_templates' => [
+                'The street lights %s have been out for several nights. %s %s',
+                'Residents said the road becomes very dark %s after 7 PM because the lamp posts are not turning on. %s %s',
+                'At least one lamp post %s is flickering and another is already out. %s %s',
+            ],
+        ],
+        [
+            'category' => 'Permit / Business Concern',
+            'offices' => ['Business Permit and Licensing Division'],
+            'priority_pool' => ['Low', 'Normal', 'Normal', 'High'],
+            'video_friendly' => false,
+            'title_templates' => [
+                'Business permit follow-up needed %s',
+                'Permit release delay reported %s',
+                'Licensing requirements clarification requested %s',
+            ],
+            'description_templates' => [
+                'The business owner submitted the permit requirements but has not received an update %s. %s %s',
+                'The permit release date has already passed %s and the applicant still has no clear guidance. %s %s',
+                'The applicant received different permit instructions %s and is requesting clarification. %s %s',
+            ],
+        ],
+        [
+            'category' => 'Flooding',
+            'offices' => [
+                'City Disaster Risk Reduction and Management Office',
+                "City Engineer's Office",
+            ],
+            'priority_pool' => ['High', 'High', 'Urgent', 'Urgent'],
+            'video_friendly' => true,
+            'title_templates' => [
+                'Floodwater quickly rises %s',
+                'Recurring flooding reported %s',
+                'Low-lying area needs flood mitigation %s',
+            ],
+            'description_templates' => [
+                'Floodwater enters nearby homes %s during moderate to heavy rain. %s %s',
+                'Residents said knee-deep flooding was recorded %s during the last rainfall event. %s %s',
+                'The roadway %s becomes difficult to pass whenever drainage overflows. %s %s',
+            ],
+        ],
+        [
+            'category' => 'Noise Complaint',
+            'offices' => ["City Mayor's Office", 'TOMECO (Traffic Operation)'],
+            'priority_pool' => ['Low', 'Normal', 'High'],
+            'video_friendly' => true,
+            'title_templates' => [
+                'Noise complaint filed %s',
+                'Late-night amplified sound reported %s',
+                'Repeated loud disturbance reported %s',
+            ],
+            'description_templates' => [
+                'Residents said loud noise continues past curfew %s and is affecting children and seniors. %s %s',
+                'There have been repeated complaints about amplified sound %s during late hours. %s %s',
+                'Several households reported a recurring disturbance %s that needs barangay or city coordination. %s %s',
+            ],
+        ],
+        [
+            'category' => 'Public Safety Concern',
+            'offices' => [
+                'City Disaster Risk Reduction and Management Office',
+                "City Mayor's Office",
+            ],
+            'priority_pool' => ['Normal', 'High', 'Urgent'],
+            'video_friendly' => true,
+            'title_templates' => [
+                'Public safety concern reported %s',
+                'Unsafe roadside condition needs inspection %s',
+                'Residents requesting immediate safety check %s',
+            ],
+            'description_templates' => [
+                'Residents noticed a safety hazard %s that could affect commuters and nearby homes. %s %s',
+                'An unsafe condition %s was reported and residents are requesting a quick inspection. %s %s',
+                'Community members said the affected area %s has become risky for pedestrians, especially at night. %s %s',
+            ],
+        ],
+        [
+            'category' => 'Traffic Congestion',
+            'offices' => ['TOMECO (Traffic Operation)', 'Land Transportation Office'],
+            'priority_pool' => ['Low', 'Normal', 'High'],
+            'video_friendly' => true,
+            'title_templates' => [
+                'Traffic congestion reported %s',
+                'Vehicle queue causing delays %s',
+                'Peak-hour traffic bottleneck needs review %s',
+            ],
+            'description_templates' => [
+                'Residents observed heavy traffic buildup %s during rush hour. %s %s',
+                'Vehicle queues have lengthened %s and are affecting nearby intersections. %s %s',
+                'Commuters said traffic management is needed %s because lane movement becomes very slow. %s %s',
+            ],
+        ],
+        [
+            'category' => 'Illegal Parking',
+            'offices' => ['TOMECO (Traffic Operation)'],
+            'priority_pool' => ['Low', 'Normal', 'High'],
+            'video_friendly' => true,
+            'title_templates' => [
+                'Illegal parking complaint filed %s',
+                'Vehicles blocking roadway reported %s',
+                'Parking obstruction needs enforcement %s',
+            ],
+            'description_templates' => [
+                'Parked vehicles are blocking part of the roadway %s and forcing traffic into one lane. %s %s',
+                'Residents said illegal parking persists %s even during busy hours. %s %s',
+                'The obstruction %s is making it difficult for tricycles and emergency vehicles to pass. %s %s',
+            ],
+        ],
+        [
+            'category' => 'Water Service Concern',
+            'offices' => ["City Engineer's Office", 'City Health Office'],
+            'priority_pool' => ['Normal', 'High', 'High'],
+            'video_friendly' => false,
+            'title_templates' => [
+                'Water service concern reported %s',
+                'Possible pipe leak reported %s',
+                'Residents requesting water line inspection %s',
+            ],
+            'description_templates' => [
+                'Residents noticed a possible water leak %s and the pavement stays wet even without rain. %s %s',
+                'The water line %s may be damaged because pressure has dropped in nearby homes. %s %s',
+                'There is a persistent wet patch %s that may indicate an underground leak. %s %s',
+            ],
+        ],
+        [
+            'category' => 'Public Sanitation',
+            'offices' => ['City Health Office'],
+            'priority_pool' => ['Low', 'Normal', 'High'],
+            'video_friendly' => false,
+            'title_templates' => [
+                'Sanitation issue reported %s',
+                'Unsanitary roadside condition noted %s',
+                'Area cleanup requested %s',
+            ],
+            'description_templates' => [
+                'Residents are requesting sanitation action %s because the area is attracting pests. %s %s',
+                'There is an unsanitary condition %s that may affect nearby houses and stalls. %s %s',
+                'Standing waste material %s needs cleanup and inspection. %s %s',
+            ],
+        ],
+        [
+            'category' => 'Tax / Assessment Concern',
+            'offices' => ["City Treasurer's Office", "City Assessor's Office"],
+            'priority_pool' => ['Low', 'Normal', 'Normal', 'High'],
+            'video_friendly' => false,
+            'title_templates' => [
+                'Tax or assessment record follow-up requested %s',
+                'Assessment correction concern logged %s',
+                'Payment posting concern needs review %s',
+            ],
+            'description_templates' => [
+                'The resident is requesting help with a tax or assessment concern filed %s. %s %s',
+                'There appears to be a mismatch in the property or payment record %s. %s %s',
+                'The transaction filed %s still needs verification from the assigned office. %s %s',
+            ],
+        ],
+    ];
+
+    private const IMPACT_PHRASES = [
+        'Motorists are starting to avoid the area and use the opposite lane.',
+        'Commuters said the issue is worst during school and office rush hours.',
+        'Nearby residents said the problem affects elderly residents and children the most.',
+        'The issue has already been reported to barangay officials but still needs city action.',
+        'The affected area is part of a commonly used route for market trips and school service vehicles.',
+        'The concern becomes more visible in the evening and after rain.',
+        'Residents said the issue has been recurring for several weeks.',
+    ];
+
+    private const REQUEST_PHRASES = [
+        'Please schedule an on-site inspection and advise the next action.',
+        'Please endorse this to the field team for verification.',
+        'Please provide an update that can be shared with residents waiting for action.',
+        'Please include the barangay in the coordination if immediate work is needed.',
+        'Please confirm the expected timeline for the next step.',
+        'Please assess whether temporary mitigation is needed while the permanent fix is pending.',
+    ];
+
+    private const PHOTO_URLS = [
+        ['url' => 'https://picsum.photos/seed/citytrack-road-damage/1280/720', 'original_name' => 'road-damage-demo.jpg'],
+        ['url' => 'https://picsum.photos/seed/citytrack-drainage/1280/720', 'original_name' => 'drainage-demo.jpg'],
+        ['url' => 'https://picsum.photos/seed/citytrack-garbage/1280/720', 'original_name' => 'garbage-collection-demo.jpg'],
+        ['url' => 'https://picsum.photos/seed/citytrack-streetlight/1280/720', 'original_name' => 'streetlight-demo.jpg'],
+        ['url' => 'https://picsum.photos/seed/citytrack-flooding/1280/720', 'original_name' => 'flooding-demo.jpg'],
+        ['url' => 'https://picsum.photos/seed/citytrack-traffic/1280/720', 'original_name' => 'traffic-demo.jpg'],
+        ['url' => 'https://picsum.photos/seed/citytrack-sanitation/1280/720', 'original_name' => 'sanitation-demo.jpg'],
+        ['url' => 'https://picsum.photos/seed/citytrack-safety/1280/720', 'original_name' => 'public-safety-demo.jpg'],
+    ];
+
+    private const VIDEO_URLS = [
+        ['url' => 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4', 'original_name' => 'site-inspection-demo.mp4'],
+        ['url' => 'https://www.w3schools.com/html/mov_bbb.mp4', 'original_name' => 'resident-video-demo.mp4'],
+    ];
+
+    private const STATUS_REMARKS = [
+        'Pending' => [
+            'The report has been logged and is waiting for field verification.',
+            'The complaint has been endorsed to the assigned department for initial review.',
+            'The office acknowledged the concern and is validating the submitted details.',
+        ],
+        'In Progress' => [
+            'Field personnel visited the location and started the initial intervention.',
+            'The issue has been assigned to staff and site coordination is ongoing.',
+            'Materials or crew scheduling is underway while the department completes validation.',
+        ],
+        'Resolved' => [
+            'The assigned office reported that corrective work has been completed on site.',
+            'The concern was addressed and the barangay was informed of the completed action.',
+            'Final verification was completed and the issue was marked resolved after follow-up.',
+        ],
+    ];
+
+    private const FEEDBACK_MESSAGES = [
+        'Praise' => [
+            'The department responded professionally and kept the citizen informed.',
+            'The update was clear and the follow-through was appreciated by the residents.',
+            'Thank you for resolving the concern and coordinating with the barangay.',
+        ],
+        'Suggestion' => [
+            'Please add clearer progress updates so residents know when field work will happen.',
+            'The process would improve if estimated completion windows were included in updates.',
+            'A short message after assignment would help citizens follow the complaint more easily.',
+        ],
+        'Complaint' => [
+            'The concern was acknowledged, but the response time still felt longer than expected.',
+            'The report needed more detailed updates while residents were waiting for action.',
+            'The issue improved, but citizens are still requesting closer monitoring afterward.',
+        ],
+    ];
+
+    /** @var array<string, Category> */
+    private array $categoryCache = [];
+
     public function run(): void
     {
-        $adminCount = (int) env('DEMO_ADMIN_COUNT', 20);
-        $citizenCount = (int) env('DEMO_CITIZEN_COUNT', 50);
-        $reportCount = (int) env('DEMO_REPORT_COUNT', 300);
-        $feedbackCount = (int) env('DEMO_FEEDBACK_COUNT', 300);
+        fake()->seed(20240509);
+        mt_srand(20240509);
+
+        $adminCount = (int) env('DEMO_ADMIN_COUNT', 39);
+        $citizenCount = (int) env('DEMO_CITIZEN_COUNT', 420);
+        $reportCount = (int) env('DEMO_REPORT_COUNT', 3200);
+        $feedbackCount = (int) env('DEMO_FEEDBACK_COUNT', 900);
+
+        $this->call(DatabaseSeeder::class);
+        $this->cleanupPreviousDemoDataset();
 
         $offices = Office::query()
             ->where('is_active', true)
             ->orderBy('name')
             ->get();
 
-        if ($offices->isEmpty()) {
-            $this->call(DatabaseSeeder::class);
-            $offices = Office::query()
-                ->where('is_active', true)
-                ->orderBy('name')
-                ->get();
-        }
-
-        $categories = Category::query()->orderBy('name')->get();
-
-        if ($categories->isEmpty()) {
-            $this->call(DatabaseSeeder::class);
-            $categories = Category::query()->orderBy('name')->get();
-        }
+        $this->primeCategories();
 
         $admins = $this->seedAdmins($adminCount, $offices);
         $citizens = $this->seedCitizens($citizenCount);
-        $reports = $this->seedReports($reportCount, $offices, $categories, $admins, $citizens);
-        $this->seedFeedback($feedbackCount, $reports);
+        $reportSummary = $this->seedReports($reportCount, $offices, $admins, $citizens, $feedbackCount);
 
         $this->command?->info(
-            "Demo data ready: {$adminCount} admins, {$citizenCount} citizens, {$reportCount} reports, {$feedbackCount} feedback entries."
+            sprintf(
+                'Demo dataset ready: %d admins, %d citizens, %d reports, %d attachments, %d status histories, %d admin responses, %d feedback entries, %d escalations.',
+                $admins->count(),
+                $citizens->count(),
+                $reportSummary['reports_count'],
+                $reportSummary['attachments_count'],
+                $reportSummary['status_history_count'],
+                $reportSummary['admin_response_count'],
+                $reportSummary['feedback_count'],
+                $reportSummary['escalation_count'],
+            )
         );
         $this->command?->info(
-            'Passwords: admins use ' . self::ADMIN_PASSWORD . ', citizens use ' . self::CITIZEN_PASSWORD . '.'
+            'Passwords: admins use '.self::ADMIN_PASSWORD.', citizens use '.self::CITIZEN_PASSWORD.'.'
         );
     }
 
-    private function seedAdmins(int $count, $offices)
+    private function cleanupPreviousDemoDataset(): void
+    {
+        $demoUsers = User::withTrashed()
+            ->where('email', 'like', 'demo.admin.%')
+            ->orWhere('email', 'like', 'demo.citizen.%')
+            ->get();
+
+        if ($demoUsers->isEmpty()) {
+            return;
+        }
+
+        $demoUsers->each(function (User $user): void {
+            $user->forceDelete();
+        });
+    }
+
+    private function primeCategories(): void
+    {
+        foreach (self::ISSUE_PROFILES as $profile) {
+            $category = Category::query()->firstOrCreate(
+                ['name' => $profile['category']],
+                ['description' => $profile['category'].' demonstration reports']
+            );
+
+            $this->categoryCache[$profile['category']] = $category;
+        }
+    }
+
+    private function seedAdmins(int $count, Collection $offices): Collection
     {
         $admins = collect();
         $officeCount = max(1, $offices->count());
 
         for ($index = 1; $index <= $count; $index++) {
             $office = $offices[($index - 1) % $officeCount];
-            $isDepartmentHead = (($index - 1) % $officeCount) === 0;
             $email = sprintf('demo.admin.%03d@citytrack.test', $index);
-
-            $admin = User::withTrashed()->updateOrCreate(
+            $admin = User::query()->updateOrCreate(
                 ['email' => $email],
                 [
-                    'name' => $this->personName(self::ADMIN_NAMES, $index),
+                    'name' => $this->fullName($index + 100),
                     'mobile_number' => sprintf('0918%07d', $index),
                     'password' => self::ADMIN_PASSWORD,
                     'role' => 'admin',
                     'department' => $office->name,
-                    'job_title' => $isDepartmentHead
+                    'job_title' => (($index - 1) % $officeCount) === 0
                         ? 'Department Head'
-                        : $this->jobTitleFor($index),
+                        : $this->adminJobTitle($index),
                     'is_active' => true,
                 ]
             );
-
-            if ($admin->trashed()) {
-                $admin->restore();
-            }
 
             $admins->push($admin);
         }
@@ -541,17 +642,16 @@ class DemoVolumeSeeder extends Seeder
         return $admins;
     }
 
-    private function seedCitizens(int $count)
+    private function seedCitizens(int $count): Collection
     {
         $citizens = collect();
 
         for ($index = 1; $index <= $count; $index++) {
-            $email = sprintf('demo.citizen.%03d@example.com', $index);
-
-            $citizen = User::withTrashed()->updateOrCreate(
+            $email = sprintf('demo.citizen.%04d@example.com', $index);
+            $citizen = User::query()->updateOrCreate(
                 ['email' => $email],
                 [
-                    'name' => $this->personName(self::CITIZEN_NAMES, $index),
+                    'name' => $this->fullName($index),
                     'mobile_number' => sprintf('0927%07d', $index),
                     'password' => self::CITIZEN_PASSWORD,
                     'role' => 'citizen',
@@ -561,192 +661,433 @@ class DemoVolumeSeeder extends Seeder
                 ]
             );
 
-            if ($citizen->trashed()) {
-                $citizen->restore();
-            }
-
             $citizens->push($citizen);
         }
 
         return $citizens;
     }
 
-    private function seedReports(int $count, $offices, $categories, $admins, $citizens)
-    {
-        $barangays = [
-            'Barangay 1 (Libertad)',
-            'Barangay 12 (GE Palanog)',
-            'Barangay 36 (Sabang)',
-            'Barangay 49 (Youngfield)',
-            'Barangay 60-A (Sagkahan)',
-            'Barangay 78 (Marasbaras)',
-            'Barangay 83-C (San Jose)',
-            'Barangay 91 (Abucay)',
-            'Barangay 95-A (Caibaan)',
-            'Barangay 109 (V&G Subdivision)',
-        ];
-        $statuses = ['New', 'Pending', 'In Progress', 'Resolved', 'Rejected'];
-        $priorities = ['Low', 'Normal', 'High', 'Urgent'];
-        $officeCount = max(1, $offices->count());
-        $citizenCount = max(1, $citizens->count());
-        $reports = collect();
+    private function seedReports(
+        int $count,
+        Collection $offices,
+        Collection $admins,
+        Collection $citizens,
+        int $feedbackLimit
+    ): array {
+        $officeByName = $offices->keyBy('name');
+        $allAdmins = $admins->values();
+        $adminsByDepartment = $admins->groupBy('department')->map(
+            fn (Collection $departmentAdmins) => $departmentAdmins->values()
+        );
+
+        $imageRows = [];
+        $statusHistoryRows = [];
+        $adminResponseRows = [];
+        $feedbackRows = [];
+        $escalationRows = [];
 
         for ($index = 1; $index <= $count; $index++) {
-            $office = $offices[($index - 1) % $officeCount];
-            $category = $this->categoryForOffice($office->name, $index, $categories);
-            $citizen = $citizens[($index - 1) % $citizenCount];
-            $departmentAdmins = $admins
-                ->where('department', $office->name)
-                ->values();
-            $assignee = $departmentAdmins->isEmpty()
-                ? null
-                : $departmentAdmins[($index - 1) % $departmentAdmins->count()];
-            $status = $statuses[($index - 1) % count($statuses)];
-            $createdAt = Carbon::now()->subDays($index % 45)->subMinutes($index * 3);
-            $legacyTitle = sprintf('Demo Report %03d - %s', $index, $office->code ?? $office->id);
-            $reportTitle = $this->reportTitle($category->name, $barangays[($index - 1) % count($barangays)], $index);
-            $reportDescription = $this->reportDescription($category->name, $office->name, $index);
+            $profile = $this->issueProfileForIndex($index);
+            $officeName = $this->pickFrom($profile['offices'], $index + 3);
+            $office = $officeByName->get($officeName) ?? $offices->first();
+            $category = $this->categoryCache[$profile['category']];
+            $citizen = $citizens[($index * 11) % max(1, $citizens->count())];
+            $departmentAdmins = $adminsByDepartment->get($office->name, collect());
 
-            $report = Report::query()
-                ->where('title', $legacyTitle)
-                ->orWhere('title', $reportTitle)
-                ->first();
-
-            if (! $report) {
-                $report = new Report();
+            if ($departmentAdmins->isEmpty()) {
+                $departmentAdmins = $allAdmins;
             }
 
-            $report->fill([
+            $reviewer = $departmentAdmins->first(
+                fn (User $admin) => $admin->isDepartmentHead()
+            ) ?? $departmentAdmins->first();
+            $assignee = $departmentAdmins->isEmpty()
+                ? null
+                : $departmentAdmins[($index * 5) % $departmentAdmins->count()];
+            $barangayProfile = $this->barangayProfileForIndex($index);
+            $spot = $this->pickFrom($barangayProfile['spots'], $index + 5);
+            $status = $this->statusForIndex($index);
+            $priority = $this->pickFrom($profile['priority_pool'], $index + 7);
+            $createdAt = $this->historicalCreatedAt($index);
+            $transitions = $this->buildTransitions(
+                $status,
+                $createdAt,
+                $reviewer,
+                $assignee,
+                $index
+            );
+            $latestTransition = empty($transitions)
+                ? null
+                : $transitions[count($transitions) - 1];
+            $resolvedAt = $status === 'Resolved'
+                ? Carbon::parse($latestTransition['happened_at'])
+                : null;
+            $updatedAt = $resolvedAt
+                ?? ($latestTransition
+                    ? Carbon::parse($latestTransition['happened_at'])
+                    : $createdAt->copy()->addHours(2 + ($index % 10)));
+
+            $report = new Report([
                 'user_id' => $citizen->id,
                 'category_id' => $category->id,
                 'office_id' => $office->id,
-                'title' => $reportTitle,
-                'description' => $reportDescription,
-                'location' => $barangays[($index - 1) % count($barangays)] . ', Tacloban City',
-                'barangay' => $barangays[($index - 1) % count($barangays)],
-                'latitude' => 11.2400 + (($index % 70) / 10000),
-                'longitude' => 125.0000 + (($index % 90) / 10000),
+                'title' => $this->buildReportTitle($profile, $spot, $index),
+                'description' => $this->buildReportDescription(
+                    $profile,
+                    $spot,
+                    $office->name,
+                    $index
+                ),
+                'location' => $spot.', '.$barangayProfile['barangay'].', Tacloban City',
+                'barangay' => $barangayProfile['barangay'],
+                'latitude' => $barangayProfile['latitude'] + (($index % 9) * 0.00021),
+                'longitude' => $barangayProfile['longitude'] + (($index % 7) * 0.00019),
                 'status' => $status,
-                'priority' => $priorities[($index - 1) % count($priorities)],
-                'assigned_to' => in_array($status, ['In Progress', 'Resolved'], true)
+                'priority' => $priority,
+                'assigned_to' => in_array($status, ['Pending', 'In Progress', 'Resolved'], true)
                     ? $assignee?->id
                     : null,
-                'resolved_at' => $status === 'Resolved'
-                    ? $createdAt->copy()->addDays(2)
-                    : null,
+                'resolved_at' => $resolvedAt,
             ]);
             $report->created_at = $createdAt;
-            $report->updated_at = $status === 'Resolved'
-                ? $createdAt->copy()->addDays(2)
-                : $createdAt->copy()->addHours($index % 72);
+            $report->updated_at = $updatedAt;
             $report->save();
-            $reports->push($report);
+
+            foreach ($this->attachmentRowsForReport($report->id, $profile, $index) as $attachmentRow) {
+                $imageRows[] = $attachmentRow;
+            }
+
+            foreach ($transitions as $transition) {
+                $statusHistoryRows[] = [
+                    'report_id' => $report->id,
+                    'old_status' => $transition['old_status'],
+                    'new_status' => $transition['new_status'],
+                    'remarks' => $transition['remarks'],
+                    'updated_by' => $transition['updated_by'],
+                    'created_at' => $transition['happened_at'],
+                    'updated_at' => $transition['happened_at'],
+                ];
+            }
+
+            if ($latestTransition !== null) {
+                $adminResponseRows[] = [
+                    'report_id' => $report->id,
+                    'user_id' => $latestTransition['updated_by'],
+                    'response' => $latestTransition['remarks'],
+                    'created_at' => $latestTransition['happened_at'],
+                    'updated_at' => $latestTransition['happened_at'],
+                ];
+            }
+
+            if (
+                $status === 'Resolved'
+                && count($feedbackRows) < $feedbackLimit
+                && ($index % 2 === 0)
+            ) {
+                $feedbackType = $this->feedbackTypeForIndex($index);
+                $feedbackAt = $resolvedAt?->copy()->addHours(3 + ($index % 9))
+                    ?? $updatedAt->copy()->addHours(4);
+                $feedbackRows[] = [
+                    'user_id' => $citizen->id,
+                    'office_id' => $office->id,
+                    'report_id' => $report->id,
+                    'type' => $feedbackType,
+                    'message' => $this->feedbackMessage($feedbackType, $report->title, $office->name, $index),
+                    'rating' => $this->feedbackRating($feedbackType, $index),
+                    'created_at' => $feedbackAt,
+                    'updated_at' => $feedbackAt,
+                ];
+            }
+
+            if (
+                $status !== 'Resolved'
+                && in_array($priority, ['High', 'Urgent'], true)
+                && $reviewer !== null
+                && ($index % 14 === 0)
+            ) {
+                $escalatedAt = $updatedAt->copy()->addHours(96 + ($index % 24));
+                $escalationStatus = $status === 'In Progress'
+                    ? (($index % 3 === 0) ? 'Intervened' : 'Acknowledged')
+                    : 'Open';
+
+                $escalationRows[] = [
+                    'report_id' => $report->id,
+                    'status' => $escalationStatus,
+                    'notes' => 'Escalated for demonstration because the concern remained unresolved beyond the expected response window.',
+                    'escalated_at' => $escalatedAt,
+                    'last_action_at' => $escalatedAt,
+                    'acted_by' => $reviewer->id,
+                    'created_at' => $escalatedAt,
+                    'updated_at' => $escalatedAt,
+                ];
+            }
         }
 
-        return $reports;
+        $this->insertInChunks(ReportImage::query(), $imageRows);
+        $this->insertInChunks(StatusHistory::query(), $statusHistoryRows);
+        $this->insertInChunks(AdminResponse::query(), $adminResponseRows);
+        $this->insertInChunks(CitizenFeedback::query(), $feedbackRows);
+        $this->insertInChunks(ReportEscalation::query(), $escalationRows);
+
+        return [
+            'reports_count' => $count,
+            'attachments_count' => count($imageRows),
+            'status_history_count' => count($statusHistoryRows),
+            'admin_response_count' => count($adminResponseRows),
+            'feedback_count' => count($feedbackRows),
+            'escalation_count' => count($escalationRows),
+        ];
     }
 
-    private function seedFeedback(int $count, $reports): void
+    private function insertInChunks($query, array $rows): void
     {
-        if ($reports->isEmpty()) {
+        if ($rows === []) {
             return;
         }
 
-        $types = ['Praise', 'Suggestion', 'Complaint'];
-        $reportCount = max(1, $reports->count());
-
-        for ($index = 1; $index <= $count; $index++) {
-            $report = $reports[($index - 1) % $reportCount]->fresh(['user', 'office', 'category']);
-
-            if (! $report || ! $report->user_id || ! $report->office_id) {
-                continue;
-            }
-
-            $type = $types[($index - 1) % count($types)];
-            $rating = match ($type) {
-                'Praise' => 5,
-                'Suggestion' => 4,
-                default => 2 + ($index % 2),
-            };
-            $createdAt = Carbon::parse($report->updated_at ?? $report->created_at)
-                ->addHours(($index % 48) + 1);
-
-            $feedback = CitizenFeedback::query()->firstOrNew([
-                'user_id' => $report->user_id,
-                'report_id' => $report->id,
-                'type' => $type,
-            ]);
-            $feedback->fill([
-                'office_id' => $report->office_id,
-                'message' => $this->feedbackMessage($type, $report, $index),
-                'rating' => $rating,
-            ]);
-            $feedback->created_at = $createdAt;
-            $feedback->updated_at = $createdAt;
-            $feedback->save();
+        foreach (array_chunk($rows, 500) as $chunk) {
+            $query->insert($chunk);
         }
     }
 
-    private function reportTitle(string $categoryName, string $barangay, int $index): string
-    {
-        $details = self::REPORT_DETAILS[$categoryName] ?? null;
-        $baseTitle = $details['title'] ?? $categoryName . ' concern for city action';
+    private function buildTransitions(
+        string $status,
+        Carbon $createdAt,
+        ?User $reviewer,
+        ?User $assignee,
+        int $index
+    ): array {
+        if ($status === 'New' || $reviewer === null) {
+            return [];
+        }
 
-        return $baseTitle . ' - ' . $barangay . ' #' . str_pad((string) $index, 3, '0', STR_PAD_LEFT);
+        $transitions = [];
+        $pendingAt = $this->clampToDemoEnd($createdAt->copy()->addHours(4 + ($index % 18)));
+        $transitions[] = [
+            'old_status' => 'New',
+            'new_status' => 'Pending',
+            'remarks' => $this->statusRemark('Pending', $index),
+            'updated_by' => $reviewer->id,
+            'happened_at' => $pendingAt,
+        ];
+
+        if ($status === 'Pending') {
+            return $transitions;
+        }
+
+        $progressActor = $assignee ?? $reviewer;
+        $inProgressAt = $this->clampToDemoEnd($pendingAt->copy()->addHours(18 + (($index * 3) % 72)));
+        $transitions[] = [
+            'old_status' => 'Pending',
+            'new_status' => 'In Progress',
+            'remarks' => $this->statusRemark('In Progress', $index),
+            'updated_by' => $progressActor->id,
+            'happened_at' => $inProgressAt,
+        ];
+
+        if ($status === 'In Progress') {
+            return $transitions;
+        }
+
+        $resolvedAt = $this->clampToDemoEnd($inProgressAt->copy()->addHours(24 + (($index * 5) % 168)));
+        $transitions[] = [
+            'old_status' => 'In Progress',
+            'new_status' => 'Resolved',
+            'remarks' => $this->statusRemark('Resolved', $index),
+            'updated_by' => $progressActor->id,
+            'happened_at' => $resolvedAt,
+        ];
+
+        return $transitions;
     }
 
-    private function reportDescription(string $categoryName, string $officeName, int $index): string
+    private function attachmentRowsForReport(int $reportId, array $profile, int $index): array
     {
-        $details = self::REPORT_DETAILS[$categoryName] ?? null;
-        $description = $details['description'] ?? 'A resident submitted this concern and is requesting proper action from the assigned city office.';
+        $pattern = $index % 10;
+        $attachments = [];
+        $timestamp = $this->historicalCreatedAt($index)->copy()->addMinutes(15);
 
-        return $description . ' This report is assigned to ' . $officeName . ' for validation and follow up. Reference no. ' . str_pad((string) $index, 3, '0', STR_PAD_LEFT) . '.';
+        if (in_array($pattern, [0, 1, 2], true)) {
+            $attachments[] = $this->imageAttachmentRow($reportId, $index, $timestamp);
+        } elseif ($pattern === 3) {
+            $attachments[] = $this->imageAttachmentRow($reportId, $index, $timestamp);
+            $attachments[] = $this->imageAttachmentRow($reportId, $index + 1, $timestamp->copy()->addMinutes(1));
+        } elseif ($pattern === 4 && ($profile['video_friendly'] ?? false)) {
+            $attachments[] = $this->imageAttachmentRow($reportId, $index, $timestamp);
+            $attachments[] = $this->videoAttachmentRow($reportId, $index, $timestamp->copy()->addMinutes(2));
+        } elseif ($pattern === 5 && ($profile['video_friendly'] ?? false)) {
+            $attachments[] = $this->videoAttachmentRow($reportId, $index, $timestamp);
+        }
+
+        return $attachments;
     }
 
-    private function feedbackMessage(string $type, Report $report, int $index): string
+    private function imageAttachmentRow(int $reportId, int $index, Carbon $timestamp): array
     {
-        $messages = self::FEEDBACK_MESSAGES[$type] ?? self::FEEDBACK_MESSAGES['Suggestion'];
-        $message = $messages[($index - 1) % count($messages)];
-        $officeName = $report->office?->name ?? 'the assigned department';
-        $reportTitle = $report->title ?: 'the submitted report';
+        $asset = $this->pickFrom(self::PHOTO_URLS, $index);
 
-        return $message . ' Related report: "' . $reportTitle . '" handled by ' . $officeName . '.';
+        return [
+            'report_id' => $reportId,
+            'image_path' => $asset['url'],
+            'media_type' => 'image',
+            'original_name' => $asset['original_name'],
+            'created_at' => $timestamp,
+            'updated_at' => $timestamp,
+        ];
     }
 
-    private function jobTitleFor(int $index): string
+    private function videoAttachmentRow(int $reportId, int $index, Carbon $timestamp): array
+    {
+        $asset = $this->pickFrom(self::VIDEO_URLS, $index);
+
+        return [
+            'report_id' => $reportId,
+            'image_path' => $asset['url'],
+            'media_type' => 'video',
+            'original_name' => $asset['original_name'],
+            'created_at' => $timestamp,
+            'updated_at' => $timestamp,
+        ];
+    }
+
+    private function buildReportTitle(array $profile, string $spot, int $index): string
+    {
+        $template = $this->pickFrom($profile['title_templates'], $index);
+
+        return sprintf($template, $spot);
+    }
+
+    private function buildReportDescription(
+        array $profile,
+        string $spot,
+        string $officeName,
+        int $index
+    ): string {
+        $template = $this->pickFrom($profile['description_templates'], $index + 1);
+        $impact = $this->pickFrom(self::IMPACT_PHRASES, $index + 2);
+        $request = $this->pickFrom(self::REQUEST_PHRASES, $index + 4);
+
+        return sprintf($template, $spot, $impact, $request)
+            .' Assigned office: '.$officeName.'.';
+    }
+
+    private function fullName(int $index): string
+    {
+        $firstName = $this->pickFrom(self::FIRST_NAMES, $index);
+        $lastName = $this->pickFrom(self::LAST_NAMES, $index * 3);
+
+        return $firstName.' '.$lastName;
+    }
+
+    private function adminJobTitle(int $index): string
     {
         return match ($index % 4) {
-            0 => 'Field Engineer',
-            1 => 'Administrator',
-            2 => 'Maintenance Crew',
+            0 => 'Field Coordinator',
+            1 => 'Operations Officer',
+            2 => 'Inspection Staff',
             default => 'Department Staff',
         };
     }
 
-    private function categoryForOffice(string $officeName, int $index, $fallbackCategories): Category
+    private function issueProfileForIndex(int $index): array
     {
-        $issueTypes = self::OFFICE_ISSUE_TYPES[$officeName] ?? [];
-
-        if ($issueTypes === []) {
-            $categoryCount = max(1, $fallbackCategories->count());
-
-            return $fallbackCategories[($index - 1) % $categoryCount];
-        }
-
-        $name = $issueTypes[($index - 1) % count($issueTypes)];
-
-        return Category::query()->firstOrCreate(
-            ['name' => $name],
-            ['description' => $name . ' reports for ' . $officeName]
-        );
+        return self::ISSUE_PROFILES[(($index * 7) + 3) % count(self::ISSUE_PROFILES)];
     }
 
-    private function personName(array $names, int $index): string
+    private function barangayProfileForIndex(int $index): array
     {
-        if ($names === []) {
-            return 'Juan Dela Cruz';
-        }
+        return self::BARANGAY_PROFILES[(($index * 13) + 5) % count(self::BARANGAY_PROFILES)];
+    }
 
-        return $names[($index - 1) % count($names)];
+    private function statusForIndex(int $index): string
+    {
+        $bucket = ($index - 1) % 25;
+
+        return match (true) {
+            $bucket < 5 => 'New',
+            $bucket < 11 => 'Pending',
+            $bucket < 19 => 'In Progress',
+            default => 'Resolved',
+        };
+    }
+
+    private function statusRemark(string $status, int $index): string
+    {
+        return $this->pickFrom(self::STATUS_REMARKS[$status] ?? self::STATUS_REMARKS['Pending'], $index);
+    }
+
+    private function feedbackTypeForIndex(int $index): string
+    {
+        return $this->pickFrom(['Praise', 'Suggestion', 'Complaint'], $index + 2);
+    }
+
+    private function feedbackRating(string $type, int $index): int
+    {
+        return match ($type) {
+            'Praise' => 5,
+            'Suggestion' => 4,
+            default => 2 + ($index % 2),
+        };
+    }
+
+    private function feedbackMessage(string $type, string $reportTitle, string $officeName, int $index): string
+    {
+        $base = $this->pickFrom(self::FEEDBACK_MESSAGES[$type] ?? self::FEEDBACK_MESSAGES['Suggestion'], $index);
+
+        return $base.' Related report: "'.$reportTitle.'" handled by '.$officeName.'.';
+    }
+
+    private function historicalCreatedAt(int $index): Carbon
+    {
+        $start = Carbon::create(
+            self::DEMO_START[0],
+            self::DEMO_START[1],
+            self::DEMO_START[2],
+            7,
+            0,
+            0,
+            'Asia/Manila'
+        );
+        $end = Carbon::create(
+            self::DEMO_END[0],
+            self::DEMO_END[1],
+            self::DEMO_END[2],
+            18,
+            0,
+            0,
+            'Asia/Manila'
+        );
+        $totalDays = $start->diffInDays($end) + 1;
+        $dayOffset = (($index * 37) + intdiv($index, 5)) % $totalDays;
+        $hour = 6 + (($index * 7) % 12);
+        $minute = ($index * 13) % 60;
+
+        return $start->copy()->addDays($dayOffset)->setTime($hour, $minute);
+    }
+
+    private function clampToDemoEnd(Carbon $timestamp): Carbon
+    {
+        $end = Carbon::create(
+            self::DEMO_END[0],
+            self::DEMO_END[1],
+            self::DEMO_END[2],
+            23,
+            45,
+            0,
+            'Asia/Manila'
+        );
+
+        return $timestamp->greaterThan($end) ? $end->copy() : $timestamp;
+    }
+
+    /**
+     * @template T
+     *
+     * @param  array<int, T>  $items
+     * @return T
+     */
+    private function pickFrom(array $items, int $index)
+    {
+        return $items[$index % count($items)];
     }
 }

@@ -65,18 +65,32 @@ class ReportImageUploadTest extends TestCase
         ])->assertForbidden();
     }
 
-    public function test_video_upload_is_rejected_now_that_only_photos_are_allowed(): void
+    public function test_citizen_can_upload_a_video_attachment_to_their_own_report(): void
     {
         Storage::fake('public');
 
         [$citizen, $report] = $this->seedCitizenReport();
         Sanctum::actingAs($citizen);
 
-        $this->postJson("/api/reports/{$report->id}/images", [
+        $response = $this->postJson("/api/reports/{$report->id}/images", [
             'media' => UploadedFile::fake()->create('evidence.mp4', 256, 'video/mp4'),
-        ])
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors('media');
+        ]);
+
+        $response
+            ->assertCreated()
+            ->assertJsonPath('image.report_id', $report->id)
+            ->assertJsonPath('image.media_type', 'video')
+            ->assertJsonPath('image.original_name', 'evidence.mp4');
+
+        $storedPath = $response->json('image.image_path');
+
+        Storage::disk('public')->assertExists($storedPath);
+        $this->assertDatabaseHas('report_images', [
+            'report_id' => $report->id,
+            'image_path' => $storedPath,
+            'media_type' => 'video',
+            'original_name' => 'evidence.mp4',
+        ]);
     }
 
     public function test_report_detail_includes_uploaded_photo_metadata(): void
@@ -117,7 +131,7 @@ class ReportImageUploadTest extends TestCase
             ->assertHeader('content-type', 'image/png');
     }
 
-    public function test_citizen_can_create_a_report_with_photos_in_a_single_request(): void
+    public function test_citizen_can_create_a_report_with_mixed_media_in_a_single_request(): void
     {
         Storage::fake('public');
 
@@ -132,7 +146,7 @@ class ReportImageUploadTest extends TestCase
             [
                 'media' => [
                     $this->fakePngUpload('inline-evidence-1.png'),
-                    $this->fakePngUpload('inline-evidence-2.png'),
+                    UploadedFile::fake()->create('inline-evidence-2.mp4', 256, 'video/mp4'),
                 ],
             ]
         ));
@@ -141,7 +155,7 @@ class ReportImageUploadTest extends TestCase
             ->assertCreated()
             ->assertJsonCount(2, 'report.images')
             ->assertJsonPath('report.images.0.media_type', 'image')
-            ->assertJsonPath('report.images.1.media_type', 'image');
+            ->assertJsonPath('report.images.1.media_type', 'video');
 
         $imagePaths = $response->json('report.images.*.image_path');
 

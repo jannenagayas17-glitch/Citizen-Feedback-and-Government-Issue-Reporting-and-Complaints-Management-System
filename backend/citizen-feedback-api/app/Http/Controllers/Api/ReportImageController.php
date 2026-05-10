@@ -11,6 +11,9 @@ use Illuminate\Validation\Rules\File;
 
 class ReportImageController extends Controller
 {
+    private const MEDIA_MAX_KB = 50 * 1024;
+    private const MEDIA_TYPES = ['jpg', 'jpeg', 'png', 'mp4', 'mov', 'avi', 'webm', '3gp', 'm4v'];
+
     public function show(string $path)
     {
         $normalizedPath = ltrim($path, '/');
@@ -24,7 +27,7 @@ class ReportImageController extends Controller
         }
 
         if (! Storage::disk('public')->exists($normalizedPath)) {
-            abort(404, 'Image not found.');
+            abort(404, 'Attachment not found.');
         }
 
         return response()->file(Storage::disk('public')->path($normalizedPath));
@@ -38,17 +41,17 @@ class ReportImageController extends Controller
         $request->validate([
             'media' => [
                 'required',
-                File::types(['jpg', 'jpeg', 'png'])
-                    ->max(50 * 1024),
+                File::types(self::MEDIA_TYPES)
+                    ->max(self::MEDIA_MAX_KB),
             ],
         ], [
-            'media.required' => 'Please attach a photo before submitting.',
-            'media.types' => 'Attachments must be JPG or PNG photos only.',
+            'media.required' => 'Please attach a photo or video before submitting.',
+            'media.types' => 'Attachments must be JPG, PNG, or video files.',
             'media.max' => 'Attachments must be 50MB or smaller.',
         ]);
 
         $file = $request->file('media');
-        $mediaType = 'image';
+        $mediaType = $this->mediaTypeForFile($file);
         $path = $file->store('report_images', 'public');
 
         $reportImage = ReportImage::create([
@@ -93,5 +96,12 @@ class ReportImageController extends Controller
         }
 
         abort(403, 'Unauthorized action.');
+    }
+
+    private function mediaTypeForFile(\Illuminate\Http\UploadedFile $file): string
+    {
+        $mimeType = strtolower((string) $file->getMimeType());
+
+        return str_starts_with($mimeType, 'video/') ? 'video' : 'image';
     }
 }

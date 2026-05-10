@@ -58,13 +58,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
       } else {
         CitizenDataCache.invalidateReports();
       }
-      setState(() {
-        _payloadFuture = CitizenDataCache.getHomePayload();
-      });
-      CitizenDataCache.getHomePayload(refresh: true).then((payload) {
-        if (!mounted) return;
-        setState(() => _payloadFuture = Future.value(payload));
-      });
+      await _refresh();
     }
   }
 

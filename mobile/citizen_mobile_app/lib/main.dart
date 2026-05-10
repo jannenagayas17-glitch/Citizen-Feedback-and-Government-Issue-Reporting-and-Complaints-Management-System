@@ -2,12 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 
 import 'firebase_options.dart';
-import 'screens/auth/login_screen.dart';
-import 'screens/citizen/citizen_home_screen.dart';
-import 'services/auth_service.dart';
 import 'utils/app_routes.dart';
 import 'utils/app_theme_controller.dart';
-import 'utils/token_storage.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -58,77 +54,10 @@ class MyApp extends StatelessWidget {
               useMaterial3: true,
               scaffoldBackgroundColor: const Color(0xFF0C1727),
             ),
-            home: const _StartupGate(),
+            initialRoute: AppRoutes.splash,
             routes: AppRoutes.routes,
           );
         },
-      ),
-    );
-  }
-}
-
-class _StartupGate extends StatelessWidget {
-  const _StartupGate();
-
-  Future<Widget> _resolveStartScreen(AppThemeController themeController) async {
-    final token = await TokenStorage.getToken();
-    final role = (await TokenStorage.getRole())?.trim().toLowerCase();
-
-    if (token == null || token.isEmpty) {
-      return const LoginScreen();
-    }
-
-    if (role != 'citizen') {
-      await TokenStorage.clearAll();
-      return const LoginScreen();
-    }
-
-    try {
-      final user = await AuthService().getCurrentUser().timeout(
-        const Duration(seconds: 6),
-      );
-      await themeController.loadForUser(user);
-    } catch (_) {
-      await TokenStorage.clearAll();
-      return const LoginScreen();
-    }
-
-    return const CitizenHomeScreen();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final themeController = AppThemeScope.of(context);
-
-    return FutureBuilder<Widget>(
-      future: _resolveStartScreen(themeController),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const _StartupLoading();
-        }
-
-        return snapshot.data ?? const LoginScreen();
-      },
-    );
-  }
-}
-
-class _StartupLoading extends StatelessWidget {
-  const _StartupLoading();
-
-  @override
-  Widget build(BuildContext context) {
-    return const ColoredBox(
-      color: Color(0xFF0C1727),
-      child: Center(
-        child: SizedBox(
-          width: 28,
-          height: 28,
-          child: CircularProgressIndicator(
-            strokeWidth: 2.6,
-            color: Color(0xFF93C5FD),
-          ),
-        ),
       ),
     );
   }

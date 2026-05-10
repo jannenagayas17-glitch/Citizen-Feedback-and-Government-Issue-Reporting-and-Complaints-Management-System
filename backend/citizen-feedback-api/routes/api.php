@@ -1,18 +1,17 @@
 <?php
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Route;
-
 use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\PasswordResetController;
-use App\Http\Controllers\Api\OfficeController;
 use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\CitizenFeedbackController;
+use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\EscalationController;
+use App\Http\Controllers\Api\OfficeController;
+use App\Http\Controllers\Api\PasswordResetController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\ReportImageController;
-use App\Http\Controllers\Api\DashboardController;
-use App\Http\Controllers\Api\CitizenFeedbackController;
 use App\Http\Controllers\Api\SystemSettingController;
-use App\Http\Controllers\Api\EscalationController;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
@@ -38,7 +37,6 @@ Route::prefix('auth')->group(function () {
 
 });
 
-
 /*
 |--------------------------------------------------------------------------
 | Password Reset Routes
@@ -48,8 +46,6 @@ Route::prefix('auth')->group(function () {
 Route::post('/forgot-password', [PasswordResetController::class, 'sendResetLink']);
 
 Route::post('/reset-password', [PasswordResetController::class, 'resetPassword']);
-
-
 
 /*
 |--------------------------------------------------------------------------
@@ -61,8 +57,6 @@ Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/offices', [OfficeController::class, 'index']);
 Route::get('/report-images/{path}', [ReportImageController::class, 'show'])
     ->where('path', '.*');
-
-
 
 /*
 |--------------------------------------------------------------------------
@@ -87,7 +81,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/logout', [AuthController::class, 'logout']);
 
-
     /*
     |--------------------------------------------------------------------------
     | Reports / Complaints
@@ -111,7 +104,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/export', [CitizenFeedbackController::class, 'export']);
     });
 
-
     /*
     |--------------------------------------------------------------------------
     | Dashboard
@@ -120,7 +112,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/dashboard', [DashboardController::class, 'index']);
     Route::get('/admin/analytics', [DashboardController::class, 'analytics']);
-
 
     /*
     |--------------------------------------------------------------------------
@@ -145,7 +136,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/reactivate-account/{id}', [AuthController::class, 'reactivateAccount']);
         Route::delete('/delete-account/{id}', [AuthController::class, 'deleteAccount']);
         Route::get('/settings', [SystemSettingController::class, 'show']);
-        Route::put('/settings', [SystemSettingController::class, 'update']);
+        Route::match(['put', 'post'], '/settings', [SystemSettingController::class, 'update'])
+            ->name('api/admin/settings');
         Route::get('/escalations', [EscalationController::class, 'index']);
         Route::post('/escalations/{report}', [EscalationController::class, 'update']);
 

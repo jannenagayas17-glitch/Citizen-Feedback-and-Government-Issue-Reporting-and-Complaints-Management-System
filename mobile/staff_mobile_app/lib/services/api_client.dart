@@ -20,16 +20,34 @@ class ApiClient {
     return headers;
   }
 
-  Uri buildUri(String endpoint) {
-    return Uri.parse('${ApiConfig.baseUrl}$endpoint');
+  Uri buildUri(String endpoint, {Map<String, dynamic>? queryParameters}) {
+    final uri = Uri.parse('${ApiConfig.baseUrl}$endpoint');
+    if (queryParameters == null || queryParameters.isEmpty) {
+      return uri;
+    }
+
+    final filtered = <String, String>{};
+    queryParameters.forEach((key, value) {
+      if (value == null) return;
+      final normalized = value.toString().trim();
+      if (normalized.isEmpty) return;
+      filtered[key] = normalized;
+    });
+
+    if (filtered.isEmpty) {
+      return uri;
+    }
+
+    return uri.replace(queryParameters: filtered);
   }
 
   Future<http.Response> get(
     String endpoint, {
     bool authRequired = false,
+    Map<String, dynamic>? queryParameters,
   }) async {
     return await http.get(
-      buildUri(endpoint),
+      buildUri(endpoint, queryParameters: queryParameters),
       headers: await getHeaders(authRequired: authRequired),
     );
   }

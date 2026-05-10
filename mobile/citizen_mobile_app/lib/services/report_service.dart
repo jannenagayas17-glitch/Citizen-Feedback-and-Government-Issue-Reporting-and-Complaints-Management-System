@@ -356,21 +356,37 @@ class ReportService {
     double? latitude,
     double? longitude,
   }) {
-    return <String, dynamic>{
-      'category_id': ?categoryId,
-      if (categoryName != null && categoryName.trim().isNotEmpty)
-        'category_name': categoryName.trim(),
-      'office_id': ?officeId,
+    final normalizedCategoryName = categoryName?.trim();
+    final normalizedBarangay = barangay?.trim();
+    final normalizedPriority = priority?.trim();
+    final categoryNameValue =
+        normalizedCategoryName == null || normalizedCategoryName.isEmpty
+        ? null
+        : normalizedCategoryName;
+    final barangayValue =
+        normalizedBarangay == null || normalizedBarangay.isEmpty
+        ? null
+        : normalizedBarangay;
+    final priorityValue =
+        normalizedPriority == null || normalizedPriority.isEmpty
+        ? null
+        : normalizedPriority;
+
+    final payload = <String, dynamic>{
       'title': title,
       'description': description,
       'location': location,
-      if (barangay != null && barangay.trim().isNotEmpty)
-        'barangay': barangay.trim(),
-      if (priority != null && priority.trim().isNotEmpty)
-        'priority': priority.trim(),
-      'latitude': ?latitude,
-      'longitude': ?longitude,
     };
+
+    if (categoryId != null) payload['category_id'] = categoryId;
+    if (categoryNameValue != null) payload['category_name'] = categoryNameValue;
+    if (officeId != null) payload['office_id'] = officeId;
+    if (barangayValue != null) payload['barangay'] = barangayValue;
+    if (priorityValue != null) payload['priority'] = priorityValue;
+    if (latitude != null) payload['latitude'] = latitude;
+    if (longitude != null) payload['longitude'] = longitude;
+
+    return payload;
   }
 
   List<dynamic> _decodeListResponse(

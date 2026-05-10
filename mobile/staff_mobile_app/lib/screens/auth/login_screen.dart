@@ -87,6 +87,14 @@ class _LoginScreenState extends State<LoginScreen> {
     _passwordError = null;
   }
 
+  Future<void> _resetGoogleSession() async {
+    try {
+      await _resolvedGoogleAuthService.signOut();
+    } catch (_) {
+      // Keep the login flow resilient even if Firebase cleanup fails.
+    }
+  }
+
   Future<void> _loadSavedEmailForMode() async {
     if (_isSuperAdminEmailLocked) {
       _emailController.text = _resolvedSuperAdminEmail;
@@ -180,6 +188,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       if (user == null) {
+        await _resetGoogleSession();
         _showSnackBar('Google sign-in failed');
         return;
       }
@@ -192,6 +201,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final data = await _authService.loginWithGoogle(
         idToken: idToken,
+        roleHint: 'admin',
         email: user.email,
         name: user.displayName,
       );
@@ -201,6 +211,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       if (!_isAllowedForSelection(role)) {
+        await _resetGoogleSession();
         await TokenStorage.clearAll();
         _showSnackBar(_modeConfig.unauthorizedMessage);
         return;
@@ -217,6 +228,7 @@ class _LoginScreenState extends State<LoginScreen> {
       AuthRedirect.goToRoleHome(context, role);
     } catch (e) {
       if (!mounted) return;
+      await _resetGoogleSession();
       _showSnackBar(e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) {

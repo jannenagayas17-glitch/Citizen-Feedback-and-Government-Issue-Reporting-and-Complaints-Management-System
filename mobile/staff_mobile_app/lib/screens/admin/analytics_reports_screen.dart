@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
+import '../../services/dashboard_service.dart';
 import '../../services/report_service.dart';
 import '../../utils/admin_theme.dart';
 import '../../utils/department_issue_types.dart';
@@ -20,6 +21,7 @@ class AnalyticsReportsScreen extends StatefulWidget {
 
 class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
   final AuthService _authService = AuthService();
+  final DashboardService _dashboardService = DashboardService();
   final ReportService _reportService = ReportService();
 
   late Future<_Payload> _payloadFuture;
@@ -27,20 +29,13 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
   String _department = 'All Departments';
   String _barangay = 'All Barangays';
   String _category = 'All Categories';
+  String _datePreset = 'last_30_days';
   late DateTimeRange _range;
 
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
-    _range = DateTimeRange(
-      start: DateTime(
-        now.year,
-        now.month,
-        now.day,
-      ).subtract(const Duration(days: 29)),
-      end: DateTime(now.year, now.month, now.day),
-    );
+    _range = _rangeForPreset(_datePreset);
     _payloadFuture = _load();
   }
 
@@ -48,18 +43,32 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
     final user = await _authService.getCurrentUser();
     final isSuperAdmin = _isSuperAdmin(user);
     final results = await Future.wait<dynamic>([
-      _reportService.getAdminReports(),
       _authService.getOffices(includeInactive: isSuperAdmin),
       _reportService.getCategories(),
+      _dashboardService.getAnalytics(
+        office: _department == 'All Departments' ? null : _department,
+        barangay: _barangay == 'All Barangays' ? null : _barangay,
+        category: _category == 'All Categories' ? null : _category,
+        datePreset: _datePreset,
+        startDate: _datePreset == 'custom' ? _range.start : null,
+        endDate: _datePreset == 'custom' ? _range.end : null,
+      ),
     ]);
-    return _Payload(
+    final payload = _Payload(
       user: Map<String, dynamic>.from(user),
-      reports: (results[0] as List).whereType<Map<String, dynamic>>().toList(),
-      offices: (results[1] as List).whereType<Map<String, dynamic>>().toList(),
-      categories: (results[2] as List)
+      reports: const [],
+      offices: (results[0] as List)
           .whereType<Map<String, dynamic>>()
+          .map(Map<String, dynamic>.from)
           .toList(),
+      categories: (results[1] as List)
+          .whereType<Map<String, dynamic>>()
+          .map(Map<String, dynamic>.from)
+          .toList(),
+      analytics: Map<String, dynamic>.from(results[2] as Map),
     );
+
+    return payload;
   }
 
   Future<void> _refresh() async {
@@ -71,7 +80,14 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
   Future<void> _export() async {
     setState(() => _exporting = true);
     try {
-      final file = await _reportService.exportAdminReports();
+      final file = await _reportService.exportAdminReports(
+        office: _department == 'All Departments' ? null : _department,
+        barangay: _barangay == 'All Barangays' ? null : _barangay,
+        category: _category == 'All Categories' ? null : _category,
+        datePreset: _datePreset,
+        startDate: _datePreset == 'custom' ? _range.start : null,
+        endDate: _datePreset == 'custom' ? _range.end : null,
+      );
       await downloadFile(
         bytes: file.bytes,
         fileName: file.fileName,
@@ -104,40 +120,107 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
     return (user['department'] ?? '').toString().trim();
   }
 
-  String _officeName(Map<String, dynamic> report) =>
-      ((report['office'] as Map<String, dynamic>?)?['name'] ?? '')
-          .toString()
-          .trim();
-  String _categoryName(Map<String, dynamic> report) {
-    final categoryName = (report['category_name'] ?? '').toString().trim();
-    if (categoryName.isNotEmpty) return categoryName;
+  DateTimeRange _rangeForPreset(String preset) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
 
-    final category = report['category'];
-    if (category is Map<String, dynamic>) {
-      final name = (category['name'] ?? '').toString().trim();
-      if (name.isNotEmpty) return name;
+    switch (preset) {
+      case 'today':
+        return DateTimeRange(start: today, end: today);
+      case 'last_7_days':
+        return DateTimeRange(
+          start: today.subtract(const Duration(days: 6)),
+          end: today,
+        );
+      case 'custom':
+        return _range;
+      default:
+        return DateTimeRange(
+          start: today.subtract(const Duration(days: 29)),
+          end: today,
+        );
     }
-
-    return 'Other';
   }
 
-  String _barangayName(Map<String, dynamic> report) =>
-      (report['barangay'] ?? '').toString().trim();
-  String _status(Map<String, dynamic> report) =>
-      (report['status'] ?? 'New').toString();
-  String _statusBucket(Map<String, dynamic> report) {
-    final status = _status(report).trim().toLowerCase();
-    if (status == 'new' || status == 'pending') return 'Pending';
-    if (status == 'in progress' || status == 'in_progress') {
-      return 'In Progress';
+  String _datePresetLabel() {
+    switch (_datePreset) {
+      case 'today':
+        return 'Today';
+      case 'last_7_days':
+        return 'Last 7 Days';
+      case 'custom':
+        return 'Custom Range';
+      default:
+        return 'Last 30 Days';
     }
-    if (status == 'resolved' || status == 'closed') return 'Resolved';
-    if (status == 'rejected') return 'Rejected';
-    return _status(report);
   }
 
-  DateTime? _createdAt(Map<String, dynamic> report) =>
-      DateTime.tryParse((report['created_at'] ?? '').toString())?.toLocal();
+  Future<void> _setDatePreset(String label) async {
+    switch (label) {
+      case 'Today':
+        _datePreset = 'today';
+        _range = _rangeForPreset(_datePreset);
+        break;
+      case 'Last 7 Days':
+        _datePreset = 'last_7_days';
+        _range = _rangeForPreset(_datePreset);
+        break;
+      case 'Last 30 Days':
+        _datePreset = 'last_30_days';
+        _range = _rangeForPreset(_datePreset);
+        break;
+      case 'Custom Range':
+        final picked = await _pickRange();
+        if (picked == null) {
+          return;
+        }
+        _datePreset = 'custom';
+        _range = picked;
+        break;
+    }
+
+    _refresh();
+  }
+
+  int _intValue(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse('$value') ?? 0;
+  }
+
+  List<MapEntry<String, int>> _entriesFromAnalytics(List<dynamic>? raw) {
+    final items =
+        raw
+            ?.whereType<Map<String, dynamic>>()
+            .map(
+              (row) => MapEntry(
+                (row['label'] ?? '').toString(),
+                _intValue(row['count']),
+              ),
+            )
+            .where((entry) => entry.key.isNotEmpty)
+            .toList() ??
+        const <MapEntry<String, int>>[];
+
+    return items;
+  }
+
+  List<_Bucket> _bucketsFromAnalytics(List<dynamic>? rawBuckets) {
+    return rawBuckets
+            ?.whereType<Map<String, dynamic>>()
+            .map(
+              (bucket) => _Bucket(
+                label: (bucket['label'] ?? '').toString(),
+                total: _intValue(bucket['total']),
+                pending: _intValue(bucket['pending']),
+                progress: _intValue(bucket['progress']),
+                resolved: _intValue(bucket['resolved']),
+                rejected: _intValue(bucket['rejected']),
+              ),
+            )
+            .toList() ??
+        const <_Bucket>[];
+  }
 
   List<String> _options(
     Iterable<String> raw,
@@ -164,13 +247,12 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
 
     return _options([
       ...payload.offices.map((office) => (office['name'] ?? '').toString()),
-      ...payload.reports.map(_officeName),
     ], 'All Departments');
   }
 
   List<String> _barangayOptions(_Payload payload) {
     return _options(
-      [...taclobanBarangays, ...payload.reports.map(_barangayName)],
+      taclobanBarangays,
       'All Barangays',
       compare: _compareBarangays,
     );
@@ -182,20 +264,12 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
             ...payload.offices.map(
               (office) => (office['name'] ?? '').toString(),
             ),
-            ...payload.reports.map(_officeName),
           ]
         : [_department];
     final mappedIssueTypes = issueTypesForDepartments(selectedDepartments);
-    final scopedReportCategories = payload.reports
-        .where((report) {
-          if (_department == 'All Departments') return true;
-          return _officeName(report).toLowerCase() == _department.toLowerCase();
-        })
-        .map(_categoryName);
 
     return _options([
       ...mappedIssueTypes,
-      ...scopedReportCategories,
       if (mappedIssueTypes.isEmpty)
         ...payload.categories.map(
           (category) => (category['name'] ?? '').toString(),
@@ -227,89 +301,6 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
     return number + ((suffix.toLowerCase().codeUnitAt(0) - 96) / 10);
   }
 
-  bool _matchesBarangay(String reportBarangay, String selectedBarangay) {
-    if (reportBarangay.trim().toLowerCase() ==
-        selectedBarangay.trim().toLowerCase()) {
-      return true;
-    }
-
-    final reportNumber = _barangayNumber(reportBarangay);
-    final selectedNumber = _barangayNumber(selectedBarangay);
-    return reportNumber != null &&
-        selectedNumber != null &&
-        reportNumber == selectedNumber;
-  }
-
-  List<Map<String, dynamic>> _filtered(_Payload payload) {
-    return _filteredForRange(payload, _range);
-  }
-
-  List<Map<String, dynamic>> _filteredForRange(
-    _Payload payload,
-    DateTimeRange range,
-  ) {
-    final isSuperAdmin = _isSuperAdmin(payload.user);
-    final assignedDepartment = _departmentLabel(payload.user);
-    return payload.reports.where((report) {
-      if (!isSuperAdmin &&
-          assignedDepartment.isNotEmpty &&
-          _officeName(report) != assignedDepartment) {
-        return false;
-      }
-      final created = _createdAt(report);
-      if (created == null) return false;
-      final date = DateTime(created.year, created.month, created.day);
-      final start = DateTime(
-        range.start.year,
-        range.start.month,
-        range.start.day,
-      );
-      final end = DateTime(range.end.year, range.end.month, range.end.day);
-      if (date.isBefore(start) || date.isAfter(end)) return false;
-      if (_department != 'All Departments' &&
-          _officeName(report).toLowerCase() != _department.toLowerCase()) {
-        return false;
-      }
-      if (_barangay != 'All Barangays' &&
-          !_matchesBarangay(_barangayName(report), _barangay)) {
-        return false;
-      }
-      if (_category != 'All Categories' &&
-          normalizeIssueTypeKey(_categoryName(report)) !=
-              normalizeIssueTypeKey(_category)) {
-        return false;
-      }
-      return true;
-    }).toList();
-  }
-
-  Map<String, int> _counts(List<Map<String, dynamic>> reports) {
-    int countStatus(String value) =>
-        reports.where((r) => _statusBucket(r) == value).length;
-    return {
-      'total': reports.length,
-      'pending': countStatus('Pending'),
-      'progress': countStatus('In Progress'),
-      'resolved': countStatus('Resolved'),
-      'rejected': countStatus('Rejected'),
-    };
-  }
-
-  List<MapEntry<String, int>> _grouped(
-    List<Map<String, dynamic>> reports,
-    String Function(Map<String, dynamic>) keyOf,
-  ) {
-    final map = <String, int>{};
-    for (final report in reports) {
-      final key = keyOf(report);
-      if (key.isEmpty) continue;
-      map[key] = (map[key] ?? 0) + 1;
-    }
-    final items = map.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    return items;
-  }
-
   int _deltaPercent(int current, int previous) {
     if (previous <= 0) {
       return current > 0 ? 100 : 0;
@@ -317,40 +308,7 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
     return (((current - previous) / previous) * 100).round();
   }
 
-  List<_Bucket> _buckets(List<Map<String, dynamic>> reports) {
-    const segments = 7;
-    final span = _range.end.difference(_range.start).inDays + 1;
-    final bucketSize = math.max(1, (span / segments).ceil());
-    final out = <_Bucket>[];
-    for (var i = 0; i < segments; i++) {
-      final start = _range.start.add(Duration(days: bucketSize * i));
-      if (start.isAfter(_range.end)) break;
-      final end = start.add(Duration(days: bucketSize - 1)).isAfter(_range.end)
-          ? _range.end
-          : start.add(Duration(days: bucketSize - 1));
-      final items = reports.where((r) {
-        final created = _createdAt(r);
-        if (created == null) return false;
-        final day = DateTime(created.year, created.month, created.day);
-        return !day.isBefore(start) && !day.isAfter(end);
-      }).toList();
-      out.add(
-        _Bucket(
-          label: '${start.month}/${start.day}',
-          total: items.length,
-          pending: items.where((r) => _statusBucket(r) == 'Pending').length,
-          progress: items
-              .where((r) => _statusBucket(r) == 'In Progress')
-              .length,
-          resolved: items.where((r) => _statusBucket(r) == 'Resolved').length,
-          rejected: items.where((r) => _statusBucket(r) == 'Rejected').length,
-        ),
-      );
-    }
-    return out;
-  }
-
-  Future<void> _pickRange() async {
+  Future<DateTimeRange?> _pickRange() async {
     final picked = await showDateRangePicker(
       context: context,
       firstDate: DateTime(2024),
@@ -414,200 +372,531 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
         );
       },
     );
-    if (picked != null) setState(() => _range = picked);
+    return picked;
   }
 
   @override
   Widget build(BuildContext context) {
     final themeColors = AdminThemeColors.of(context);
     final bottom = MediaQuery.of(context).padding.bottom;
-    final body = SafeArea(
-      child: RefreshIndicator(
-        onRefresh: _refresh,
-        child: FutureBuilder<_Payload>(
-          future: _payloadFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snapshot.hasError) {
-              return ListView(
-                padding: const EdgeInsets.all(20),
-                children: [
-                  _panel(
-                    Text(
-                      snapshot.error.toString(),
-                      style: TextStyle(color: themeColors.text),
-                    ),
-                  ),
-                ],
-              );
-            }
-            final payload = snapshot.data!;
-            final departments = _departmentOptions(payload);
-            if (!departments.contains(_department)) {
-              _department = departments.first;
-            }
-            final barangays = _barangayOptions(payload);
-            final categories = _categoryOptions(payload);
-            if (!barangays.contains(_barangay)) _barangay = barangays.first;
-            if (!categories.contains(_category)) _category = categories.first;
-            if (_category != 'All Categories' &&
-                !categories
-                    .map((item) => item.toLowerCase())
-                    .contains(_category.toLowerCase())) {
-              _category = 'All Categories';
-            }
-            final reports = _filtered(payload);
-            final counts = _counts(reports);
-            final spanDays = _range.end.difference(_range.start).inDays + 1;
-            final previousRange = DateTimeRange(
-              start: _range.start.subtract(Duration(days: spanDays)),
-              end: _range.start.subtract(const Duration(days: 1)),
-            );
-            final previousCounts = _counts(
-              _filteredForRange(payload, previousRange),
-            );
-            final categoryBreakdown = _grouped(
-              reports,
-              _categoryName,
-            ).take(6).toList();
-            final barangayBreakdown = _grouped(
-              reports,
-              _barangayName,
-            ).take(6).toList();
-            final resolutionRate = counts['total'] == 0
-                ? 0
-                : (((counts['resolved'] ?? 0) / (counts['total'] ?? 1)) * 100)
-                      .round();
-            final screenWidth = MediaQuery.of(context).size.width;
-            final isWide = screenWidth >= 1180;
-            final useWideFilters = screenWidth >= 1380;
-            final superAdmin = _isSuperAdmin(payload.user);
 
-            Widget card(
-              String label,
-              String key,
-              String hint, {
-              IconData? icon,
-            }) => Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: _colorFor(key).withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: _colorFor(key).withValues(alpha: 0.18),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '${counts[key] ?? 0}',
-                          style: TextStyle(
-                            color: _colorFor(key),
-                            fontSize: 21,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
+    return Scaffold(
+      backgroundColor: themeColors.background,
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: _refresh,
+          child: FutureBuilder<_Payload>(
+            future: _payloadFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              if (snapshot.hasError) {
+                return ListView(
+                  padding: const EdgeInsets.all(20),
+                  children: [
+                    _panel(
+                      Text(
+                        snapshot.error.toString(),
+                        style: TextStyle(color: themeColors.text),
                       ),
-                      if (icon != null)
-                        Icon(icon, color: _colorFor(key), size: 18),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: themeColors.text,
-                      fontWeight: FontWeight.w700,
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    hint,
-                    style: TextStyle(
-                      color: themeColors.mutedText,
-                      fontSize: 12,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    '${_deltaPercent(counts[key] ?? 0, previousCounts[key] ?? 0) >= 0 ? '+' : ''}${_deltaPercent(counts[key] ?? 0, previousCounts[key] ?? 0)}% from last period',
-                    style: TextStyle(
-                      color:
-                          _deltaPercent(
-                                counts[key] ?? 0,
-                                previousCounts[key] ?? 0,
-                              ) >=
-                              0
-                          ? const Color(0xFF7FE2B5)
-                          : const Color(0xFFF38A8A),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            );
+                  ],
+                );
+              }
 
-            Widget summaryCard(
-              String label,
-              String key,
-              String hint, {
-              IconData? icon,
-            }) {
-              final child = card(label, key, hint, icon: icon);
-              if (!isWide) return child;
-              return Expanded(child: child);
-            }
+              final payload = snapshot.data!;
+              final analytics = payload.analytics;
+              final departments = _departmentOptions(payload);
+              if (!departments.contains(_department)) {
+                _department = departments.first;
+              }
+              final barangays = _barangayOptions(payload);
+              final categories = _categoryOptions(payload);
+              if (!barangays.contains(_barangay)) _barangay = barangays.first;
+              if (!categories.contains(_category)) _category = categories.first;
 
-            return ListView(
-              padding: EdgeInsets.fromLTRB(14, 14, 14, bottom + 24),
-              children: [
-                if (!widget.embedded) _topBar(payload.user, superAdmin),
-                if (!widget.embedded) const SizedBox(height: 18),
-                Row(
+              final overview = Map<String, dynamic>.from(
+                analytics['overview'] as Map? ?? const {},
+              );
+              final comparisonOverview = Map<String, dynamic>.from(
+                analytics['comparison_overview'] as Map? ?? const {},
+              );
+              final counts = <String, int>{
+                'total': _intValue(overview['total_reports']),
+                'pending': _intValue(overview['pending']),
+                'progress': _intValue(overview['in_progress']),
+                'resolved': _intValue(overview['resolved']),
+                'rejected': _intValue(overview['rejected']),
+              };
+              final previousCounts = <String, int>{
+                'total': _intValue(comparisonOverview['total_reports']),
+                'pending': _intValue(comparisonOverview['pending']),
+                'progress': _intValue(comparisonOverview['in_progress']),
+                'resolved': _intValue(comparisonOverview['resolved']),
+                'rejected': _intValue(comparisonOverview['rejected']),
+              };
+              final categoryBreakdown = _entriesFromAnalytics(
+                analytics['category_breakdown'] as List?,
+              );
+              final barangayBreakdown = _entriesFromAnalytics(
+                analytics['barangay_breakdown'] as List?,
+              );
+              final timelineBuckets = _bucketsFromAnalytics(
+                analytics['timeline_breakdown'] as List?,
+              );
+              final totalCount = counts['total'] ?? 0;
+              final resolvedCount = counts['resolved'] ?? 0;
+              final resolutionRate = totalCount == 0
+                  ? 0
+                  : ((resolvedCount / totalCount) * 100).round();
+              final screenWidth = MediaQuery.of(context).size.width;
+              final isWide = screenWidth >= 1180;
+              final useWideFilters = screenWidth >= 1380;
+              final superAdmin = _isSuperAdmin(payload.user);
+              final dateLabel = _datePresetLabel();
+
+              Widget card(
+                String label,
+                String key,
+                String hint, {
+                IconData? icon,
+              }) => Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: _colorFor(key).withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: _colorFor(key).withValues(alpha: 0.18),
+                  ),
+                ),
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Analytics',
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${counts[key] ?? 0}',
                             style: TextStyle(
-                              color: themeColors.text,
-                              fontSize: 22,
+                              color: _colorFor(key),
+                              fontSize: 21,
                               fontWeight: FontWeight.w800,
                             ),
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            superAdmin
-                                ? 'View and manage all issue reports from across the city.'
-                                : 'Live analytics from your assigned office.',
-                            style: TextStyle(color: themeColors.mutedText),
-                          ),
-                        ],
+                        ),
+                        if (icon != null)
+                          Icon(icon, color: _colorFor(key), size: 18),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: themeColors.text,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    if (isWide) ...[
-                      const SizedBox(width: 16),
-                      FilledButton.icon(
+                    const SizedBox(height: 6),
+                    Text(
+                      hint,
+                      style: TextStyle(
+                        color: themeColors.mutedText,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      '${_deltaPercent(counts[key] ?? 0, previousCounts[key] ?? 0) >= 0 ? '+' : ''}${_deltaPercent(counts[key] ?? 0, previousCounts[key] ?? 0)}% from last period',
+                      style: TextStyle(
+                        color:
+                            _deltaPercent(
+                                  counts[key] ?? 0,
+                                  previousCounts[key] ?? 0,
+                                ) >=
+                                0
+                            ? const Color(0xFF7FE2B5)
+                            : const Color(0xFFF38A8A),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+
+              Widget summaryCard(
+                String label,
+                String key,
+                String hint, {
+                IconData? icon,
+              }) {
+                final child = card(label, key, hint, icon: icon);
+                if (!isWide) return child;
+                return Expanded(child: child);
+              }
+
+              final filterRow = useWideFilters
+                  ? Row(
+                      children: [
+                        Expanded(
+                          flex: 4,
+                          child: _dropdown(_department, departments, (v) {
+                            if (v == null) return;
+                            setState(() {
+                              _department = v;
+                              _category = 'All Categories';
+                              _payloadFuture = _load();
+                            });
+                          }),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 4,
+                          child: _dropdown(_barangay, barangays, (v) {
+                            if (v == null) return;
+                            setState(() {
+                              _barangay = v;
+                              _payloadFuture = _load();
+                            });
+                          }),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 4,
+                          child: _dropdown(_category, categories, (v) {
+                            if (v == null) return;
+                            setState(() {
+                              _category = v;
+                              _payloadFuture = _load();
+                            });
+                          }),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 5,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _dropdown(
+                                _datePresetLabel(),
+                                const [
+                                  'Last 30 Days',
+                                  'Today',
+                                  'Last 7 Days',
+                                  'Custom Range',
+                                ],
+                                (v) {
+                                  if (v == null) return;
+                                  _setDatePreset(v);
+                                },
+                              ),
+                              if (_datePreset == 'custom') ...[
+                                const SizedBox(height: 10),
+                                _rangeButton(),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    )
+                  : Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        _dropdown(_department, departments, (v) {
+                          if (v == null) return;
+                          setState(() {
+                            _department = v;
+                            _category = 'All Categories';
+                            _payloadFuture = _load();
+                          });
+                        }, width: 240),
+                        _dropdown(_barangay, barangays, (v) {
+                          if (v == null) return;
+                          setState(() {
+                            _barangay = v;
+                            _payloadFuture = _load();
+                          });
+                        }, width: 240),
+                        _dropdown(_category, categories, (v) {
+                          if (v == null) return;
+                          setState(() {
+                            _category = v;
+                            _payloadFuture = _load();
+                          });
+                        }, width: 240),
+                        SizedBox(
+                          width: 280,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _dropdown(
+                                _datePresetLabel(),
+                                const [
+                                  'Last 30 Days',
+                                  'Today',
+                                  'Last 7 Days',
+                                  'Custom Range',
+                                ],
+                                (v) {
+                                  if (v == null) return;
+                                  _setDatePreset(v);
+                                },
+                              ),
+                              if (_datePreset == 'custom') ...[
+                                const SizedBox(height: 10),
+                                _rangeButton(),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+
+              final summaryRow = isWide
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        summaryCard(
+                          'Total Reports',
+                          'total',
+                          'Filtered city reports',
+                          icon: Icons.insert_chart_rounded,
+                        ),
+                        const SizedBox(width: 14),
+                        summaryCard(
+                          'Pending Reports',
+                          'pending',
+                          'Needs triage',
+                          icon: Icons.south_rounded,
+                        ),
+                        const SizedBox(width: 14),
+                        summaryCard(
+                          'In Progress Reports',
+                          'progress',
+                          'Assigned to staff',
+                          icon: Icons.north_rounded,
+                        ),
+                        const SizedBox(width: 14),
+                        summaryCard(
+                          'Resolved Reports',
+                          'resolved',
+                          'Closed cases',
+                          icon: Icons.trending_up_rounded,
+                        ),
+                        const SizedBox(width: 14),
+                        summaryCard(
+                          'Rejected Reports',
+                          'rejected',
+                          'Invalid or prank',
+                          icon: Icons.south_east_rounded,
+                        ),
+                      ],
+                    )
+                  : Wrap(
+                      spacing: 14,
+                      runSpacing: 14,
+                      children: [
+                        card(
+                          'Total Reports',
+                          'total',
+                          'Filtered city reports',
+                          icon: Icons.insert_chart_rounded,
+                        ),
+                        card(
+                          'Pending Reports',
+                          'pending',
+                          'Needs triage',
+                          icon: Icons.south_rounded,
+                        ),
+                        card(
+                          'In Progress Reports',
+                          'progress',
+                          'Assigned to staff',
+                          icon: Icons.north_rounded,
+                        ),
+                        card(
+                          'Resolved Reports',
+                          'resolved',
+                          'Closed cases',
+                          icon: Icons.trending_up_rounded,
+                        ),
+                        card(
+                          'Rejected Reports',
+                          'rejected',
+                          'Invalid or prank',
+                          icon: Icons.south_east_rounded,
+                        ),
+                      ],
+                    );
+
+              final analyticsPanels = isWide
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: 8,
+                          child: Column(
+                            children: [
+                              _metricPanel(
+                                'Reports Overview',
+                                _trendBuckets(timelineBuckets),
+                                trailing: dateLabel,
+                              ),
+                              const SizedBox(height: 16),
+                              _metricPanel(
+                                'Report Resolution Rate',
+                                _resolutionPanel(
+                                  resolutionRate,
+                                  categoryBreakdown,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          flex: 5,
+                          child: Column(
+                            children: [
+                              _metricPanel(
+                                'Reports by Category',
+                                _bars(
+                                  categoryBreakdown,
+                                  const Color(0xFF6678FF),
+                                  usePalette: true,
+                                ),
+                                trailing: dateLabel,
+                              ),
+                              const SizedBox(height: 16),
+                              _metricPanel(
+                                'Issues by Barangay',
+                                _bars(
+                                  barangayBreakdown,
+                                  const Color(0xFF557DFF),
+                                ),
+                                trailing: dateLabel,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    )
+                  : Column(
+                      children: [
+                        _metricPanel(
+                          'Reports Overview',
+                          _trendBuckets(timelineBuckets),
+                          trailing: dateLabel,
+                        ),
+                        const SizedBox(height: 16),
+                        _metricPanel(
+                          'Reports by Category',
+                          _bars(
+                            categoryBreakdown,
+                            const Color(0xFF6678FF),
+                            usePalette: true,
+                          ),
+                          trailing: dateLabel,
+                        ),
+                        const SizedBox(height: 16),
+                        _metricPanel(
+                          'Report Resolution Rate',
+                          _resolutionPanel(resolutionRate, categoryBreakdown),
+                        ),
+                        const SizedBox(height: 16),
+                        _metricPanel(
+                          'Issues by Barangay',
+                          _bars(barangayBreakdown, const Color(0xFF557DFF)),
+                          trailing: dateLabel,
+                        ),
+                      ],
+                    );
+
+              return ListView(
+                padding: EdgeInsets.fromLTRB(14, 14, 14, bottom + 24),
+                children: [
+                  if (!widget.embedded) _topBar(payload.user, superAdmin),
+                  if (!widget.embedded) const SizedBox(height: 18),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Analytics',
+                              style: TextStyle(
+                                color: themeColors.text,
+                                fontSize: 22,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              superAdmin
+                                  ? 'View and manage all issue reports from across the city.'
+                                  : 'Live analytics from your assigned office.',
+                              style: TextStyle(color: themeColors.mutedText),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (isWide) ...[
+                        const SizedBox(width: 16),
+                        FilledButton.icon(
+                          onPressed: _exporting ? null : _export,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF2557D6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 16,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          icon: _exporting
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.download_rounded, size: 16),
+                          label: Text(
+                            _exporting ? 'Exporting...' : 'Export Excel',
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  _panel(
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        filterRow,
+                        const SizedBox(height: 16),
+                        summaryRow,
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  analyticsPanels,
+                  if (!isWide) ...[
+                    const SizedBox(height: 16),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: FilledButton.icon(
                         onPressed: _exporting ? null : _export,
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF2557D6),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 18,
-                            vertical: 16,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
                         ),
                         icon: _exporting
                             ? const SizedBox(
@@ -623,272 +912,15 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                           _exporting ? 'Exporting...' : 'Export Excel',
                         ),
                       ),
-                    ],
+                    ),
                   ],
-                ),
-                const SizedBox(height: 18),
-                _panel(
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (useWideFilters)
-                        Row(
-                          children: [
-                            Expanded(
-                              flex: 4,
-                              child: _dropdown(
-                                _department,
-                                departments,
-                                (v) => setState(() {
-                                  _department = v!;
-                                  _category = 'All Categories';
-                                }),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              flex: 4,
-                              child: _dropdown(
-                                _barangay,
-                                barangays,
-                                (v) => setState(() => _barangay = v!),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              flex: 4,
-                              child: _dropdown(
-                                _category,
-                                categories,
-                                (v) => setState(() => _category = v!),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(flex: 5, child: _rangeButton()),
-                          ],
-                        )
-                      else
-                        Wrap(
-                          spacing: 12,
-                          runSpacing: 12,
-                          children: [
-                            _dropdown(
-                              _department,
-                              departments,
-                              (v) => setState(() {
-                                _department = v!;
-                                _category = 'All Categories';
-                              }),
-                              width: 240,
-                            ),
-                            _dropdown(
-                              _barangay,
-                              barangays,
-                              (v) => setState(() => _barangay = v!),
-                              width: 240,
-                            ),
-                            _dropdown(
-                              _category,
-                              categories,
-                              (v) => setState(() => _category = v!),
-                              width: 240,
-                            ),
-                            SizedBox(width: 280, child: _rangeButton()),
-                          ],
-                        ),
-                      const SizedBox(height: 16),
-                      if (isWide)
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            summaryCard(
-                              'Total Reports',
-                              'total',
-                              'Filtered city reports',
-                              icon: Icons.insert_chart_rounded,
-                            ),
-                            const SizedBox(width: 14),
-                            summaryCard(
-                              'Pending Reports',
-                              'pending',
-                              'Needs triage',
-                              icon: Icons.south_rounded,
-                            ),
-                            const SizedBox(width: 14),
-                            summaryCard(
-                              'In Progress Reports',
-                              'progress',
-                              'Assigned to staff',
-                              icon: Icons.north_rounded,
-                            ),
-                            const SizedBox(width: 14),
-                            summaryCard(
-                              'Resolved Reports',
-                              'resolved',
-                              'Closed cases',
-                              icon: Icons.trending_up_rounded,
-                            ),
-                            const SizedBox(width: 14),
-                            summaryCard(
-                              'Rejected Reports',
-                              'rejected',
-                              'Invalid or prank',
-                              icon: Icons.south_east_rounded,
-                            ),
-                          ],
-                        )
-                      else
-                        Wrap(
-                          spacing: 14,
-                          runSpacing: 14,
-                          children: [
-                            card(
-                              'Total Reports',
-                              'total',
-                              'Filtered city reports',
-                              icon: Icons.insert_chart_rounded,
-                            ),
-                            card(
-                              'Pending Reports',
-                              'pending',
-                              'Needs triage',
-                              icon: Icons.south_rounded,
-                            ),
-                            card(
-                              'In Progress Reports',
-                              'progress',
-                              'Assigned to staff',
-                              icon: Icons.north_rounded,
-                            ),
-                            card(
-                              'Resolved Reports',
-                              'resolved',
-                              'Closed cases',
-                              icon: Icons.trending_up_rounded,
-                            ),
-                            card(
-                              'Rejected Reports',
-                              'rejected',
-                              'Invalid or prank',
-                              icon: Icons.south_east_rounded,
-                            ),
-                          ],
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 18),
-                if (isWide)
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        flex: 8,
-                        child: Column(
-                          children: [
-                            _metricPanel(
-                              'Reports Overview',
-                              _trendBuckets(_buckets(reports)),
-                              trailing: 'Last 30 Days',
-                            ),
-                            const SizedBox(height: 16),
-                            _metricPanel(
-                              'Report Resolution Rate',
-                              _resolutionPanel(
-                                resolutionRate,
-                                categoryBreakdown,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        flex: 5,
-                        child: Column(
-                          children: [
-                            _metricPanel(
-                              'Reports by Category',
-                              _bars(
-                                categoryBreakdown,
-                                const Color(0xFF6678FF),
-                                usePalette: true,
-                              ),
-                              trailing: 'All Time',
-                            ),
-                            const SizedBox(height: 16),
-                            _metricPanel(
-                              'Issues by Barangay',
-                              _bars(barangayBreakdown, const Color(0xFF557DFF)),
-                              trailing: 'Last 30 Days',
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  )
-                else ...[
-                  _metricPanel(
-                    'Reports Overview',
-                    _trendBuckets(_buckets(reports)),
-                    trailing: 'Last 30 Days',
-                  ),
-                  const SizedBox(height: 16),
-                  _metricPanel(
-                    'Reports by Category',
-                    _bars(
-                      categoryBreakdown,
-                      const Color(0xFF6678FF),
-                      usePalette: true,
-                    ),
-                    trailing: 'All Time',
-                  ),
-                  const SizedBox(height: 16),
-                  _metricPanel(
-                    'Report Resolution Rate',
-                    _resolutionPanel(resolutionRate, categoryBreakdown),
-                  ),
-                  const SizedBox(height: 16),
-                  _metricPanel(
-                    'Issues by Barangay',
-                    _bars(barangayBreakdown, const Color(0xFF557DFF)),
-                    trailing: 'Last 30 Days',
-                  ),
                 ],
-                if (!isWide) ...[
-                  const SizedBox(height: 16),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: FilledButton.icon(
-                      onPressed: _exporting ? null : _export,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF2557D6),
-                      ),
-                      icon: _exporting
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(Icons.download_rounded, size: 16),
-                      label: Text(_exporting ? 'Exporting...' : 'Export Excel'),
-                    ),
-                  ),
-                ],
-              ],
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );
-    if (widget.embedded) {
-      return ColoredBox(color: themeColors.background, child: body);
-    }
-
-    return Scaffold(backgroundColor: themeColors.background, body: body);
   }
 
   Widget _topBar(Map<String, dynamic> user, bool superAdmin) {
@@ -992,7 +1024,15 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
   );
 
   Widget _rangeButton() => OutlinedButton(
-    onPressed: _pickRange,
+    onPressed: () async {
+      final picked = await _pickRange();
+      if (picked == null) return;
+      setState(() {
+        _datePreset = 'custom';
+        _range = picked;
+        _payloadFuture = _load();
+      });
+    },
     style: OutlinedButton.styleFrom(
       backgroundColor: AdminThemeColors.of(context).input,
       side: BorderSide(color: AdminThemeColors.of(context).border),
@@ -1436,11 +1476,13 @@ class _Payload {
     required this.reports,
     required this.offices,
     required this.categories,
+    required this.analytics,
   });
   final Map<String, dynamic> user;
   final List<Map<String, dynamic>> reports;
   final List<Map<String, dynamic>> offices;
   final List<Map<String, dynamic>> categories;
+  final Map<String, dynamic> analytics;
 }
 
 class _Bucket {

@@ -6,14 +6,15 @@ use App\Http\Controllers\Controller;
 use App\Models\Office;
 use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
     private const EMOJI_REGEX = '/[\x{1F1E6}-\x{1F1FF}\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}]/u';
+
     private const FULL_NAME_REGEX = "/^(?=.{3,255}$)(?=.*\s)\p{L}[\p{L}'\.-]*(?:\s+\p{L}[\p{L}'\.-]*)+$/u";
 
     public function registerCitizen(Request $request)
@@ -24,10 +25,10 @@ class AuthController extends Controller
     public function register(Request $request)
     {
         $request->validate([
-            'name' => ['required', 'string', 'max:255', 'regex:' . self::FULL_NAME_REGEX, 'not_regex:' . self::EMOJI_REGEX],
-            'email' => ['required', 'string', 'email', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/', 'max:255', 'unique:users,email', 'not_regex:' . self::EMOJI_REGEX],
+            'name' => ['required', 'string', 'max:255', 'regex:'.self::FULL_NAME_REGEX, 'not_regex:'.self::EMOJI_REGEX],
+            'email' => ['required', 'string', 'email', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/', 'max:255', 'unique:users,email', 'not_regex:'.self::EMOJI_REGEX],
             'mobile_number' => ['nullable', 'regex:/^\d{11}$/'],
-            'password' => ['required', 'string', 'min:8', 'confirmed', 'not_regex:' . self::EMOJI_REGEX],
+            'password' => ['required', 'string', 'min:8', 'confirmed', 'not_regex:'.self::EMOJI_REGEX],
         ], $this->validationMessages());
 
         $user = User::create([
@@ -49,12 +50,12 @@ class AuthController extends Controller
     public function requestGovernmentAccount(Request $request)
     {
         $request->validate([
-            'name' => ['required', 'string', 'max:255', 'regex:' . self::FULL_NAME_REGEX, 'not_regex:' . self::EMOJI_REGEX],
-            'email' => ['required', 'string', 'email', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/', 'max:255', 'unique:users,email', 'not_regex:' . self::EMOJI_REGEX],
+            'name' => ['required', 'string', 'max:255', 'regex:'.self::FULL_NAME_REGEX, 'not_regex:'.self::EMOJI_REGEX],
+            'email' => ['required', 'string', 'email', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/', 'max:255', 'unique:users,email', 'not_regex:'.self::EMOJI_REGEX],
             'mobile_number' => ['required', 'regex:/^\d{11}$/'],
-            'password' => ['required', 'string', 'min:8', 'confirmed', 'not_regex:' . self::EMOJI_REGEX],
-            'department' => ['required', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX, 'exists:offices,name'],
-            'job_title' => ['required', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
+            'password' => ['required', 'string', 'min:8', 'confirmed', 'not_regex:'.self::EMOJI_REGEX],
+            'department' => ['required', 'string', 'max:255', 'not_regex:'.self::EMOJI_REGEX, 'exists:offices,name'],
+            'job_title' => ['required', 'string', 'max:255', 'not_regex:'.self::EMOJI_REGEX],
         ], $this->validationMessages());
 
         $office = Office::query()
@@ -87,8 +88,8 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         $request->validate([
-            'email' => ['required', 'email', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/', 'not_regex:' . self::EMOJI_REGEX],
-            'password' => ['required', 'not_regex:' . self::EMOJI_REGEX],
+            'email' => ['required', 'email', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/', 'not_regex:'.self::EMOJI_REGEX],
+            'password' => ['required', 'not_regex:'.self::EMOJI_REGEX],
         ], $this->validationMessages());
 
         $user = User::where('email', $request->email)->first();
@@ -122,8 +123,9 @@ class AuthController extends Controller
 
     public function googleLogin(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'id_token' => 'required|string',
+            'role_hint' => 'nullable|string|in:citizen,admin',
         ]);
 
         $firebaseApiKey = config('services.firebase.api_key');
@@ -142,12 +144,12 @@ class AuthController extends Controller
                 ->timeout(15)
                 ->retry(2, 400)
                 ->post(
-                'https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=' . $firebaseApiKey,
-                ['idToken' => $request->id_token]
-            );
+                    'https://identitytoolkit.googleapis.com/v1/accounts:lookup?key='.$firebaseApiKey,
+                    ['idToken' => $validated['id_token']]
+                );
         } catch (\Throwable $e) {
             $message = app()->isLocal()
-                ? 'Google token verification failed on the server: ' . $e->getMessage()
+                ? 'Google token verification failed on the server: '.$e->getMessage()
                 : 'Google token verification is temporarily unavailable.';
 
             throw ValidationException::withMessages([
@@ -187,15 +189,10 @@ class AuthController extends Controller
             ]);
         }
 
-        $user = User::firstOrCreate(
-            ['email' => $email],
-            [
-                'name' => $firebaseUser['displayName'] ?? Str::before($email, '@'),
-                'password' => Hash::make(Str::random(32)),
-                'role' => 'citizen',
-                'firebase_uid' => $firebaseUser['localId'] ?? null,
-            ]
-        );
+        $roleHint = $validated['role_hint'] ?? 'citizen';
+        $user = $roleHint === 'admin'
+            ? $this->resolveStaffGoogleUser($email)
+            : $this->resolveCitizenGoogleUser($email);
 
         if (! $user->is_active) {
             throw ValidationException::withMessages([
@@ -224,6 +221,56 @@ class AuthController extends Controller
         ]);
     }
 
+    private function resolveCitizenGoogleUser(string $email): User
+    {
+        $user = User::query()->where('email', $email)->first();
+
+        if (! $user) {
+            throw ValidationException::withMessages([
+                'email' => ['No registered citizen account was found for this Google email. Please sign up first.'],
+            ]);
+        }
+
+        if ($user->role !== 'citizen') {
+            throw ValidationException::withMessages([
+                'email' => ['This Google account is not registered as a citizen account.'],
+            ]);
+        }
+
+        return $user;
+    }
+
+    private function resolveStaffGoogleUser(string $email): User
+    {
+        $user = User::query()->where('email', $email)->first();
+
+        if (! $user) {
+            throw ValidationException::withMessages([
+                'email' => ['No approved admin account was found for this Google email. Please ask the super admin to create or verify your account first.'],
+            ]);
+        }
+
+        if ($user->role === 'pending_admin') {
+            throw ValidationException::withMessages([
+                'email' => ['Your admin access request is still pending approval.'],
+            ]);
+        }
+
+        if ($user->role === 'super_admin') {
+            throw ValidationException::withMessages([
+                'email' => ['Super admin accounts must sign in with email and password.'],
+            ]);
+        }
+
+        if ($user->role !== 'admin') {
+            throw ValidationException::withMessages([
+                'email' => ['This Google account is not authorized for staff login.'],
+            ]);
+        }
+
+        return $user;
+    }
+
     public function logout(Request $request)
     {
         $request->user()->currentAccessToken()->delete();
@@ -249,8 +296,8 @@ class AuthController extends Controller
         }
 
         $request->validate([
-            'name' => ['required', 'string', 'max:255', 'regex:' . self::FULL_NAME_REGEX, 'not_regex:' . self::EMOJI_REGEX],
-            'email' => ['required', 'email', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/', 'max:255', 'unique:users,email,' . $user->id, 'not_regex:' . self::EMOJI_REGEX],
+            'name' => ['required', 'string', 'max:255', 'regex:'.self::FULL_NAME_REGEX, 'not_regex:'.self::EMOJI_REGEX],
+            'email' => ['required', 'email', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/', 'max:255', 'unique:users,email,'.$user->id, 'not_regex:'.self::EMOJI_REGEX],
             'mobile_number' => ['nullable', 'regex:/^\d{11}$/'],
         ], $this->validationMessages());
 
@@ -271,8 +318,8 @@ class AuthController extends Controller
         $user = $request->user();
 
         $validated = $request->validate([
-            'current_password' => ['required', 'string', 'not_regex:' . self::EMOJI_REGEX],
-            'new_password' => ['required', 'string', 'min:8', 'confirmed', 'different:current_password', 'not_regex:' . self::EMOJI_REGEX],
+            'current_password' => ['required', 'string', 'not_regex:'.self::EMOJI_REGEX],
+            'new_password' => ['required', 'string', 'min:8', 'confirmed', 'different:current_password', 'not_regex:'.self::EMOJI_REGEX],
         ], $this->validationMessages());
 
         if (! Hash::check($validated['current_password'], $user->password)) {
@@ -315,13 +362,13 @@ class AuthController extends Controller
         $this->ensureSuperAdmin($request);
 
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255', 'regex:' . self::FULL_NAME_REGEX, 'not_regex:' . self::EMOJI_REGEX],
-            'email' => ['required', 'string', 'email', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/', 'max:255', 'unique:users,email', 'not_regex:' . self::EMOJI_REGEX],
+            'name' => ['required', 'string', 'max:255', 'regex:'.self::FULL_NAME_REGEX, 'not_regex:'.self::EMOJI_REGEX],
+            'email' => ['required', 'string', 'email', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/', 'max:255', 'unique:users,email', 'not_regex:'.self::EMOJI_REGEX],
             'mobile_number' => ['nullable', 'regex:/^\d{11}$/'],
-            'password' => ['required', 'string', 'min:8', 'confirmed', 'not_regex:' . self::EMOJI_REGEX],
+            'password' => ['required', 'string', 'min:8', 'confirmed', 'not_regex:'.self::EMOJI_REGEX],
             'role' => ['required', 'in:pending_admin,admin,citizen'],
-            'department' => ['nullable', 'required_if:role,pending_admin,admin', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX, 'exists:offices,name'],
-            'job_title' => ['nullable', 'required_if:role,pending_admin,admin', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
+            'department' => ['nullable', 'required_if:role,pending_admin,admin', 'string', 'max:255', 'not_regex:'.self::EMOJI_REGEX, 'exists:offices,name'],
+            'job_title' => ['nullable', 'required_if:role,pending_admin,admin', 'string', 'max:255', 'not_regex:'.self::EMOJI_REGEX],
         ], $this->validationMessages());
 
         $role = $validated['role'];
@@ -383,13 +430,13 @@ class AuthController extends Controller
         }
 
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255', 'regex:' . self::FULL_NAME_REGEX, 'not_regex:' . self::EMOJI_REGEX],
-            'email' => ['required', 'string', 'email', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/', 'max:255', 'unique:users,email,' . $user->id, 'not_regex:' . self::EMOJI_REGEX],
+            'name' => ['required', 'string', 'max:255', 'regex:'.self::FULL_NAME_REGEX, 'not_regex:'.self::EMOJI_REGEX],
+            'email' => ['required', 'string', 'email', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/', 'max:255', 'unique:users,email,'.$user->id, 'not_regex:'.self::EMOJI_REGEX],
             'mobile_number' => ['nullable', 'regex:/^\d{11}$/'],
             'role' => ['required', 'in:pending_admin,admin,citizen'],
-            'department' => ['nullable', 'required_if:role,pending_admin,admin', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX, 'exists:offices,name'],
-            'job_title' => ['nullable', 'required_if:role,pending_admin,admin', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
-            'password' => ['nullable', 'string', 'min:8', 'confirmed', 'not_regex:' . self::EMOJI_REGEX],
+            'department' => ['nullable', 'required_if:role,pending_admin,admin', 'string', 'max:255', 'not_regex:'.self::EMOJI_REGEX, 'exists:offices,name'],
+            'job_title' => ['nullable', 'required_if:role,pending_admin,admin', 'string', 'max:255', 'not_regex:'.self::EMOJI_REGEX],
+            'password' => ['nullable', 'string', 'min:8', 'confirmed', 'not_regex:'.self::EMOJI_REGEX],
         ], $this->validationMessages());
 
         $role = $validated['role'];

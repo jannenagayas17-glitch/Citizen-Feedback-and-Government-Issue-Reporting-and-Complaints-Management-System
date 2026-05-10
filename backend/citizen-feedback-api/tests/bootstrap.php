@@ -18,7 +18,7 @@ foreach ($staleCacheFiles as $file) {
     $path = $cachePath.DIRECTORY_SEPARATOR.$file;
 
     if (is_file($path)) {
-        unlink($path);
+        @unlink($path);
     }
 }
 

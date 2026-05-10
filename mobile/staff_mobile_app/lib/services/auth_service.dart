@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
+import 'google_auth_service.dart';
 import '../utils/token_storage.dart';
 
 class AuthService {
@@ -79,6 +80,7 @@ class AuthService {
 
   Future<Map<String, dynamic>> loginWithGoogle({
     required String idToken,
+    required String roleHint,
     String? email,
     String? name,
   }) async {
@@ -87,6 +89,7 @@ class AuthService {
       headers: await _headers(),
       body: jsonEncode({
         'id_token': idToken,
+        'role_hint': roleHint,
         if (email != null && email.trim().isNotEmpty) 'email': email.trim(),
         if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
       }),
@@ -538,6 +541,7 @@ class AuthService {
         headers: await _headers(authRequired: true),
       );
     } finally {
+      await GoogleAuthService().signOut();
       await TokenStorage.clearAll();
     }
   }

@@ -94,13 +94,7 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
       } else {
         CitizenDataCache.invalidateReports();
       }
-      setState(() {
-        _reportsFuture = CitizenDataCache.getReports();
-      });
-      CitizenDataCache.getReports(refresh: true).then((reports) {
-        if (!mounted) return;
-        setState(() => _reportsFuture = Future.value(reports));
-      });
+      await _refresh();
     }
   }
 

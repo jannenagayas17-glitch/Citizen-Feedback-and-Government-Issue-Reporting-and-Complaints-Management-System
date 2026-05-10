@@ -342,6 +342,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
                       .fold<double>(0, (sum, value) => sum + value) /
                   unresolved.length)
               .round();
+    final avgResponseLabel = _formatResponseTime(avgHours);
     final resolutionRate = reports.isEmpty
         ? 0
         : ((resolved / reports.length) * 100).round();
@@ -474,6 +475,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
           .where((office) => office['is_active'] != false)
           .length,
       'avgResponseHours': avgHours,
+      'avgResponseLabel': avgResponseLabel,
       'resolutionRate': resolutionRate,
       'escalations': escalations.take(2).toList(),
       'barangays': hottestBarangays.take(5).toList(),
@@ -490,6 +492,17 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
       'monthlySeries': monthlySeries,
       'escalationTriggerHours': triggerHours,
     };
+  }
+
+  String _formatResponseTime(int hours) {
+    final safeHours = hours < 0 ? 0 : hours;
+
+    if (safeHours > 24) {
+      final days = math.max(1, safeHours ~/ 24);
+      return '$days ${days == 1 ? 'Day' : 'Days'}';
+    }
+
+    return '$safeHours ${safeHours == 1 ? 'Hour' : 'Hours'}';
   }
 
   @override
@@ -654,7 +667,6 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
 
   Widget _buildDashboardLanding({required Map<String, dynamic> metrics}) {
     final colors = AdminThemeColors.of(context);
-    final isWide = MediaQuery.of(context).size.width >= 1180;
     final officePerformance =
         (metrics['officePerformance'] as List<dynamic>? ?? const []);
     final officeStats = (metrics['officeStats'] as List<dynamic>? ?? const []);
@@ -670,6 +682,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
+        final useWidePanels = constraints.maxWidth >= 980;
         final summaryColumns = constraints.maxWidth >= 1200
             ? 4
             : constraints.maxWidth >= 760
@@ -717,7 +730,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
                 _DashboardStatCard(
                   width: summaryCardWidth,
                   label: 'Avg. Response Time',
-                  value: '${metrics['avgResponseHours'] ?? 0}h',
+                  value: (metrics['avgResponseLabel'] ?? '0 Hours').toString(),
                   hint: 'Target < 12h',
                   color: const Color(0xFFF2A84B),
                 ),
@@ -736,7 +749,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
               onReportsTap: _openReports,
             ),
             const SizedBox(height: 16),
-            if (isWide)
+            if (useWidePanels)
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -758,7 +771,8 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
                       child: _DepartmentPerformanceCard(
                         items: officePerformance.cast<Map<String, dynamic>>(),
                         avgResponseHours:
-                            '${metrics['avgResponseHours'] ?? 0}h',
+                            (metrics['avgResponseLabel'] ?? '0 Hours')
+                                .toString(),
                         resolutionRate: '${metrics['resolutionRate'] ?? 0}%',
                         totalReports: '${metrics['totalReports'] ?? 0}',
                       ),
@@ -779,7 +793,8 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
                 title: 'Department Performance',
                 child: _DepartmentPerformanceCard(
                   items: officePerformance.cast<Map<String, dynamic>>(),
-                  avgResponseHours: '${metrics['avgResponseHours'] ?? 0}h',
+                  avgResponseHours: (metrics['avgResponseLabel'] ?? '0 Hours')
+                      .toString(),
                   resolutionRate: '${metrics['resolutionRate'] ?? 0}%',
                   totalReports: '${metrics['totalReports'] ?? 0}',
                 ),
@@ -787,14 +802,14 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
             ],
             const SizedBox(height: 16),
             _DashboardPanel(
-              title: 'All Departments',
+              title: 'Departments Resolved',
               trailing: 'Resolution tracking',
               child: _DepartmentGrid(
                 items: officeStats.cast<Map<String, dynamic>>(),
               ),
             ),
             const SizedBox(height: 16),
-            if (isWide)
+            if (useWidePanels)
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1406,17 +1421,25 @@ class _DashboardStatCard extends StatelessWidget {
         children: [
           Text(label, style: TextStyle(color: colors.mutedText, fontSize: 12)),
           const SizedBox(height: 10),
-          Text(
-            value,
-            style: TextStyle(
-              color: color,
-              fontSize: 28,
-              fontWeight: FontWeight.w800,
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                value,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 6),
           Text(
             hint,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: color,
               fontSize: 12,
@@ -1454,24 +1477,61 @@ class _DashboardPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    color: colors.text,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final stackHeader =
+                  trailing != null && constraints.maxWidth < 430;
+
+              if (stackHeader) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: colors.text,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      trailing!,
+                      style: TextStyle(color: colors.mutedText, fontSize: 11),
+                    ),
+                  ],
+                );
+              }
+
+              return Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: colors.text,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              if (trailing != null)
-                Text(
-                  trailing!,
-                  style: TextStyle(color: colors.mutedText, fontSize: 11),
-                ),
-            ],
+                  if (trailing != null) ...[
+                    const SizedBox(width: 12),
+                    Flexible(
+                      child: Text(
+                        trailing!,
+                        maxLines: 2,
+                        textAlign: TextAlign.right,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: colors.mutedText, fontSize: 11),
+                      ),
+                    ),
+                  ],
+                ],
+              );
+            },
           ),
           const SizedBox(height: 14),
           child,
@@ -1556,7 +1616,7 @@ class _EscalationStrip extends StatelessWidget {
                 (report) => Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: Text(
-                    '${report['title'] ?? 'Untitled report'} • ${((report['office'] as Map<String, dynamic>?)?['name'] ?? 'No office')}',
+                    '${report['title'] ?? 'Untitled report'} - ${((report['office'] as Map<String, dynamic>?)?['name'] ?? 'No office')}',
                     style: TextStyle(
                       color: colors.isDark
                           ? Colors.white.withValues(alpha: 0.82)
@@ -2172,66 +2232,101 @@ class _DepartmentPerformanceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AdminThemeColors.of(context);
-    return Column(
-      children: [
-        ...items.take(5).map((item) {
-          final rate = (item['resolutionRate'] as int?) ?? 0;
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final infoColumns = constraints.maxWidth >= 720
+            ? 3
+            : constraints.maxWidth >= 430
+            ? 2
+            : 1;
+        const infoSpacing = 10.0;
+        final infoTileWidth =
+            (constraints.maxWidth - ((infoColumns - 1) * infoSpacing)) /
+            infoColumns;
+
+        return Column(
+          children: [
+            ...items.take(5).map((item) {
+              final rate = (item['resolutionRate'] as int?) ?? 0;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Text(
-                        (item['name'] ?? 'Department').toString(),
-                        style: TextStyle(
-                          color: colors.text,
-                          fontWeight: FontWeight.w600,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            (item['name'] ?? 'Department').toString(),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: colors.text,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 12),
+                        Text(
+                          '$rate%',
+                          style: TextStyle(
+                            color: rate >= 70
+                                ? const Color(0xFF68D9A2)
+                                : const Color(0xFFFF9E66),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
                     ),
-                    Text(
-                      '$rate%',
-                      style: TextStyle(
-                        color: rate >= 70
-                            ? const Color(0xFF68D9A2)
-                            : const Color(0xFFFF9E66),
-                        fontWeight: FontWeight.w700,
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: LinearProgressIndicator(
+                        value: rate / 100,
+                        minHeight: 8,
+                        backgroundColor: colors.isDark
+                            ? Colors.white.withValues(alpha: 0.06)
+                            : const Color(0xFFE3ECF8),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          rate >= 70
+                              ? const Color(0xFF68D9A2)
+                              : const Color(0xFF5F92FF),
+                        ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(999),
-                  child: LinearProgressIndicator(
-                    value: rate / 100,
-                    minHeight: 8,
-                    backgroundColor: colors.isDark
-                        ? Colors.white.withValues(alpha: 0.06)
-                        : const Color(0xFFE3ECF8),
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      rate >= 70
-                          ? const Color(0xFF68D9A2)
-                          : const Color(0xFF5F92FF),
-                    ),
+              );
+            }),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: infoSpacing,
+              runSpacing: infoSpacing,
+              children: [
+                SizedBox(
+                  width: infoTileWidth,
+                  child: _InfoTile(
+                    label: 'Avg Response Time',
+                    value: avgResponseHours,
                   ),
+                ),
+                SizedBox(
+                  width: infoTileWidth,
+                  child: _InfoTile(
+                    label: 'Resolution Rate',
+                    value: resolutionRate,
+                  ),
+                ),
+                SizedBox(
+                  width: infoTileWidth,
+                  child: _InfoTile(label: 'Total Reports', value: totalReports),
                 ),
               ],
             ),
-          );
-        }),
-        const SizedBox(height: 4),
-        Row(
-          children: [
-            _InfoTile(label: 'Avg Response Time', value: avgResponseHours),
-            _InfoTile(label: 'Resolution Rate', value: resolutionRate),
-            _InfoTile(label: 'Total Reports', value: totalReports),
           ],
-        ),
-      ],
+        );
+      },
     );
   }
 }
@@ -2246,17 +2341,18 @@ class _DepartmentGrid extends StatelessWidget {
     final colors = AdminThemeColors.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = constraints.maxWidth >= 1180
-            ? 3
-            : constraints.maxWidth >= 760
-            ? 2
-            : 1;
+        const spacing = 12.0;
+        const minCardWidth = 240.0;
+        final columns =
+            ((constraints.maxWidth + spacing) / (minCardWidth + spacing))
+                .floor()
+                .clamp(1, 3);
         final cardWidth =
-            (constraints.maxWidth - ((columns - 1) * 12)) / columns;
+            (constraints.maxWidth - ((columns - 1) * spacing)) / columns;
 
         return Wrap(
-          spacing: 12,
-          runSpacing: 12,
+          spacing: spacing,
+          runSpacing: spacing,
           children: items.map((item) {
             final rate = (item['resolutionRate'] as int?) ?? 0;
             return Container(
@@ -2272,7 +2368,7 @@ class _DepartmentGrid extends StatelessWidget {
                 children: [
                   Text(
                     (item['name'] ?? 'Department').toString(),
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: colors.text,
@@ -2294,9 +2390,18 @@ class _DepartmentGrid extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  Text(
-                    '${item['total'] ?? 0} total | ${item['pending'] ?? 0} pending | $rate% resolved',
-                    style: TextStyle(color: colors.mutedText, fontSize: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _DepartmentMetricPill(
+                        label: '${item['total'] ?? 0} total',
+                      ),
+                      _DepartmentMetricPill(
+                        label: '${item['pending'] ?? 0} pending',
+                      ),
+                      _DepartmentMetricPill(label: '$rate% resolved'),
+                    ],
                   ),
                 ],
               ),
@@ -2304,6 +2409,29 @@ class _DepartmentGrid extends StatelessWidget {
           }).toList(),
         );
       },
+    );
+  }
+}
+
+class _DepartmentMetricPill extends StatelessWidget {
+  const _DepartmentMetricPill({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: colors.input,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: colors.border),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(color: colors.mutedText, fontSize: 12),
+      ),
     );
   }
 }
@@ -2331,94 +2459,188 @@ class _AdminManagementTable extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 14),
-        Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: colors.border)),
-          ),
-          child: Row(
-            children: [
-              _TableLabel('ADMIN', flex: 4),
-              _TableLabel('DEPARTMENT', flex: 4),
-              _TableLabel('STATUS', flex: 2),
-              _TableLabel('ACTIONS', flex: 3),
-            ],
-          ),
-        ),
-        ...items.map(
-          (item) => Container(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: colors.border)),
-            ),
-            child: Row(
+        LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 760) {
+              return Column(
+                children: items.map((item) {
+                  final isActive = item['active'] == true;
+
+                  return Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: colors.panelAlt,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: colors.border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 14,
+                              backgroundColor: const Color(0xFF3F4FB8),
+                              child: Text(
+                                ((item['name'] ?? 'A').toString())
+                                    .substring(0, 1)
+                                    .toUpperCase(),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                (item['name'] ?? 'Admin').toString(),
+                                style: TextStyle(
+                                  color: colors.text,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            _StatusBadge(
+                              label: isActive ? 'Active' : 'Disabled',
+                              color: isActive
+                                  ? const Color(0xFF68D9A2)
+                                  : const Color(0xFFE6616D),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          (item['department'] ?? '-').toString(),
+                          style: TextStyle(color: colors.mutedText),
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _ActionSmallButton(
+                              label: 'Edit',
+                              color: const Color(0xFF4C6FFF),
+                              onTap: onManageTap,
+                            ),
+                            _ActionSmallButton(
+                              label: isActive ? 'Disable' : 'Enable',
+                              color: isActive
+                                  ? const Color(0xFFE6616D)
+                                  : const Color(0xFF68D9A2),
+                              onTap: onManageTap,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              );
+            }
+
+            return Column(
               children: [
-                Expanded(
-                  flex: 4,
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    border: Border(bottom: BorderSide(color: colors.border)),
+                  ),
                   child: Row(
                     children: [
-                      CircleAvatar(
-                        radius: 14,
-                        backgroundColor: const Color(0xFF3F4FB8),
-                        child: Text(
-                          ((item['name'] ?? 'A').toString())
-                              .substring(0, 1)
-                              .toUpperCase(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
+                      _TableLabel('ADMIN', flex: 4),
+                      _TableLabel('DEPARTMENT', flex: 4),
+                      _TableLabel('STATUS', flex: 2),
+                      _TableLabel('ACTIONS', flex: 3),
+                    ],
+                  ),
+                ),
+                ...items.map(
+                  (item) => Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      border: Border(bottom: BorderSide(color: colors.border)),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 4,
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 14,
+                                backgroundColor: const Color(0xFF3F4FB8),
+                                child: Text(
+                                  ((item['name'] ?? 'A').toString())
+                                      .substring(0, 1)
+                                      .toUpperCase(),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  (item['name'] ?? 'Admin').toString(),
+                                  style: TextStyle(color: colors.text),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          (item['name'] ?? 'Admin').toString(),
-                          style: TextStyle(color: colors.text),
+                        Expanded(
+                          flex: 4,
+                          child: Text(
+                            (item['department'] ?? '-').toString(),
+                            style: TextStyle(color: colors.mutedText),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  flex: 4,
-                  child: Text(
-                    (item['department'] ?? '-').toString(),
-                    style: TextStyle(color: colors.mutedText),
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: _StatusBadge(
-                    label: item['active'] == true ? 'Active' : 'Disabled',
-                    color: item['active'] == true
-                        ? const Color(0xFF68D9A2)
-                        : const Color(0xFFE6616D),
-                  ),
-                ),
-                Expanded(
-                  flex: 3,
-                  child: Row(
-                    children: [
-                      _ActionSmallButton(
-                        label: 'Edit',
-                        color: const Color(0xFF4C6FFF),
-                        onTap: onManageTap,
-                      ),
-                      const SizedBox(width: 8),
-                      _ActionSmallButton(
-                        label: item['active'] == true ? 'Disable' : 'Enable',
-                        color: item['active'] == true
-                            ? const Color(0xFFE6616D)
-                            : const Color(0xFF68D9A2),
-                        onTap: onManageTap,
-                      ),
-                    ],
+                        Expanded(
+                          flex: 2,
+                          child: _StatusBadge(
+                            label: item['active'] == true
+                                ? 'Active'
+                                : 'Disabled',
+                            color: item['active'] == true
+                                ? const Color(0xFF68D9A2)
+                                : const Color(0xFFE6616D),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 3,
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              _ActionSmallButton(
+                                label: 'Edit',
+                                color: const Color(0xFF4C6FFF),
+                                onTap: onManageTap,
+                              ),
+                              _ActionSmallButton(
+                                label: item['active'] == true
+                                    ? 'Disable'
+                                    : 'Enable',
+                                color: item['active'] == true
+                                    ? const Color(0xFFE6616D)
+                                    : const Color(0xFF68D9A2),
+                                onTap: onManageTap,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
-            ),
-          ),
+            );
+          },
         ),
       ],
     );
@@ -2629,10 +2851,17 @@ class _InfoTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(color: colors.mutedText, fontSize: 11)),
+          Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: colors.mutedText, fontSize: 11),
+          ),
           const SizedBox(height: 4),
           Text(
             value,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(color: colors.text, fontWeight: FontWeight.w800),
           ),
         ],

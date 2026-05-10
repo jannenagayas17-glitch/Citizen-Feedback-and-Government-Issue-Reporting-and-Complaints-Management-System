@@ -1,7 +1,11 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../../services/auth_service.dart';
+import '../../utils/app_routes.dart';
+import '../../utils/app_theme_controller.dart';
 import '../../utils/token_storage.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -12,29 +16,66 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+  Timer? _bootstrapTimer;
+
   @override
   void initState() {
     super.initState();
-    navigate();
+    _bootstrapTimer = Timer(const Duration(milliseconds: 1400), _bootstrap);
   }
 
-  Future<void> navigate() async {
-    await Future.delayed(const Duration(seconds: 1));
-
+  Future<void> _bootstrap() async {
     final token = await TokenStorage.getToken();
     final role = (await TokenStorage.getRole())?.trim().toLowerCase();
 
     if (!mounted) return;
 
-    if (token == null) {
-      Navigator.pushReplacementNamed(context, '/login');
-    } else if (role == 'super_admin') {
-      Navigator.pushReplacementNamed(context, '/super-admin-home');
-    } else if (role == 'admin' || role == 'staff') {
-      Navigator.pushReplacementNamed(context, '/admin-home');
-    } else {
-      Navigator.pushReplacementNamed(context, '/citizen-home');
+    if (token == null || token.isEmpty) {
+      _goTo(AppRoutes.login);
+      return;
     }
+
+    if (role != 'citizen') {
+      await TokenStorage.clearAll();
+      _goTo(AppRoutes.login);
+      return;
+    }
+
+    try {
+      final user = await AuthService().getCurrentUser().timeout(
+        const Duration(seconds: 6),
+      );
+
+      if (!mounted) return;
+
+      final currentRole = (user['role'] ?? '').toString().trim().toLowerCase();
+      if (currentRole != 'citizen') {
+        await TokenStorage.clearAll();
+        _goTo(AppRoutes.login);
+        return;
+      }
+
+      await AppThemeScope.of(context).loadForUser(user);
+      if (!mounted) return;
+
+      _goTo(AppRoutes.citizenHome);
+    } catch (_) {
+      await TokenStorage.clearAll();
+      if (mounted) {
+        _goTo(AppRoutes.login);
+      }
+    }
+  }
+
+  void _goTo(String route) {
+    if (!mounted) return;
+    Navigator.pushReplacementNamed(context, route);
+  }
+
+  @override
+  void dispose() {
+    _bootstrapTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -56,132 +97,159 @@ class _SplashScreenState extends State<SplashScreen> {
               ),
             ),
           ),
+          Positioned(
+            left: -60,
+            top: 90,
+            child: _GlowBlob(color: Color(0xFF2563EB).withValues(alpha: 0.22)),
+          ),
+          Positioned(
+            right: -50,
+            bottom: 110,
+            child: _GlowBlob(color: Color(0xFFD8B15A).withValues(alpha: 0.18)),
+          ),
           Positioned.fill(
             child: Opacity(
-              opacity: 0.12,
-              child: Image.asset('assets/images/logo.png', fit: BoxFit.cover),
+              opacity: 0.08,
+              child: Image.asset(
+                'assets/images/logo_splash.png',
+                fit: BoxFit.cover,
+              ),
             ),
           ),
           SafeArea(
             child: Center(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 26),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(34),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                    child: Container(
-                      width: double.infinity,
-                      constraints: const BoxConstraints(maxWidth: 360),
-                      padding: const EdgeInsets.fromLTRB(26, 34, 26, 28),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(34),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.18),
-                        ),
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.white.withValues(alpha: 0.22),
-                            Colors.white.withValues(alpha: 0.10),
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0.92, end: 1.0),
+                  duration: const Duration(milliseconds: 900),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, scale, child) {
+                    final opacity = (((scale - 0.92) / 0.08).clamp(
+                      0.0,
+                      1.0,
+                    )).toDouble();
+                    return Opacity(
+                      opacity: opacity,
+                      child: Transform.scale(scale: scale, child: child),
+                    );
+                  },
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(34),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                      child: Container(
+                        width: double.infinity,
+                        constraints: const BoxConstraints(maxWidth: 360),
+                        padding: const EdgeInsets.fromLTRB(26, 34, 26, 28),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(34),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.18),
+                          ),
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.white.withValues(alpha: 0.22),
+                              Colors.white.withValues(alpha: 0.10),
+                            ],
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.24),
+                              blurRadius: 28,
+                              offset: const Offset(0, 16),
+                            ),
                           ],
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.24),
-                            blurRadius: 28,
-                            offset: const Offset(0, 16),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 108,
-                            height: 108,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: const Color(0xFFD8B15A),
-                                width: 2,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(
-                                    0xFFD8B15A,
-                                  ).withValues(alpha: 0.18),
-                                  blurRadius: 20,
-                                  spreadRadius: 2,
-                                ),
-                              ],
-                            ),
-                            child: Padding(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 108,
+                              height: 108,
                               padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white.withValues(alpha: 0.12),
+                                border: Border.all(
+                                  color: const Color(0xFFD8B15A),
+                                  width: 2,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(
+                                      0xFFD8B15A,
+                                    ).withValues(alpha: 0.18),
+                                    blurRadius: 20,
+                                    spreadRadius: 2,
+                                  ),
+                                ],
+                              ),
                               child: ClipOval(
                                 child: Image.asset(
-                                  'assets/images/logo.png',
+                                  'assets/images/logo_splash.png',
                                   fit: BoxFit.contain,
                                 ),
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 28),
-                          const Text(
-                            'CityTrack',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 26,
-                              fontWeight: FontWeight.w700,
-                              height: 1.25,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Tacloban City Citizen Feedback',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.78),
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(height: 26),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 18,
-                              vertical: 11,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.10),
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.14),
-                              ),
-                            ),
-                            child: Text(
-                              'Preparing secure access',
+                            const SizedBox(height: 28),
+                            const Text(
+                              'CityTrack',
+                              textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.72),
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                                fontSize: 26,
+                                fontWeight: FontWeight.w700,
+                                height: 1.25,
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 24),
-                          const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Dot(),
-                              SizedBox(width: 10),
-                              Dot(),
-                              SizedBox(width: 10),
-                              Dot(),
-                            ],
-                          ),
-                        ],
+                            const SizedBox(height: 16),
+                            Text(
+                              'Tacloban City Citizen Feedback',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.78),
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 26),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                                vertical: 11,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.10),
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.14),
+                                ),
+                              ),
+                              child: Text(
+                                'Preparing secure access',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.72),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                _Dot(),
+                                SizedBox(width: 10),
+                                _Dot(),
+                                SizedBox(width: 10),
+                                _Dot(),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -195,8 +263,26 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 }
 
-class Dot extends StatelessWidget {
-  const Dot({super.key});
+class _GlowBlob extends StatelessWidget {
+  const _GlowBlob({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 180,
+      height: 180,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(colors: [color, color.withValues(alpha: 0.0)]),
+      ),
+    );
+  }
+}
+
+class _Dot extends StatelessWidget {
+  const _Dot();
 
   @override
   Widget build(BuildContext context) {

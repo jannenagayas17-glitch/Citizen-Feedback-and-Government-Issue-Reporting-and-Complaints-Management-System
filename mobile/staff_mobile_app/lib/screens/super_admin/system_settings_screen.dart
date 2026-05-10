@@ -67,6 +67,15 @@ class _SystemSettingsScreenState extends State<SystemSettingsScreen> {
     }
   }
 
+  Future<void> _reload() async {
+    setState(() => _payloadFuture = _loadPayload());
+    try {
+      await _payloadFuture;
+    } catch (_) {
+      // FutureBuilder renders the error state for the user.
+    }
+  }
+
   Future<void> _changePassword({
     required String currentPassword,
     required String newPassword,
@@ -93,6 +102,8 @@ class _SystemSettingsScreenState extends State<SystemSettingsScreen> {
           return _SettingsMessageCard(
             title: 'Unable to load settings',
             message: snapshot.error.toString().replaceFirst('Exception: ', ''),
+            actionLabel: 'Retry',
+            onAction: _reload,
           );
         }
 
@@ -177,6 +188,8 @@ class _SettingsContentState extends State<_SettingsContent> {
   late bool _enableAlerts;
   late bool _escalationNotifications;
   late bool _feedbackNotifications;
+  late bool _cachedEscalationNotifications;
+  late bool _cachedFeedbackNotifications;
   late int _defaultDueHours;
   late String _defaultDueUnit;
   late int _triggerTimeHours;
@@ -231,10 +244,21 @@ class _SettingsContentState extends State<_SettingsContent> {
           const <String, dynamic>{},
     );
 
-    _enableAlerts = notifications['enable_alerts'] != false;
-    _escalationNotifications =
+    final savedEnableAlerts = notifications['enable_alerts'] != false;
+    final savedEscalationNotifications =
         notifications['escalation_notifications'] != false;
-    _feedbackNotifications = notifications['feedback_notifications'] != false;
+    final savedFeedbackNotifications =
+        notifications['feedback_notifications'] != false;
+
+    _enableAlerts = savedEnableAlerts;
+    _cachedEscalationNotifications = savedEscalationNotifications;
+    _cachedFeedbackNotifications = savedFeedbackNotifications;
+    _escalationNotifications = savedEnableAlerts
+        ? savedEscalationNotifications
+        : false;
+    _feedbackNotifications = savedEnableAlerts
+        ? savedFeedbackNotifications
+        : false;
     _defaultDueHours = _sanitizeIntOption(
       int.tryParse('${reportSettings['default_due_hours'] ?? 48}') ?? 48,
       _dueHourOptions,
@@ -281,12 +305,16 @@ class _SettingsContentState extends State<_SettingsContent> {
     _confirmPasswordError = null;
   }
 
-  Future<void> _submit() async {
-    final payload = <String, dynamic>{
+  Map<String, dynamic> _buildSettingsPayload() {
+    return <String, dynamic>{
       'notifications': <String, dynamic>{
         'enable_alerts': _enableAlerts,
-        'escalation_notifications': _escalationNotifications,
-        'feedback_notifications': _feedbackNotifications,
+        'escalation_notifications': _enableAlerts
+            ? _escalationNotifications
+            : false,
+        'feedback_notifications': _enableAlerts
+            ? _feedbackNotifications
+            : false,
       },
       'report_settings': <String, dynamic>{
         'default_due_hours': _defaultDueHours,
@@ -298,8 +326,50 @@ class _SettingsContentState extends State<_SettingsContent> {
         'priority': _priority,
       },
     };
+  }
 
-    await widget.onSave(payload);
+  Future<void> _submit() async {
+    await widget.onSave(_buildSettingsPayload());
+  }
+
+  void _setEnableAlerts(bool value) {
+    setState(() {
+      if (!value) {
+        _cachedEscalationNotifications = _escalationNotifications;
+        _cachedFeedbackNotifications = _feedbackNotifications;
+        _enableAlerts = false;
+        _escalationNotifications = false;
+        _feedbackNotifications = false;
+        return;
+      }
+
+      _enableAlerts = true;
+      _escalationNotifications = _cachedEscalationNotifications;
+      _feedbackNotifications = _cachedFeedbackNotifications;
+
+      if (!_escalationNotifications && !_feedbackNotifications) {
+        _escalationNotifications = true;
+        _feedbackNotifications = true;
+        _cachedEscalationNotifications = true;
+        _cachedFeedbackNotifications = true;
+      }
+    });
+  }
+
+  void _setEscalationNotifications(bool value) {
+    setState(() {
+      _cachedEscalationNotifications = value;
+      _escalationNotifications = value;
+      _enableAlerts = _escalationNotifications || _feedbackNotifications;
+    });
+  }
+
+  void _setFeedbackNotifications(bool value) {
+    setState(() {
+      _cachedFeedbackNotifications = value;
+      _feedbackNotifications = value;
+      _enableAlerts = _escalationNotifications || _feedbackNotifications;
+    });
   }
 
   Future<void> _submitPasswordChange() async {
@@ -378,9 +448,11 @@ class _SettingsContentState extends State<_SettingsContent> {
             ? MediaQuery.of(context).size.width
             : constraints.maxWidth;
         final isWide = contentWidth >= 1080;
+        final useCompactActions = contentWidth < 640;
         final panelWidth = isWide ? (contentWidth - 18) / 2 : contentWidth;
 
         return ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: EdgeInsets.fromLTRB(
             widget.embedded ? 0 : 24,
             widget.embedded ? 0 : 20,
@@ -470,15 +542,14 @@ class _SettingsContentState extends State<_SettingsContent> {
                   SizedBox(
                     width: panelWidth,
                     child: _ToggleSettingsCard(
+                      isSaving: widget.isSaving,
                       enableAlerts: _enableAlerts,
                       escalationNotifications: _escalationNotifications,
                       feedbackNotifications: _feedbackNotifications,
-                      onEnableAlertsChanged: (value) =>
-                          setState(() => _enableAlerts = value),
-                      onEscalationNotificationsChanged: (value) =>
-                          setState(() => _escalationNotifications = value),
-                      onFeedbackNotificationsChanged: (value) =>
-                          setState(() => _feedbackNotifications = value),
+                      onEnableAlertsChanged: _setEnableAlerts,
+                      onEscalationNotificationsChanged:
+                          _setEscalationNotifications,
+                      onFeedbackNotificationsChanged: _setFeedbackNotifications,
                     ),
                   ),
                 ],
@@ -493,12 +564,14 @@ class _SettingsContentState extends State<_SettingsContent> {
                   width: panelWidth,
                   child: _SettingsPanel(
                     title: 'Notification Settings',
-                    child: Column(
-                      children: [
-                        Row(
+                    child: LayoutBuilder(
+                      builder: (context, panelConstraints) {
+                        final stackDueFields = panelConstraints.maxWidth < 480;
+
+                        return Column(
                           children: [
-                            Expanded(
-                              child: _LabeledDropdown<int>(
+                            if (stackDueFields) ...[
+                              _LabeledDropdown<int>(
                                 label: 'Default Due Time',
                                 value: _defaultDueHours,
                                 items: _dueHourOptions,
@@ -506,10 +579,8 @@ class _SettingsContentState extends State<_SettingsContent> {
                                 onChanged: (value) =>
                                     setState(() => _defaultDueHours = value),
                               ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _LabeledDropdown<String>(
+                              const SizedBox(height: 16),
+                              _LabeledDropdown<String>(
                                 label: 'Unit',
                                 value: _defaultDueUnit,
                                 items: _dueUnitOptions,
@@ -517,20 +588,48 @@ class _SettingsContentState extends State<_SettingsContent> {
                                 onChanged: (value) =>
                                     setState(() => _defaultDueUnit = value),
                               ),
+                            ] else ...[
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _LabeledDropdown<int>(
+                                      label: 'Default Due Time',
+                                      value: _defaultDueHours,
+                                      items: _dueHourOptions,
+                                      itemLabel: (value) => '$value',
+                                      onChanged: (value) => setState(
+                                        () => _defaultDueHours = value,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: _LabeledDropdown<String>(
+                                      label: 'Unit',
+                                      value: _defaultDueUnit,
+                                      items: _dueUnitOptions,
+                                      itemLabel: (value) => value,
+                                      onChanged: (value) => setState(
+                                        () => _defaultDueUnit = value,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                            const SizedBox(height: 16),
+                            _LabeledDropdown<int>(
+                              label: 'Escalation Trigger Time',
+                              value: _triggerTimeHours,
+                              trailingText: 'Hours',
+                              items: _triggerHourOptions,
+                              itemLabel: (value) => '$value',
+                              onChanged: (value) =>
+                                  setState(() => _triggerTimeHours = value),
                             ),
                           ],
-                        ),
-                        const SizedBox(height: 16),
-                        _LabeledDropdown<int>(
-                          label: 'Escalation Trigger Time',
-                          value: _triggerTimeHours,
-                          trailingText: 'Hours',
-                          items: _triggerHourOptions,
-                          itemLabel: (value) => '$value',
-                          onChanged: (value) =>
-                              setState(() => _triggerTimeHours = value),
-                        ),
-                      ],
+                        );
+                      },
                     ),
                   ),
                 ),
@@ -566,32 +665,35 @@ class _SettingsContentState extends State<_SettingsContent> {
             const SizedBox(height: 20),
             Align(
               alignment: Alignment.centerRight,
-              child: FilledButton(
-                onPressed: widget.isSaving ? null : _submit,
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF2C54D4),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 26,
-                    vertical: 16,
+              child: SizedBox(
+                width: useCompactActions ? double.infinity : null,
+                child: FilledButton(
+                  onPressed: widget.isSaving ? null : _submit,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF2C54D4),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 26,
+                      vertical: 16,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                child: widget.isSaving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
+                  child: widget.isSaving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          'Save Changes',
+                          style: TextStyle(fontWeight: FontWeight.w700),
                         ),
-                      )
-                    : const Text(
-                        'Save Changes',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
+                ),
               ),
             ),
           ],
@@ -955,6 +1057,7 @@ class _PasswordSettingsCard extends StatelessWidget {
 
 class _ToggleSettingsCard extends StatelessWidget {
   const _ToggleSettingsCard({
+    required this.isSaving,
     required this.enableAlerts,
     required this.escalationNotifications,
     required this.feedbackNotifications,
@@ -963,6 +1066,7 @@ class _ToggleSettingsCard extends StatelessWidget {
     required this.onFeedbackNotificationsChanged,
   });
 
+  final bool isSaving;
   final bool enableAlerts;
   final bool escalationNotifications;
   final bool feedbackNotifications;
@@ -973,26 +1077,56 @@ class _ToggleSettingsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = _SettingsColors.of(context);
-    return Column(
-      children: [
-        _SwitchTile(
-          label: 'Enable Alerts',
-          value: enableAlerts,
-          onChanged: onEnableAlertsChanged,
-        ),
-        Divider(color: colors.border, height: 18),
-        _SwitchTile(
-          label: 'Escalation Notifications',
-          value: escalationNotifications,
-          onChanged: onEscalationNotificationsChanged,
-        ),
-        Divider(color: colors.border, height: 18),
-        _SwitchTile(
-          label: 'Feedback Notifications',
-          value: feedbackNotifications,
-          onChanged: onFeedbackNotificationsChanged,
-        ),
-      ],
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: colors.softPanel,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Alert Preferences',
+            style: TextStyle(
+              color: colors.text,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Control which dashboard alerts stay active and keep the saved state consistent after refresh or relogin.',
+            style: TextStyle(color: colors.mutedText, fontSize: 13),
+          ),
+          const SizedBox(height: 16),
+          _SwitchTile(
+            label: 'Enable Alerts',
+            subtitle: 'Turn all super admin alert notifications on or off.',
+            value: enableAlerts,
+            enabled: !isSaving,
+            onChanged: onEnableAlertsChanged,
+          ),
+          Divider(color: colors.border, height: 22),
+          _SwitchTile(
+            label: 'Escalation Notifications',
+            subtitle:
+                'Alert the dashboard when complaints pass the escalation threshold.',
+            value: escalationNotifications,
+            enabled: enableAlerts && !isSaving,
+            onChanged: onEscalationNotificationsChanged,
+          ),
+          Divider(color: colors.border, height: 22),
+          _SwitchTile(
+            label: 'Feedback Notifications',
+            subtitle:
+                'Keep alerts for new citizen feedback and complaint updates.',
+            value: feedbackNotifications,
+            enabled: enableAlerts && !isSaving,
+            onChanged: onFeedbackNotificationsChanged,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1000,32 +1134,56 @@ class _ToggleSettingsCard extends StatelessWidget {
 class _SwitchTile extends StatelessWidget {
   const _SwitchTile({
     required this.label,
+    required this.subtitle,
     required this.value,
+    required this.enabled,
     required this.onChanged,
   });
 
   final String label;
+  final String subtitle;
   final bool value;
+  final bool enabled;
   final ValueChanged<bool> onChanged;
 
   @override
   Widget build(BuildContext context) {
     final colors = _SettingsColors.of(context);
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            label,
-            style: TextStyle(color: colors.text, fontSize: 15),
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 180),
+      opacity: enabled ? 1 : 0.58,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: colors.text,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: TextStyle(color: colors.mutedText, fontSize: 12.5),
+                ),
+              ],
+            ),
           ),
-        ),
-        Switch(
-          value: value,
-          onChanged: onChanged,
-          activeThumbColor: Colors.white,
-          activeTrackColor: const Color(0xFF2E62FF),
-        ),
-      ],
+          const SizedBox(width: 12),
+          Switch(
+            value: value,
+            onChanged: enabled ? onChanged : null,
+            activeThumbColor: Colors.white,
+            activeTrackColor: const Color(0xFF2E62FF),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1106,10 +1264,17 @@ class _LabeledDropdown<T> extends StatelessWidget {
 }
 
 class _SettingsMessageCard extends StatelessWidget {
-  const _SettingsMessageCard({required this.title, required this.message});
+  const _SettingsMessageCard({
+    required this.title,
+    required this.message,
+    this.actionLabel,
+    this.onAction,
+  });
 
   final String title;
   final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -1147,6 +1312,17 @@ class _SettingsMessageCard extends StatelessWidget {
               textAlign: TextAlign.center,
               style: TextStyle(color: colors.mutedText),
             ),
+            if (actionLabel != null && onAction != null) ...[
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: onAction,
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF2C54D4),
+                  foregroundColor: Colors.white,
+                ),
+                child: Text(actionLabel!),
+              ),
+            ],
           ],
         ),
       ),

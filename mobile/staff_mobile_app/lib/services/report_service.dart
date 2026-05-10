@@ -82,22 +82,87 @@ class ReportService {
   }
 
   Future<List<dynamic>> getAdminReports({String? status}) async {
-    final endpoint = status == null || status.isEmpty
-        ? '/admin/reports'
-        : '/admin/reports?status=${Uri.encodeComponent(status)}';
-    final response = await _apiClient.get(endpoint, authRequired: true);
+    final response = await _apiClient.get(
+      '/admin/reports',
+      authRequired: true,
+      queryParameters: {
+        if (status != null && status.isNotEmpty) 'status': status,
+      },
+    );
     return _decodeListResponse(
       response,
       fallbackMessage: 'Failed to fetch admin reports',
     );
   }
 
-  Future<ReportExportFile> exportAdminReports({String? status}) async {
-    final endpoint = status == null || status.isEmpty
-        ? '/admin/reports/export'
-        : '/admin/reports/export?status=${Uri.encodeComponent(status)}';
+  Future<AdminReportPage> getAdminReportsPage({
+    int page = 1,
+    int perPage = 25,
+    String? search,
+    String? status,
+    String? category,
+    String? barangay,
+    String? office,
+  }) async {
+    final response = await _apiClient.get(
+      '/admin/reports',
+      authRequired: true,
+      queryParameters: {
+        'paginate': 'true',
+        'page': page,
+        'per_page': perPage,
+        if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+        if (status != null && status.trim().isNotEmpty) 'status': status.trim(),
+        if (category != null && category.trim().isNotEmpty)
+          'category': category.trim(),
+        if (barangay != null && barangay.trim().isNotEmpty)
+          'barangay': barangay.trim(),
+        if (office != null && office.trim().isNotEmpty) 'office': office.trim(),
+      },
+    );
 
-    final response = await _apiClient.get(endpoint, authRequired: true);
+    final data = _decodeMapResponse(response.body);
+    if (response.statusCode == 200 && data != null && data['data'] is List) {
+      return AdminReportPage.fromJson(data);
+    }
+
+    throw Exception(
+      data == null
+          ? 'Failed to fetch admin reports'
+          : data['message']?.toString() ??
+                (data['errors'] != null
+                    ? data['errors'].toString()
+                    : 'Failed to fetch admin reports'),
+    );
+  }
+
+  Future<ReportExportFile> exportAdminReports({
+    String? search,
+    String? status,
+    String? category,
+    String? barangay,
+    String? office,
+    String? datePreset,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    final response = await _apiClient.get(
+      '/admin/reports/export',
+      authRequired: true,
+      queryParameters: {
+        if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+        if (status != null && status.trim().isNotEmpty) 'status': status.trim(),
+        if (category != null && category.trim().isNotEmpty)
+          'category': category.trim(),
+        if (barangay != null && barangay.trim().isNotEmpty)
+          'barangay': barangay.trim(),
+        if (office != null && office.trim().isNotEmpty) 'office': office.trim(),
+        if (datePreset != null && datePreset.trim().isNotEmpty)
+          'date_preset': datePreset.trim(),
+        if (startDate != null) 'start_date': _formatDateOnly(startDate),
+        if (endDate != null) 'end_date': _formatDateOnly(endDate),
+      },
+    );
 
     if (response.statusCode == 200) {
       return ReportExportFile(
@@ -222,21 +287,37 @@ class ReportService {
     double? latitude,
     double? longitude,
   }) {
-    return <String, dynamic>{
-      'category_id': ?categoryId,
-      if (categoryName != null && categoryName.trim().isNotEmpty)
-        'category_name': categoryName.trim(),
-      'office_id': ?officeId,
+    final normalizedCategoryName = categoryName?.trim();
+    final normalizedBarangay = barangay?.trim();
+    final normalizedPriority = priority?.trim();
+    final categoryNameValue =
+        normalizedCategoryName == null || normalizedCategoryName.isEmpty
+        ? null
+        : normalizedCategoryName;
+    final barangayValue =
+        normalizedBarangay == null || normalizedBarangay.isEmpty
+        ? null
+        : normalizedBarangay;
+    final priorityValue =
+        normalizedPriority == null || normalizedPriority.isEmpty
+        ? null
+        : normalizedPriority;
+
+    final payload = <String, dynamic>{
       'title': title,
       'description': description,
       'location': location,
-      if (barangay != null && barangay.trim().isNotEmpty)
-        'barangay': barangay.trim(),
-      if (priority != null && priority.trim().isNotEmpty)
-        'priority': priority.trim(),
-      'latitude': ?latitude,
-      'longitude': ?longitude,
     };
+
+    if (categoryId != null) payload['category_id'] = categoryId;
+    if (categoryNameValue != null) payload['category_name'] = categoryNameValue;
+    if (officeId != null) payload['office_id'] = officeId;
+    if (barangayValue != null) payload['barangay'] = barangayValue;
+    if (priorityValue != null) payload['priority'] = priorityValue;
+    if (latitude != null) payload['latitude'] = latitude;
+    if (longitude != null) payload['longitude'] = longitude;
+
+    return payload;
   }
 
   List<dynamic> _decodeListResponse(
@@ -286,6 +367,14 @@ class ReportService {
       return null;
     }
   }
+
+  String _formatDateOnly(DateTime date) {
+    final normalized = DateTime(date.year, date.month, date.day);
+    final year = normalized.year.toString().padLeft(4, '0');
+    final month = normalized.month.toString().padLeft(2, '0');
+    final day = normalized.day.toString().padLeft(2, '0');
+    return '$year-$month-$day';
+  }
 }
 
 class ReportExportFile {
@@ -298,4 +387,48 @@ class ReportExportFile {
   final List<int> bytes;
   final String fileName;
   final String mimeType;
+}
+
+class AdminReportPage {
+  const AdminReportPage({
+    required this.reports,
+    required this.currentPage,
+    required this.lastPage,
+    required this.perPage,
+    required this.total,
+    required this.from,
+    required this.to,
+  });
+
+  factory AdminReportPage.fromJson(Map<String, dynamic> json) {
+    int parseInt(dynamic value, {int fallback = 0}) {
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      return int.tryParse('$value') ?? fallback;
+    }
+
+    return AdminReportPage(
+      reports: (json['data'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(Map<String, dynamic>.from)
+          .toList(),
+      currentPage: parseInt(json['current_page'], fallback: 1),
+      lastPage: parseInt(json['last_page'], fallback: 1),
+      perPage: parseInt(json['per_page'], fallback: 25),
+      total: parseInt(json['total']),
+      from: parseInt(json['from']),
+      to: parseInt(json['to']),
+    );
+  }
+
+  final List<Map<String, dynamic>> reports;
+  final int currentPage;
+  final int lastPage;
+  final int perPage;
+  final int total;
+  final int from;
+  final int to;
+
+  bool get hasPreviousPage => currentPage > 1;
+  bool get hasNextPage => currentPage < lastPage;
 }
