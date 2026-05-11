@@ -60,4 +60,34 @@ void main() {
       expect(managedUserDeduplicationKey(user), 'id:42');
     },
   );
+
+  test(
+    'deduplicateManagedUsers keeps distinct same-name accounts when emails differ',
+    () {
+      final users = [
+        {
+          'id': 172,
+          'name': 'Aileen Dela Cruz',
+          'email': 'demo.citizen.0018@example.com',
+          'role': 'citizen',
+          'mobile_number': '09270000018',
+        },
+        {
+          'id': 222,
+          'name': 'Aileen Dela Cruz',
+          'email': 'demo.citizen.0068@example.com',
+          'role': 'citizen',
+          'mobile_number': '09270000068',
+        },
+      ];
+
+      final deduped = deduplicateManagedUsers(users);
+
+      expect(deduped, hasLength(2));
+      expect(deduped.map((user) => normalizedManagedUserEmail(user)).toSet(), {
+        'demo.citizen.0018@example.com',
+        'demo.citizen.0068@example.com',
+      });
+    },
+  );
 }

@@ -283,7 +283,19 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
     users.sort((a, b) {
       final aName = (a['name'] ?? '').toString().toLowerCase();
       final bName = (b['name'] ?? '').toString().toLowerCase();
-      return aName.compareTo(bName);
+      final nameComparison = aName.compareTo(bName);
+      if (nameComparison != 0) {
+        return nameComparison;
+      }
+
+      final aEmail = (a['email'] ?? '').toString().toLowerCase();
+      final bEmail = (b['email'] ?? '').toString().toLowerCase();
+      final emailComparison = aEmail.compareTo(bEmail);
+      if (emailComparison != 0) {
+        return emailComparison;
+      }
+
+      return _userId(a).compareTo(_userId(b));
     });
 
     return users;
@@ -1479,9 +1491,19 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        row.jobTitle,
+                        row.primaryIdentityLine,
                         style: TextStyle(color: colors.mutedText, fontSize: 13),
                       ),
+                      if (row.secondaryIdentityLine.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          row.secondaryIdentityLine,
+                          style: TextStyle(
+                            color: colors.mutedText.withValues(alpha: 0.86),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -2910,6 +2932,40 @@ class _StaffRow {
     if (value.isNotEmpty) return value;
     if (role == 'citizen') return 'Citizen Account';
     return 'Administrator';
+  }
+
+  String get emailAddress => (user['email'] ?? '').toString().trim();
+
+  String get mobileNumber => (user['mobile_number'] ?? '').toString().trim();
+
+  int get userId {
+    final rawId = user['id'];
+    if (rawId is int) return rawId;
+    if (rawId is num) return rawId.toInt();
+    return int.tryParse('$rawId') ?? 0;
+  }
+
+  String get primaryIdentityLine {
+    if (emailAddress.isNotEmpty) {
+      return emailAddress;
+    }
+    return jobTitle;
+  }
+
+  String get secondaryIdentityLine {
+    final parts = <String>[];
+    if (role == 'citizen') {
+      parts.add('Citizen Account');
+    } else {
+      parts.add(jobTitle);
+    }
+    if (mobileNumber.isNotEmpty) {
+      parts.add(mobileNumber);
+    }
+    if (userId > 0) {
+      parts.add('ID #$userId');
+    }
+    return parts.join(' · ');
   }
 
   String get initials {
