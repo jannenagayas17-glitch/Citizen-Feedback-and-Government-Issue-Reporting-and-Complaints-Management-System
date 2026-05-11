@@ -8,6 +8,7 @@ import '../../services/auth_service.dart';
 import '../../services/google_auth_service.dart';
 import '../../utils/app_theme_controller.dart';
 import '../../utils/auth_redirect.dart';
+import '../../utils/portal_session_notice.dart';
 import '../../utils/token_storage.dart';
 import 'forgot_password_screen.dart';
 import 'register_screen.dart';
@@ -15,10 +16,16 @@ import 'register_screen.dart';
 enum LoginMode { admin, superAdmin }
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key, this.authService, this.googleAuthService});
+  const LoginScreen({
+    super.key,
+    this.authService,
+    this.googleAuthService,
+    this.initialSnackBarMessage,
+  });
 
   final AuthService? authService;
   final GoogleAuthService? googleAuthService;
+  final String? initialSnackBarMessage;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -47,6 +54,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isGoogleLoading = false;
   String? _emailError;
   String? _passwordError;
+  bool _didShowInitialNotice = false;
 
   bool get _isSuperAdminMode => _selectedMode == LoginMode.superAdmin;
   _LoginModeConfig get _modeConfig => _LoginModeConfig.fromMode(_selectedMode);
@@ -59,6 +67,9 @@ class _LoginScreenState extends State<LoginScreen> {
     super.initState();
     _authService = widget.authService ?? AuthService();
     _loadSavedEmailForMode();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showInitialNoticeIfNeeded();
+    });
   }
 
   GoogleAuthService get _resolvedGoogleAuthService =>
@@ -260,6 +271,25 @@ class _LoginScreenState extends State<LoginScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _showInitialNoticeIfNeeded() {
+    if (!mounted || _didShowInitialNotice) {
+      return;
+    }
+
+    final initialMessage = widget.initialSnackBarMessage?.trim();
+    final message = initialMessage != null && initialMessage.isNotEmpty
+        ? initialMessage
+        : PortalSessionNotice.consume();
+
+    _didShowInitialNotice = true;
+
+    if (message == null || message.isEmpty) {
+      return;
+    }
+
+    _showSnackBar(message);
   }
 
   Future<void> _handleModeChange(LoginMode mode) async {

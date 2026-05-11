@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Office;
 use App\Models\User;
+use App\Support\UserEmailDeduplicationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
@@ -373,11 +374,16 @@ class AuthController extends Controller
         $query = User::withTrashed()
             ->whereIn('role', ['super_admin', 'admin', 'pending_admin', 'citizen']);
 
+        $deduplicatedUsers = app(UserEmailDeduplicationService::class)
+            ->deduplicateUsersForDisplay(
+                $query
+                    ->orderByRaw("case when role = 'super_admin' then 0 when role = 'admin' then 1 when role = 'pending_admin' then 2 else 3 end")
+                    ->orderBy('name')
+                    ->get()
+            );
+
         return response()->json(
-            $query
-                ->orderByRaw("case when role = 'super_admin' then 0 when role = 'admin' then 1 when role = 'pending_admin' then 2 else 3 end")
-                ->orderBy('name')
-                ->get()
+            $deduplicatedUsers->values()
         );
     }
 
@@ -718,7 +724,7 @@ class AuthController extends Controller
         ?int $ignoreUserId = null
     ): void {
         $emailQuery = User::withTrashed()
-            ->whereRaw('LOWER(email) = ?', [$this->normalizeEmail($email)]);
+            ->whereRaw('LOWER(TRIM(email)) = ?', [$this->normalizeEmail($email)]);
 
         if ($ignoreUserId !== null) {
             $emailQuery->where('id', '!=', $ignoreUserId);
@@ -755,10 +761,9 @@ class AuthController extends Controller
         }
 
         return User::query()
-            ->whereRaw('LOWER(email) = ?', [$normalizedEmail])
-            ->orderByDesc('is_active')
-            ->orderByDesc('id')
-            ->first();
+            ->whereRaw('LOWER(TRIM(email)) = ?', [$normalizedEmail])
+            ->get()
+            ->pipe(fn ($users) => app(UserEmailDeduplicationService::class)->pickPreferredUser($users));
     }
 
     private function validationMessages(): array

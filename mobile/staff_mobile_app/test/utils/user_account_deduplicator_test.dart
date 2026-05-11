@@ -90,4 +90,18 @@ void main() {
       });
     },
   );
+
+  test(
+    'duplicateManagedUserEmailGroups reports only normalized email clashes',
+    () {
+      final groups = duplicateManagedUserEmailGroups([
+        {'id': 10, 'name': 'Legacy Citizen', 'email': ' Citizen@Test.com '},
+        {'id': 11, 'name': 'Current Citizen', 'email': 'citizen@test.com'},
+        {'id': 12, 'name': 'Different Citizen', 'email': 'other@test.com'},
+      ]);
+
+      expect(groups.keys, {'citizen@test.com'});
+      expect(groups['citizen@test.com'], hasLength(2));
+    },
+  );
 }

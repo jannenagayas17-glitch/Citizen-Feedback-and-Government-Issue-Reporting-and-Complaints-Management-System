@@ -4,7 +4,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'utils/app_theme_controller.dart';
 import 'utils/app_routes.dart';
-import 'utils/session_gate.dart';
 
 final ThemeData _lightTheme = ThemeData(
   colorScheme: ColorScheme.fromSeed(
@@ -53,7 +52,7 @@ class MyApp extends StatelessWidget {
             theme: _lightTheme,
             darkTheme: _darkTheme,
             themeAnimationDuration: Duration.zero,
-            home: const SessionGate(),
+            initialRoute: AppRoutes.splash,
             routes: AppRoutes.routes,
           );
         },

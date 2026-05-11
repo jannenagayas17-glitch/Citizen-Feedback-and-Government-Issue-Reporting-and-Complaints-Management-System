@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 
 import '../screens/auth/login_screen.dart';
-import '../services/auth_service.dart';
+import '../services/portal_auth_gate.dart';
 import 'app_theme_controller.dart';
 import 'auth_redirect.dart';
+import 'portal_session_notice.dart';
 import 'token_storage.dart';
 
 class SessionGate extends StatefulWidget {
-  const SessionGate({super.key});
+  const SessionGate({super.key, this.authGate});
+
+  final PortalAuthGate? authGate;
 
   @override
   State<SessionGate> createState() => _SessionGateState();
@@ -16,6 +19,8 @@ class SessionGate extends StatefulWidget {
 class _SessionGateState extends State<SessionGate> {
   bool _showLogin = false;
 
+  PortalAuthGate get _authGate => widget.authGate ?? PortalAuthGate();
+
   @override
   void initState() {
     super.initState();
@@ -23,45 +28,34 @@ class _SessionGateState extends State<SessionGate> {
   }
 
   Future<void> _routeFromSavedSession() async {
-    final token = await TokenStorage.getToken();
+    final result = await _authGate.resolve();
+
+    if (result.shouldClearStoredSession) {
+      await TokenStorage.clearAll();
+    }
 
     if (!mounted) return;
 
-    if (token == null || token.isEmpty) {
+    if (result.shouldOpenLogin) {
+      if (result.message != null && result.message!.trim().isNotEmpty) {
+        PortalSessionNotice.store(result.message!);
+      }
       setState(() => _showLogin = true);
       return;
     }
 
-    try {
-      final user = await AuthService().getCurrentUser();
-      final role = AuthRedirect.normalizeRole(
-        user['role'] ?? await TokenStorage.getRole(),
-      );
+    final role = result.normalizedRole!;
+    final user = result.user!;
+    final themeController = AppThemeScope.of(context);
 
-      await TokenStorage.saveRole(role);
-      if (mounted) {
-        await AppThemeScope.of(context).loadForUser(user);
-      }
+    await TokenStorage.saveRole(role);
+    if (!mounted) return;
 
-      if (!mounted) return;
+    await themeController.loadForUser(user);
 
-      final route = AuthRedirect.routeForRole(role);
+    if (!mounted) return;
 
-      if (route == '/login') {
-        await TokenStorage.clearAll();
-        if (!mounted) return;
-        setState(() => _showLogin = true);
-        return;
-      }
-
-      Navigator.pushReplacementNamed(context, route);
-    } catch (_) {
-      await TokenStorage.clearAll();
-
-      if (!mounted) return;
-
-      setState(() => _showLogin = true);
-    }
+    Navigator.pushReplacementNamed(context, AuthRedirect.routeForRole(role));
   }
 
   @override
@@ -70,6 +64,11 @@ class _SessionGateState extends State<SessionGate> {
       return const LoginScreen();
     }
 
-    return const ColoredBox(color: Color(0xFF0C1727));
+    return const Scaffold(
+      body: ColoredBox(
+        color: Color(0xFF0C1727),
+        child: Center(child: CircularProgressIndicator()),
+      ),
+    );
   }
 }

@@ -372,6 +372,46 @@ class AdminAccountManagementTest extends TestCase
         ]);
     }
 
+    public function test_super_admin_user_list_collapses_duplicate_normalized_emails(): void
+    {
+        $superAdmin = User::create([
+            'name' => 'Super Admin',
+            'email' => 'dedupe-super-admin@test.com',
+            'password' => 'password123',
+            'role' => 'super_admin',
+            'is_active' => true,
+        ]);
+
+        User::create([
+            'name' => 'Legacy Citizen Copy',
+            'email' => '  Duplicate.Citizen@Test.com ',
+            'password' => 'password123',
+            'role' => 'citizen',
+            'is_active' => false,
+        ]);
+
+        $activeCitizen = User::create([
+            'name' => 'Active Citizen',
+            'email' => 'duplicate.citizen@test.com',
+            'password' => 'password123',
+            'role' => 'citizen',
+            'is_active' => true,
+        ]);
+
+        Sanctum::actingAs($superAdmin);
+
+        $response = $this->getJson('/api/admin/users');
+
+        $response->assertOk();
+
+        $matchingUsers = collect($response->json())
+            ->filter(fn (array $user) => strtolower(trim((string) ($user['email'] ?? ''))) === 'duplicate.citizen@test.com')
+            ->values();
+
+        $this->assertCount(1, $matchingUsers);
+        $this->assertSame($activeCitizen->id, $matchingUsers->first()['id']);
+    }
+
     public function test_protected_super_admin_profile_cannot_be_edited_from_portal(): void
     {
         $superAdmin = User::create([

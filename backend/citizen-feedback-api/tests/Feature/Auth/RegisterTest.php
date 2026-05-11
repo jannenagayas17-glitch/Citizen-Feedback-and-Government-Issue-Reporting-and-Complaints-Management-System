@@ -55,6 +55,28 @@ class RegisterTest extends TestCase
             ->assertJsonPath('errors.email.0', 'This email is already registered.');
     }
 
+    public function test_citizen_registration_rejects_legacy_duplicate_email_with_spaces(): void
+    {
+        \App\Models\User::create([
+            'name' => 'Legacy Citizen',
+            'email' => '  citizen.legacy@example.com ',
+            'password' => bcrypt('password123'),
+            'role' => 'citizen',
+            'is_active' => true,
+        ]);
+
+        $this->postJson('/api/auth/register', [
+            'name' => 'New Citizen',
+            'email' => 'Citizen.Legacy@example.com',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+            'mobile_number' => '09175551234',
+        ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('email')
+            ->assertJsonPath('errors.email.0', 'This email is already registered.');
+    }
+
     public function test_citizen_registration_validates_bad_full_name(): void
     {
         $response = $this->postJson('/api/auth/register', [

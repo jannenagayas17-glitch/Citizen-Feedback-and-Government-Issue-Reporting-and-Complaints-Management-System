@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../screens/admin/admin_home_screen.dart';
 import '../screens/auth/forgot_password_screen.dart';
+import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
 import '../screens/super_admin/super_admin_dashboard.dart';
+import 'protected_portal_route.dart';
 import 'session_gate.dart';
 
 class AppRoutes {
@@ -16,11 +18,32 @@ class AppRoutes {
 
   static Map<String, WidgetBuilder> get routes {
     return {
-      login: (context) => const SessionGate(),
+      splash: (context) => const SessionGate(),
+      login: (context) => const LoginScreen(),
       register: (context) => const RegisterScreen(),
       forgotPassword: (context) => const ForgotPasswordScreen(),
-      adminHome: (context) => const AdminHomeScreen(),
-      superAdminHome: (context) => const SuperAdminDashboard(),
+      adminHome: (context) => const ProtectedPortalRoute(
+        allowedRoles: {'admin'},
+        childBuilder: _buildAdminHome,
+      ),
+      superAdminHome: (context) => const ProtectedPortalRoute(
+        allowedRoles: {'super_admin'},
+        childBuilder: _buildSuperAdminHome,
+      ),
     };
+  }
+
+  static Widget _buildAdminHome(
+    BuildContext context,
+    Map<String, dynamic> user,
+  ) {
+    return const AdminHomeScreen();
+  }
+
+  static Widget _buildSuperAdminHome(
+    BuildContext context,
+    Map<String, dynamic> user,
+  ) {
+    return const SuperAdminDashboard();
   }
 }

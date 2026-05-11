@@ -31,6 +31,32 @@ List<Map<String, dynamic>> deduplicateManagedUsers(Iterable<dynamic> users) {
   return uniqueUsers.values.map(Map<String, dynamic>.from).toList();
 }
 
+Map<String, List<Map<String, dynamic>>> duplicateManagedUserEmailGroups(
+  Iterable<dynamic> users,
+) {
+  final grouped = <String, List<Map<String, dynamic>>>{};
+
+  for (final rawUser in users) {
+    if (rawUser is! Map<String, dynamic>) {
+      continue;
+    }
+
+    final user = Map<String, dynamic>.from(rawUser);
+    final normalizedEmail = normalizedManagedUserEmail(user);
+    if (normalizedEmail.isEmpty) {
+      continue;
+    }
+
+    grouped
+        .putIfAbsent(normalizedEmail, () => <Map<String, dynamic>>[])
+        .add(user);
+  }
+
+  grouped.removeWhere((key, value) => value.length < 2);
+
+  return grouped;
+}
+
 String managedUserDeduplicationKey(Map<String, dynamic> user) {
   final normalizedEmail = normalizedManagedUserEmail(user);
   if (normalizedEmail.isNotEmpty) {

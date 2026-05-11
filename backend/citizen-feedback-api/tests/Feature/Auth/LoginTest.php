@@ -90,4 +90,22 @@ class LoginTest extends TestCase
             ->assertStatus(422)
             ->assertJsonValidationErrors('email');
     }
+
+    public function test_user_can_login_when_legacy_email_in_database_has_spaces_and_mixed_case(): void
+    {
+        User::create([
+            'name' => 'Legacy Citizen',
+            'email' => '  Legacy.Citizen@Example.com ',
+            'password' => Hash::make('password123'),
+            'role' => 'citizen',
+            'is_active' => true,
+        ]);
+
+        $this->postJson('/api/auth/login', [
+            'email' => 'legacy.citizen@example.com',
+            'password' => 'password123',
+        ])
+            ->assertOk()
+            ->assertJsonPath('user.role', 'citizen');
+    }
 }

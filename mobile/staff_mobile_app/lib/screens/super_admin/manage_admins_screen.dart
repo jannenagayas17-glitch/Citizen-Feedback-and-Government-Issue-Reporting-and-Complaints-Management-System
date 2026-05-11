@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -41,6 +42,18 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
       _reportService.getAdminReports(),
       _authService.getOffices(includeInactive: true),
     ]);
+
+    if (kDebugMode) {
+      final duplicateEmailGroups = duplicateManagedUserEmailGroups(
+        results[0] as List<dynamic>,
+      );
+      if (duplicateEmailGroups.isNotEmpty) {
+        debugPrint(
+          'Account Management duplicate email groups from API: '
+          '${duplicateEmailGroups.keys.join(', ')}',
+        );
+      }
+    }
 
     return _StaffPayload(
       users: results[0] as List<dynamic>,
