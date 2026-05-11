@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
-import '../../services/report_service.dart';
+import '../../services/dashboard_service.dart';
 import '../../services/system_settings_service.dart';
 import '../admin/analytics_reports_screen.dart';
 import '../auth/login_screen.dart';
@@ -35,7 +35,7 @@ enum _SuperAdminDesktopSection {
 
 class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
   final AuthService _authService = AuthService();
-  final ReportService _reportService = ReportService();
+  final DashboardService _dashboardService = DashboardService();
   final SystemSettingsService _settingsService = SystemSettingsService();
 
   late Future<_SuperDashboardData> _statsFuture;
@@ -54,29 +54,29 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
   Future<_SuperDashboardData> _loadAndCacheDashboard() async {
     final results = await Future.wait([
       _authService.getCurrentUser(),
-      _reportService.getAdminReports(),
+      _dashboardService.getDashboardStats(),
+      _dashboardService.getAnalytics(),
       _authService.getAdminUsers(),
       _authService.getOffices(includeInactive: true),
       _settingsService.getSettings(),
     ]);
     final user = Map<String, dynamic>.from(results[0] as Map);
-    final reports = (results[1] as List)
+    final stats = Map<String, dynamic>.from(results[1] as Map);
+    final analytics = Map<String, dynamic>.from(results[2] as Map);
+    final users = (results[3] as List)
         .whereType<Map<String, dynamic>>()
         .map(Map<String, dynamic>.from)
         .toList();
-    final users = (results[2] as List)
+    final offices = (results[4] as List)
         .whereType<Map<String, dynamic>>()
         .map(Map<String, dynamic>.from)
         .toList();
-    final offices = (results[3] as List)
-        .whereType<Map<String, dynamic>>()
-        .map(Map<String, dynamic>.from)
-        .toList();
-    final settings = Map<String, dynamic>.from(results[4] as Map);
+    final settings = Map<String, dynamic>.from(results[5] as Map);
 
     final data = _SuperDashboardData(
       user: user,
-      reports: reports,
+      stats: stats,
+      analytics: analytics,
       users: users,
       offices: offices,
       settings: settings,
@@ -228,29 +228,6 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
     );
   }
 
-  DateTime? _reportCreatedAt(Map<String, dynamic> report) {
-    final raw = report['created_at']?.toString();
-    return raw == null ? null : DateTime.tryParse(raw)?.toLocal();
-  }
-
-  String _reportStatus(Map<String, dynamic> report) =>
-      (report['status'] ?? 'New').toString();
-
-  String _reportPriority(Map<String, dynamic> report) =>
-      (report['priority'] ?? 'Normal').toString();
-
-  String _reportOfficeName(Map<String, dynamic> report) {
-    final office = report['office'];
-    if (office is Map<String, dynamic>) {
-      final name = (office['name'] ?? '').toString().trim();
-      if (name.isNotEmpty) return name;
-    }
-    return 'Unassigned Office';
-  }
-
-  String _reportBarangay(Map<String, dynamic> report) =>
-      (report['barangay'] ?? '').toString().trim();
-
   double? _barangayNumber(String value) {
     final match = RegExp(
       r'^barangay\s+(\d+)(?:-([a-z]))?',
@@ -312,107 +289,91 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
   }
 
   Map<String, dynamic> _buildDashboardMetrics(_SuperDashboardData data) {
-    final reports = data.reports;
+    final analytics = data.analytics;
+    final overview = Map<String, dynamic>.from(
+      analytics['overview'] as Map? ?? const {},
+    );
+    final priorityBreakdown =
+        (analytics['priority_breakdown'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
+    final officeBreakdown =
+        (analytics['office_breakdown'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
+    final rawBarangays =
+        (analytics['top_barangays'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
+    final monthlyVolume =
+        (analytics['monthly_volume'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
+    final escalations =
+        (analytics['escalations_preview'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
     final offices = data.offices;
     final elevatedUsers = data.users
         .where((user) => ['admin', 'super_admin'].contains(user['role']))
         .toList();
-    final resolved = reports
-        .where((report) => _reportStatus(report) == 'Resolved')
-        .length;
-    final unresolved = reports
-        .where((report) => _reportStatus(report) != 'Resolved')
-        .toList();
+    final totalReports =
+        int.tryParse(
+          '${overview['total_reports'] ?? data.stats['total_reports'] ?? 0}',
+        ) ??
+        0;
+    final resolved = int.tryParse('${overview['resolved'] ?? 0}') ?? 0;
+    final pending = int.tryParse('${overview['pending'] ?? 0}') ?? 0;
+    final inProgress = int.tryParse('${overview['in_progress'] ?? 0}') ?? 0;
+    final rejected = int.tryParse('${overview['rejected'] ?? 0}') ?? 0;
     final triggerHours =
         int.tryParse(
-          '${data.settings['escalation_settings']?['trigger_time_hours'] ?? 72}',
+          '${analytics['trigger_time_hours'] ?? data.settings['escalation_settings']?['trigger_time_hours'] ?? 72}',
         ) ??
         72;
-    final avgHours = unresolved.isEmpty
-        ? 0
-        : (unresolved
-                      .map((report) {
-                        final created = _reportCreatedAt(report);
-                        if (created == null) return 0.0;
-                        return DateTime.now()
-                            .difference(created)
-                            .inHours
-                            .toDouble();
-                      })
-                      .fold<double>(0, (sum, value) => sum + value) /
-                  unresolved.length)
-              .round();
+    final avgHours =
+        int.tryParse('${analytics['average_open_hours'] ?? 0}') ?? 0;
     final avgResponseLabel = _formatResponseTime(avgHours);
-    final resolutionRate = reports.isEmpty
+    final resolutionRate = totalReports == 0
         ? 0
-        : ((resolved / reports.length) * 100).round();
+        : ((resolved / totalReports) * 100).round();
 
-    final escalations =
-        reports.where((report) {
-          final created = _reportCreatedAt(report);
-          if (created == null) return false;
-          return _reportStatus(report) != 'Resolved' &&
-              DateTime.now().difference(created).inHours >= triggerHours;
-        }).toList()..sort((a, b) {
-          final aDate =
-              _reportCreatedAt(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
-          final bDate =
-              _reportCreatedAt(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
-          return aDate.compareTo(bDate);
-        });
-
-    final officeStats =
-        offices.map((office) {
-            final name = (office['name'] ?? '').toString().trim();
-            final officeReports = reports
-                .where((report) => _reportOfficeName(report) == name)
-                .toList();
-            final officeResolved = officeReports
-                .where((report) => _reportStatus(report) == 'Resolved')
-                .length;
-            return {
-              'name': name,
-              'total': officeReports.length,
-              'pending': officeReports
-                  .where((report) => _reportStatus(report) == 'Pending')
-                  .length,
-              'resolved': officeResolved,
-              'resolutionRate': officeReports.isEmpty
-                  ? 0
-                  : ((officeResolved / officeReports.length) * 100).round(),
-            };
-          }).toList()
-          ..sort((a, b) => (b['total'] as int).compareTo(a['total'] as int));
+    final officeStats = officeBreakdown.map((office) {
+      return {
+        'name': (office['label'] ?? 'Department').toString(),
+        'total': int.tryParse('${office['count'] ?? 0}') ?? 0,
+        'pending': int.tryParse('${office['pending'] ?? 0}') ?? 0,
+        'resolved': int.tryParse('${office['resolved'] ?? 0}') ?? 0,
+        'resolutionRate':
+            int.tryParse('${office['resolution_rate'] ?? 0}') ?? 0,
+      };
+    }).toList();
 
     final officePerformance = officeStats.take(5).toList();
     final hottestBarangays = <Map<String, dynamic>>[];
-    final byBarangay = <String, int>{};
-    for (final report in reports) {
-      final barangay = _reportBarangay(report);
-      if (barangay.isEmpty) continue;
-      byBarangay[barangay] = (byBarangay[barangay] ?? 0) + 1;
-    }
-    final maxBarangayCount = byBarangay.values.isEmpty
+    final maxBarangayCount = rawBarangays.isEmpty
         ? 1
-        : byBarangay.values.reduce(math.max);
-    final barangayEntries = byBarangay.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+        : rawBarangays
+              .map((item) => int.tryParse('${item['count'] ?? 0}') ?? 0)
+              .reduce(math.max);
     hottestBarangays.addAll(
-      barangayEntries.asMap().entries.map((entry) {
+      rawBarangays.asMap().entries.map((entry) {
         final item = entry.value;
         final index = entry.key;
-        final ratio = item.value / maxBarangayCount;
+        final label = (item['label'] ?? 'Barangay').toString();
+        final count = int.tryParse('${item['count'] ?? 0}') ?? 0;
+        final ratio = maxBarangayCount == 0 ? 0.0 : count / maxBarangayCount;
         final severity = ratio >= 0.8
             ? 'High'
             : ratio >= 0.45
             ? 'Medium'
             : 'Low';
-        final position = _heatMapPositionForBarangay(item.key, index);
+        final position = _heatMapPositionForBarangay(label, index);
         return {
-          'label': item.key,
-          'count': item.value,
+          'label': label,
+          'count': count,
           'severity': severity,
-          'share': ((item.value / reports.length.clamp(1, 999999)) * 100)
+          'share': ((count / totalReports.clamp(1, 999999)) * 100)
               .toStringAsFixed(1),
           'x': position.dx,
           'y': position.dy,
@@ -437,60 +398,39 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
         );
 
     final priorityWeights = {'Low': 1, 'Normal': 2, 'High': 3, 'Urgent': 4};
-    final avgSeverity = reports.isEmpty
+    final weightedSeverity = priorityBreakdown.fold<double>(0, (sum, item) {
+      final label = (item['label'] ?? '').toString();
+      final count = int.tryParse('${item['count'] ?? 0}') ?? 0;
+      return sum + ((priorityWeights[label] ?? 2) * count);
+    });
+    final avgSeverity = totalReports == 0
         ? 0.0
-        : reports
-                  .map(
-                    (report) => priorityWeights[_reportPriority(report)] ?? 2,
-                  )
-                  .fold<int>(0, (sum, value) => sum + value) /
-              reports.length;
-    final praiseLike = reports
-        .where((report) => _reportStatus(report) == 'Resolved')
-        .length;
-    final suggestionLike = reports
-        .where((report) => _reportStatus(report) == 'Pending')
-        .length;
-    final complaintLike = reports
-        .where(
-          (report) =>
-              ['In Progress', 'Rejected'].contains(_reportStatus(report)),
-        )
-        .length;
-
-    final monthlyMap = <int, int>{};
-    for (final report in reports) {
-      final created = _reportCreatedAt(report);
-      if (created == null) continue;
-      monthlyMap[created.month] = (monthlyMap[created.month] ?? 0) + 1;
-    }
-    final monthlySeries = List.generate(
-      12,
-      (index) => {'month': index + 1, 'count': monthlyMap[index + 1] ?? 0},
-    );
+        : weightedSeverity / totalReports;
 
     return {
-      'totalReports': reports.length,
+      'totalReports': totalReports,
       'totalDepartments': offices
           .where((office) => office['is_active'] != false)
           .length,
       'avgResponseHours': avgHours,
       'avgResponseLabel': avgResponseLabel,
       'resolutionRate': resolutionRate,
-      'escalations': escalations.take(2).toList(),
+      'escalations': escalations.take(4).toList(),
       'barangays': hottestBarangays.take(5).toList(),
       'officePerformance': officePerformance,
       'officeStats': officeStats.take(6).toList(),
       'adminRows': adminRows.take(4).toList(),
       'feedback': {
-        'total': reports.length,
+        'total': totalReports,
         'avgStars': avgSeverity,
-        'praise': praiseLike,
-        'suggestion': suggestionLike,
-        'complaint': complaintLike,
+        'praise': resolved,
+        'suggestion': pending,
+        'complaint': inProgress + rejected,
       },
-      'monthlySeries': monthlySeries,
+      'monthlySeries': monthlyVolume,
       'escalationTriggerHours': triggerHours,
+      'staleReportsCount':
+          int.tryParse('${analytics['stale_reports_count'] ?? 0}') ?? 0,
     };
   }
 
@@ -937,14 +877,16 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
 class _SuperDashboardData {
   const _SuperDashboardData({
     required this.user,
-    required this.reports,
+    required this.stats,
+    required this.analytics,
     required this.users,
     required this.offices,
     required this.settings,
   });
 
   final Map<String, dynamic> user;
-  final List<Map<String, dynamic>> reports;
+  final Map<String, dynamic> stats;
+  final Map<String, dynamic> analytics;
   final List<Map<String, dynamic>> users;
   final List<Map<String, dynamic>> offices;
   final Map<String, dynamic> settings;
@@ -2756,20 +2698,6 @@ class _MonthlyVolumeChart extends StatelessWidget {
     final maxCount = items.isEmpty
         ? 1
         : items.map((item) => (item['count'] as int?) ?? 0).reduce(math.max);
-    const labels = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
 
     return SizedBox(
       height: 180,
@@ -2795,7 +2723,22 @@ class _MonthlyVolumeChart extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    labels[index],
+                    (items[index]['label'] ?? '').toString().isEmpty
+                        ? [
+                            'Jan',
+                            'Feb',
+                            'Mar',
+                            'Apr',
+                            'May',
+                            'Jun',
+                            'Jul',
+                            'Aug',
+                            'Sep',
+                            'Oct',
+                            'Nov',
+                            'Dec',
+                          ][index % 12]
+                        : (items[index]['label'] ?? '').toString(),
                     style: TextStyle(color: colors.mutedText, fontSize: 11),
                   ),
                 ],

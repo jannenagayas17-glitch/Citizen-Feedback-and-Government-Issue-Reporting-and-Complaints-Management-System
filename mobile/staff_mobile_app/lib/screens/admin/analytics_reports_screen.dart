@@ -29,13 +29,14 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
   String _department = 'All Departments';
   String _barangay = 'All Barangays';
   String _category = 'All Categories';
-  String _datePreset = 'last_30_days';
+  String _status = 'All Statuses';
+  String? _datePreset;
   late DateTimeRange _range;
 
   @override
   void initState() {
     super.initState();
-    _range = _rangeForPreset(_datePreset);
+    _range = _defaultRange();
     _payloadFuture = _load();
   }
 
@@ -49,6 +50,7 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
         office: _department == 'All Departments' ? null : _department,
         barangay: _barangay == 'All Barangays' ? null : _barangay,
         category: _category == 'All Categories' ? null : _category,
+        status: _status == 'All Statuses' ? null : _status,
         datePreset: _datePreset,
         startDate: _datePreset == 'custom' ? _range.start : null,
         endDate: _datePreset == 'custom' ? _range.end : null,
@@ -84,6 +86,7 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
         office: _department == 'All Departments' ? null : _department,
         barangay: _barangay == 'All Barangays' ? null : _barangay,
         category: _category == 'All Categories' ? null : _category,
+        status: _status == 'All Statuses' ? null : _status,
         datePreset: _datePreset,
         startDate: _datePreset == 'custom' ? _range.start : null,
         endDate: _datePreset == 'custom' ? _range.end : null,
@@ -120,7 +123,17 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
     return (user['department'] ?? '').toString().trim();
   }
 
-  DateTimeRange _rangeForPreset(String preset) {
+  DateTimeRange _defaultRange() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    return DateTimeRange(
+      start: today.subtract(const Duration(days: 29)),
+      end: today,
+    );
+  }
+
+  DateTimeRange _rangeForPreset(String? preset) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
@@ -135,15 +148,14 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
       case 'custom':
         return _range;
       default:
-        return DateTimeRange(
-          start: today.subtract(const Duration(days: 29)),
-          end: today,
-        );
+        return _defaultRange();
     }
   }
 
   String _datePresetLabel() {
     switch (_datePreset) {
+      case null:
+        return 'All Time';
       case 'today':
         return 'Today';
       case 'last_7_days':
@@ -157,6 +169,10 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
 
   Future<void> _setDatePreset(String label) async {
     switch (label) {
+      case 'All Time':
+        _datePreset = null;
+        _range = _defaultRange();
+        break;
       case 'Today':
         _datePreset = 'today';
         _range = _rangeForPreset(_datePreset);
@@ -275,6 +291,17 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
           (category) => (category['name'] ?? '').toString(),
         ),
     ], 'All Categories');
+  }
+
+  List<String> _statusOptions() {
+    return const [
+      'All Statuses',
+      'New',
+      'Pending',
+      'In Progress',
+      'Resolved',
+      'Rejected',
+    ];
   }
 
   int _compareBarangays(String a, String b) {
@@ -456,6 +483,11 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
               final useWideFilters = screenWidth >= 1380;
               final superAdmin = _isSuperAdmin(payload.user);
               final dateLabel = _datePresetLabel();
+              final hasComparison = _datePreset != null;
+              final statuses = _statusOptions();
+              if (!statuses.contains(_status)) {
+                _status = statuses.first;
+              }
 
               Widget card(
                 String label,
@@ -508,16 +540,19 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      '${_deltaPercent(counts[key] ?? 0, previousCounts[key] ?? 0) >= 0 ? '+' : ''}${_deltaPercent(counts[key] ?? 0, previousCounts[key] ?? 0)}% from last period',
+                      hasComparison
+                          ? '${_deltaPercent(counts[key] ?? 0, previousCounts[key] ?? 0) >= 0 ? '+' : ''}${_deltaPercent(counts[key] ?? 0, previousCounts[key] ?? 0)}% from last period'
+                          : 'Showing all scoped reports',
                       style: TextStyle(
-                        color:
-                            _deltaPercent(
-                                  counts[key] ?? 0,
-                                  previousCounts[key] ?? 0,
-                                ) >=
-                                0
-                            ? const Color(0xFF7FE2B5)
-                            : const Color(0xFFF38A8A),
+                        color: hasComparison
+                            ? (_deltaPercent(
+                                        counts[key] ?? 0,
+                                        previousCounts[key] ?? 0,
+                                      ) >=
+                                      0
+                                  ? const Color(0xFF7FE2B5)
+                                  : const Color(0xFFF38A8A))
+                            : themeColors.mutedText,
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                       ),
@@ -575,6 +610,17 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                         ),
                         const SizedBox(width: 12),
                         Expanded(
+                          flex: 4,
+                          child: _dropdown(_status, statuses, (v) {
+                            if (v == null) return;
+                            setState(() {
+                              _status = v;
+                              _payloadFuture = _load();
+                            });
+                          }),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
                           flex: 5,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -582,6 +628,7 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                               _dropdown(
                                 _datePresetLabel(),
                                 const [
+                                  'All Time',
                                   'Last 30 Days',
                                   'Today',
                                   'Last 7 Days',
@@ -627,6 +674,13 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                             _payloadFuture = _load();
                           });
                         }, width: 240),
+                        _dropdown(_status, statuses, (v) {
+                          if (v == null) return;
+                          setState(() {
+                            _status = v;
+                            _payloadFuture = _load();
+                          });
+                        }, width: 220),
                         SizedBox(
                           width: 280,
                           child: Column(
@@ -635,6 +689,7 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                               _dropdown(
                                 _datePresetLabel(),
                                 const [
+                                  'All Time',
                                   'Last 30 Days',
                                   'Today',
                                   'Last 7 Days',

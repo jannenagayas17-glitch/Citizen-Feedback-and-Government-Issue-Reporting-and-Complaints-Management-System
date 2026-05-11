@@ -1,0 +1,224 @@
+<?php
+
+namespace App\Support;
+
+use App\Models\Office;
+use App\Models\Report;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Carbon;
+
+class ReportQueryService
+{
+    /**
+     * @return list<string>
+     */
+    public function canonicalStatuses(): array
+    {
+        return ['New', 'Pending', 'In Progress', 'Resolved', 'Rejected'];
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function canonicalPriorities(): array
+    {
+        return ['Low', 'Normal', 'High', 'Urgent'];
+    }
+
+    public function scopedForUser($user): Builder
+    {
+        $query = Report::query();
+        $role = $user->role ?? 'citizen';
+
+        if ($role === 'citizen') {
+            $query->where('reports.user_id', $user->id);
+        } elseif ($role === 'admin') {
+            $officeId = $this->resolveAdminOfficeId($user);
+
+            if ($officeId === null) {
+                $query->whereRaw('1 = 0');
+            } else {
+                $query->where('reports.office_id', $officeId);
+            }
+        }
+
+        return $query;
+    }
+
+    public function applyFilters(Builder $query, array $filters): void
+    {
+        if (! empty($filters['status'])) {
+            $query->where('reports.status', trim((string) $filters['status']));
+        }
+
+        if (! empty($filters['office'])) {
+            $office = trim((string) $filters['office']);
+            $query->whereHas('office', function (Builder $officeQuery) use ($office) {
+                $officeQuery->whereRaw('LOWER(name) = ?', [mb_strtolower($office)]);
+            });
+        }
+
+        if (! empty($filters['barangay'])) {
+            $barangay = trim((string) $filters['barangay']);
+            $query->whereRaw('LOWER(reports.barangay) = ?', [mb_strtolower($barangay)]);
+        }
+
+        if (! empty($filters['category'])) {
+            $category = trim((string) $filters['category']);
+            $query->whereHas('category', function (Builder $categoryQuery) use ($category) {
+                $categoryQuery->whereRaw('LOWER(name) = ?', [mb_strtolower($category)]);
+            });
+        }
+
+        if (! empty($filters['search'])) {
+            $search = trim((string) $filters['search']);
+            $normalizedSearch = mb_strtolower($search);
+            $trackingId = preg_replace('/[^0-9]/', '', $search) ?? '';
+
+            $query->where(function (Builder $searchQuery) use ($search, $normalizedSearch, $trackingId) {
+                $hasCondition = false;
+
+                if ($trackingId !== '' && ctype_digit($trackingId)) {
+                    $searchQuery->where('reports.id', (int) $trackingId);
+                    $hasCondition = true;
+                }
+
+                $like = '%' . $search . '%';
+                $titleMethod = $hasCondition ? 'orWhere' : 'where';
+
+                $searchQuery
+                    ->{$titleMethod}('reports.title', 'like', $like)
+                    ->orWhere('reports.location', 'like', $like)
+                    ->orWhere('reports.barangay', 'like', $like)
+                    ->orWhere('reports.status', 'like', $like)
+                    ->orWhereHas('category', function (Builder $categoryQuery) use ($normalizedSearch) {
+                        $categoryQuery->whereRaw('LOWER(name) like ?', ['%' . $normalizedSearch . '%']);
+                    })
+                    ->orWhereHas('office', function (Builder $officeQuery) use ($normalizedSearch) {
+                        $officeQuery->whereRaw('LOWER(name) like ?', ['%' . $normalizedSearch . '%']);
+                    })
+                    ->orWhereHas('user', function (Builder $userQuery) use ($normalizedSearch) {
+                        $userQuery->whereRaw('LOWER(name) like ?', ['%' . $normalizedSearch . '%']);
+                    });
+            });
+        }
+    }
+
+    public function applyDateRangeFilter(Builder $query, array $filters): ?array
+    {
+        $range = $this->resolveDateRange($filters);
+
+        if ($range === null) {
+            return null;
+        }
+
+        $query->whereBetween('reports.created_at', [$range['start'], $range['end']]);
+
+        return $range;
+    }
+
+    public function resolveDateRange(array $filters): ?array
+    {
+        $preset = trim((string) ($filters['date_preset'] ?? ''));
+        if ($preset === '') {
+            return null;
+        }
+
+        $today = now()->startOfDay();
+
+        return match ($preset) {
+            'today' => [
+                'preset' => $preset,
+                'start' => $today->copy(),
+                'end' => $today->copy()->endOfDay(),
+            ],
+            'last_7_days' => [
+                'preset' => $preset,
+                'start' => $today->copy()->subDays(6),
+                'end' => $today->copy()->endOfDay(),
+            ],
+            'last_30_days' => [
+                'preset' => $preset,
+                'start' => $today->copy()->subDays(29),
+                'end' => $today->copy()->endOfDay(),
+            ],
+            'custom' => [
+                'preset' => $preset,
+                'start' => Carbon::parse((string) $filters['start_date'])->startOfDay(),
+                'end' => Carbon::parse((string) $filters['end_date'])->endOfDay(),
+            ],
+            default => null,
+        };
+    }
+
+    public function fallbackTimelineRange(Builder $query): array
+    {
+        $earliestCreatedAt = (clone $query)->min('created_at');
+        $latestCreatedAt = (clone $query)->max('created_at');
+
+        $start = $earliestCreatedAt === null
+            ? now()->startOfDay()
+            : Carbon::parse($earliestCreatedAt)->startOfDay();
+        $end = $latestCreatedAt === null
+            ? now()->endOfDay()
+            : Carbon::parse($latestCreatedAt)->endOfDay();
+
+        if ($start->gt($end)) {
+            [$start, $end] = [$end->copy()->startOfDay(), $start->copy()->endOfDay()];
+        }
+
+        return [
+            'preset' => 'all_time',
+            'start' => $start,
+            'end' => $end,
+        ];
+    }
+
+    public function buildOverviewCounts(Builder $query): array
+    {
+        $statusCounts = (clone $query)
+            ->select('status')
+            ->selectRaw('COUNT(*) as total')
+            ->groupBy('status')
+            ->pluck('total', 'status');
+
+        $new = (int) ($statusCounts['New'] ?? 0);
+        $pending = (int) ($statusCounts['Pending'] ?? 0);
+        $inProgress = (int) ($statusCounts['In Progress'] ?? 0);
+        $resolved = (int) ($statusCounts['Resolved'] ?? 0);
+        $rejected = (int) ($statusCounts['Rejected'] ?? 0);
+
+        return [
+            'total_reports' => (clone $query)->count(),
+            'new' => $new,
+            'pending' => $pending,
+            'in_progress' => $inProgress,
+            'resolved' => $resolved,
+            'rejected' => $rejected,
+            'queue_count' => $new + $pending + $inProgress,
+        ];
+    }
+
+    public function resolveAdminOfficeId($user): ?int
+    {
+        if (($user->role ?? null) !== 'admin') {
+            return null;
+        }
+
+        $directOfficeId = data_get($user, 'office_id') ?? data_get($user, 'office.id');
+        if ($directOfficeId !== null && is_numeric($directOfficeId)) {
+            return (int) $directOfficeId;
+        }
+
+        $department = trim((string) ($user->department ?? ''));
+        if ($department === '') {
+            return null;
+        }
+
+        $resolvedOfficeId = Office::query()
+            ->whereRaw('LOWER(name) = ?', [mb_strtolower($department)])
+            ->value('id');
+
+        return $resolvedOfficeId === null ? null : (int) $resolvedOfficeId;
+    }
+}

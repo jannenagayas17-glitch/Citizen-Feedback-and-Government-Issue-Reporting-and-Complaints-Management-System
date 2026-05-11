@@ -13,6 +13,7 @@ class DashboardService {
     String? office,
     String? barangay,
     String? category,
+    String? status,
     String? datePreset,
     DateTime? startDate,
     DateTime? endDate,
@@ -26,6 +27,7 @@ class DashboardService {
           'barangay': barangay.trim(),
         if (category != null && category.trim().isNotEmpty)
           'category': category.trim(),
+        if (status != null && status.trim().isNotEmpty) 'status': status.trim(),
         if (datePreset != null && datePreset.trim().isNotEmpty)
           'date_preset': datePreset.trim(),
         if (startDate != null) 'start_date': _formatDateOnly(startDate),

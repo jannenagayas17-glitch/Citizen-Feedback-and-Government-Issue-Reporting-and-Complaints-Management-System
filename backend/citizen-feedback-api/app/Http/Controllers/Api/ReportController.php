@@ -8,9 +8,9 @@ use App\Models\Category;
 use App\Models\Office;
 use App\Models\Report;
 use App\Models\StatusHistory;
+use App\Support\ReportQueryService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -26,6 +26,11 @@ class ReportController extends Controller
     private const OTP_TTL_MINUTES = 10;
     private const MEDIA_MAX_KB = 50 * 1024;
     private const MEDIA_TYPES = ['jpg', 'jpeg', 'png', 'mp4', 'mov', 'avi', 'webm', '3gp', 'm4v'];
+
+    public function __construct(
+        private readonly ReportQueryService $reportQueries,
+    ) {
+    }
 
     public function index(Request $request)
     {
@@ -186,14 +191,21 @@ class ReportController extends Controller
             'category' => ['nullable', 'string', 'max:255'],
             'barangay' => ['nullable', 'string', 'max:255'],
             'office' => ['nullable', 'string', 'max:255'],
+            'date_preset' => ['nullable', 'string', 'in:today,last_7_days,last_30_days,custom'],
+            'start_date' => ['nullable', 'date', 'required_if:date_preset,custom'],
+            'end_date' => ['nullable', 'date', 'required_if:date_preset,custom', 'after_or_equal:start_date'],
             'page' => ['nullable', 'integer', 'min:1'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $query = $this->scopedAdminReports($request)
+        $query = $this->reportQueries
+            ->scopedForUser($request->user())
+            ->orderByDesc('reports.created_at')
+            ->orderByDesc('reports.id')
             ->with($this->adminListRelations());
 
-        $this->applyAdminReportFilters($query, $validated);
+        $this->reportQueries->applyFilters($query, $validated);
+        $this->reportQueries->applyDateRangeFilter($query, $validated);
 
         $shouldPaginate = $request->boolean('paginate')
             || $request->filled('page')
@@ -264,11 +276,15 @@ class ReportController extends Controller
             'barangay' => ['nullable', 'string', 'max:255'],
             'office' => ['nullable', 'string', 'max:255'],
             'date_preset' => ['nullable', 'string', 'in:today,last_7_days,last_30_days,custom'],
-            'start_date' => ['nullable', 'date'],
-            'end_date' => ['nullable', 'date'],
+            'start_date' => ['nullable', 'date', 'required_if:date_preset,custom'],
+            'end_date' => ['nullable', 'date', 'required_if:date_preset,custom', 'after_or_equal:start_date'],
         ]);
 
-        $query = $this->scopedAdminReports($request)->with([
+        $query = $this->reportQueries
+            ->scopedForUser($request->user())
+            ->orderByDesc('reports.created_at')
+            ->orderByDesc('reports.id')
+            ->with([
             'user:id,name,email',
             'category:id,name',
             'office:id,name',
@@ -276,10 +292,10 @@ class ReportController extends Controller
             'adminResponses' => function ($responseQuery) {
                 $responseQuery->latest();
             },
-        ]);
+            ]);
 
-        $this->applyAdminReportFilters($query, $validated);
-        $this->applyDateRangeFilter($query, $validated);
+        $this->reportQueries->applyFilters($query, $validated);
+        $this->reportQueries->applyDateRangeFilter($query, $validated);
 
         $reports = $query->get();
         $analytics = $this->buildReportExportAnalytics($reports);
@@ -499,124 +515,6 @@ class ReportController extends Controller
             ->all();
     }
 
-    private function scopedAdminReports(Request $request)
-    {
-        $query = Report::query()
-            ->orderByDesc('reports.created_at')
-            ->orderByDesc('reports.id');
-
-        if (($request->user()->role ?? null) === 'admin') {
-            $officeId = $this->resolveAdminOfficeId($request->user());
-
-            if ($officeId === null) {
-                $query->whereRaw('1 = 0');
-            } else {
-                $query->where('reports.office_id', $officeId);
-            }
-        }
-
-        return $query;
-    }
-
-    private function applyAdminReportFilters($query, array $filters): void
-    {
-        if (! empty($filters['status'])) {
-            $query->where('reports.status', $filters['status']);
-        }
-
-        if (! empty($filters['office'])) {
-            $office = trim((string) $filters['office']);
-            $query->whereHas('office', function ($officeQuery) use ($office) {
-                $officeQuery->whereRaw('LOWER(name) = ?', [mb_strtolower($office)]);
-            });
-        }
-
-        if (! empty($filters['barangay'])) {
-            $barangay = trim((string) $filters['barangay']);
-            $query->whereRaw('LOWER(reports.barangay) = ?', [mb_strtolower($barangay)]);
-        }
-
-        if (! empty($filters['category'])) {
-            $category = trim((string) $filters['category']);
-            $query->whereHas('category', function ($categoryQuery) use ($category) {
-                $categoryQuery->whereRaw('LOWER(name) = ?', [mb_strtolower($category)]);
-            });
-        }
-
-        if (! empty($filters['search'])) {
-            $search = trim((string) $filters['search']);
-            $normalizedSearch = mb_strtolower($search);
-            $trackingId = preg_replace('/[^0-9]/', '', $search) ?? '';
-
-            $query->where(function ($searchQuery) use ($search, $normalizedSearch, $trackingId) {
-                $hasCondition = false;
-
-                if ($trackingId !== '' && ctype_digit($trackingId)) {
-                    $searchQuery->where('reports.id', (int) $trackingId);
-                    $hasCondition = true;
-                }
-
-                $like = '%' . $search . '%';
-
-                $titleMethod = $hasCondition ? 'orWhere' : 'where';
-
-                $searchQuery
-                    ->{$titleMethod}('reports.title', 'like', $like)
-                    ->orWhere('reports.location', 'like', $like)
-                    ->orWhere('reports.barangay', 'like', $like)
-                    ->orWhere('reports.status', 'like', $like)
-                    ->orWhereHas('category', function ($categoryQuery) use ($normalizedSearch) {
-                        $categoryQuery->whereRaw('LOWER(name) like ?', ['%' . $normalizedSearch . '%']);
-                    })
-                    ->orWhereHas('office', function ($officeQuery) use ($normalizedSearch) {
-                        $officeQuery->whereRaw('LOWER(name) like ?', ['%' . $normalizedSearch . '%']);
-                    })
-                    ->orWhereHas('user', function ($userQuery) use ($normalizedSearch) {
-                        $userQuery->whereRaw('LOWER(name) like ?', ['%' . $normalizedSearch . '%']);
-                    });
-            });
-        }
-    }
-
-    private function applyDateRangeFilter($query, array $filters): void
-    {
-        $preset = (string) ($filters['date_preset'] ?? '');
-        $startDate = $filters['start_date'] ?? null;
-        $endDate = $filters['end_date'] ?? null;
-
-        if ($preset === '' && ($startDate === null || $endDate === null)) {
-            return;
-        }
-
-        if ($preset === 'custom') {
-            if ($startDate === null || $endDate === null) {
-                $query->whereRaw('1 = 0');
-                return;
-            }
-
-            $start = Carbon::parse((string) $startDate)->startOfDay();
-            $end = Carbon::parse((string) $endDate)->endOfDay();
-        } else {
-            $today = now()->startOfDay();
-            [$start, $end] = match ($preset) {
-                'today' => [$today->copy(), $today->copy()->endOfDay()],
-                'last_7_days' => [$today->copy()->subDays(6), $today->copy()->endOfDay()],
-                'last_30_days' => [$today->copy()->subDays(29), $today->copy()->endOfDay()],
-                default => [null, null],
-            };
-        }
-
-        if ($start === null || $end === null) {
-            return;
-        }
-
-        if ($start->gt($end)) {
-            [$start, $end] = [$end->copy()->startOfDay(), $start->copy()->endOfDay()];
-        }
-
-        $query->whereBetween('reports.created_at', [$start, $end]);
-    }
-
     private function authorizeReportAccess(Request $request, Report $report): void
     {
         $role = $request->user()->role ?? 'citizen';
@@ -626,35 +524,12 @@ class ReportController extends Controller
         }
 
         if ($role === 'admin') {
-            $adminOfficeId = $this->resolveAdminOfficeId($request->user());
+            $adminOfficeId = $this->reportQueries->resolveAdminOfficeId($request->user());
 
             if ($adminOfficeId === null || (int) $report->office_id !== (int) $adminOfficeId) {
                 abort(403, 'Unauthorized action.');
             }
         }
-    }
-
-    private function resolveAdminOfficeId($user): ?int
-    {
-        if (($user->role ?? null) !== 'admin') {
-            return null;
-        }
-
-        $directOfficeId = data_get($user, 'office_id') ?? data_get($user, 'office.id');
-        if ($directOfficeId !== null && is_numeric($directOfficeId)) {
-            return (int) $directOfficeId;
-        }
-
-        $department = trim((string) ($user->department ?? ''));
-        if ($department === '') {
-            return null;
-        }
-
-        $resolvedOfficeId = Office::query()
-            ->whereRaw('LOWER(name) = ?', [mb_strtolower($department)])
-            ->value('id');
-
-        return $resolvedOfficeId === null ? null : (int) $resolvedOfficeId;
     }
 
     private function validateReportPayload(Request $request): array

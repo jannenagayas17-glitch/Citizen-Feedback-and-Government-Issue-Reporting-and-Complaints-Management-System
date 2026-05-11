@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
 import '../../services/dashboard_service.dart';
-import '../../services/report_service.dart';
 import '../../utils/admin_theme.dart';
 import 'analytics_reports_screen.dart';
 import '../auth/login_screen.dart';
@@ -22,7 +21,6 @@ enum _AdminDesktopSection { dashboard, reports, analytics, feedback, profile }
 
 class _AdminHomeScreenState extends State<AdminHomeScreen> {
   final DashboardService _dashboardService = DashboardService();
-  final ReportService _reportService = ReportService();
   final AuthService _authService = AuthService();
 
   late Future<_AdminHomeData> _homeFuture;
@@ -38,18 +36,23 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   }
 
   Future<_AdminHomeData> _loadHome() async {
-    final results = await Future.wait([
+    final results = await Future.wait<dynamic>([
       _dashboardService.getDashboardStats(),
       _dashboardService.getAnalytics(),
-      _reportService.getAdminReports(),
       _authService.getCurrentUser(),
     ]);
 
+    final stats = Map<String, dynamic>.from(results[0] as Map);
+    final analytics = Map<String, dynamic>.from(results[1] as Map);
+    final user = Map<String, dynamic>.from(results[2] as Map);
+
     return _AdminHomeData(
-      stats: results[0] as Map<String, dynamic>,
-      analytics: results[1] as Map<String, dynamic>,
-      reports: results[2] as List<dynamic>,
-      user: results[3] as Map<String, dynamic>,
+      stats: stats,
+      analytics: analytics,
+      reports: List<dynamic>.from(
+        analytics['recent_reports'] as List<dynamic>? ?? const [],
+      ),
+      user: user,
     );
   }
 
@@ -227,12 +230,6 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     return int.tryParse('$raw');
   }
 
-  DateTime? _reportTimestamp(Map<String, dynamic> report) {
-    final rawTimestamp = (report['updated_at'] ?? report['created_at'] ?? '')
-        .toString();
-    return DateTime.tryParse(rawTimestamp);
-  }
-
   Color _priorityColor(String priority) {
     switch (priority) {
       case 'Urgent':
@@ -266,43 +263,6 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       ),
       hintStyle: TextStyle(color: colors.mutedText),
     );
-  }
-
-  int _statusCount(List<Map<String, dynamic>> reports, String status) {
-    return reports.where((report) => _reportStatus(report) == status).length;
-  }
-
-  List<Map<String, dynamic>> _triageReports(
-    List<Map<String, dynamic>> reports,
-  ) {
-    final triage = reports
-        .where(
-          (report) => const {
-            'Pending',
-            'New',
-            'In Progress',
-          }.contains(_reportStatus(report)),
-        )
-        .toList();
-    triage.sort((a, b) {
-      final aTime = _reportTimestamp(a);
-      final bTime = _reportTimestamp(b);
-      if (aTime == null && bTime == null) return 0;
-      if (aTime == null) return 1;
-      if (bTime == null) return -1;
-      return bTime.compareTo(aTime);
-    });
-    return triage.take(3).toList();
-  }
-
-  int _staleReportCount(List<Map<String, dynamic>> reports) {
-    return reports.where((report) {
-      final status = _reportStatus(report);
-      if (status == 'Resolved') return false;
-      final timestamp = _reportTimestamp(report);
-      if (timestamp == null) return false;
-      return DateTime.now().difference(timestamp).inHours >= 72;
-    }).length;
   }
 
   List<Map<String, dynamic>> _tableReports(List<Map<String, dynamic>> reports) {
@@ -382,6 +342,9 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               final reports = data.reports.cast<dynamic>();
               final analytics = data.analytics;
               final currentUser = data.user;
+              final queueCount = analytics['queue_count'] is int
+                  ? analytics['queue_count'] as int
+                  : int.tryParse('${analytics['queue_count']}') ?? 0;
               final statusBreakdown =
                   (analytics['status_breakdown'] as List<dynamic>? ?? const []);
               final priorityBreakdown =
@@ -592,9 +555,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                               departmentName: _departmentLabel(currentUser),
                               adminName: (currentUser['name'] ?? 'Admin User')
                                   .toString(),
-                              notificationCount: _triageReports(
-                                _reportMaps(filteredReports),
-                              ).length,
+                              notificationCount: queueCount,
                             ),
                             Expanded(
                               child: Row(
@@ -689,14 +650,24 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   }) {
     final reportList = _reportMaps(reports);
     final departmentName = _departmentLabel(currentUser);
-    final triageQueue = _triageReports(reportList);
+    final triageQueue =
+        (data.analytics['triage_reports'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
     final tableReports = _tableReports(reportList);
-    final staleReports = _staleReportCount(reportList);
     final assignedReports = reportList
         .where((report) => _reportStatus(report) == 'In Progress')
         .take(3)
         .toList();
-    final rejectedCount = _statusCount(reportList, 'Rejected');
+    final staleReports = data.analytics['stale_reports_count'] is int
+        ? data.analytics['stale_reports_count'] as int
+        : int.tryParse('${data.analytics['stale_reports_count']}') ?? 0;
+    final overview = Map<String, dynamic>.from(
+      data.analytics['overview'] as Map? ?? const {},
+    );
+    final rejectedCount = overview['rejected'] is int
+        ? overview['rejected'] as int
+        : int.tryParse('${overview['rejected']}') ?? 0;
     final colors = AdminThemeColors.of(context);
     final panelGradient = LinearGradient(colors: [colors.panel, colors.panel]);
 
@@ -722,7 +693,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               child: _WideMetricCard(
                 title: 'Total Reports',
                 value: '${data.stats['total_reports'] ?? 0}',
-                subtitle: '+${triageQueue.length} this week',
+                subtitle: '${data.stats['queue_count'] ?? 0} active in queue',
                 icon: Icons.bar_chart_rounded,
                 gradient: panelGradient,
                 valueColor: colors.text,
@@ -746,7 +717,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               child: _WideMetricCard(
                 title: 'In Progress',
                 value: '${data.stats['in_progress'] ?? 0}',
-                subtitle: '${assignedReports.length} assigned',
+                subtitle: '${data.stats['in_progress'] ?? 0} assigned',
                 icon: Icons.sync_rounded,
                 gradient: panelGradient,
                 valueColor: const Color(0xFF60A5FA),

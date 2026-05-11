@@ -241,4 +241,74 @@ class DashboardAnalyticsTest extends TestCase
             ->assertJsonPath('monthly_trend.5.new_reports', 1)
             ->assertJsonPath('monthly_trend.3.resolved_reports', 1);
     }
+
+    public function test_super_admin_dashboard_analytics_and_report_listing_match_without_filters(): void
+    {
+        $citizen = User::create([
+            'name' => 'Consistency Citizen',
+            'email' => 'consistency-citizen@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'citizen',
+            'is_active' => true,
+        ]);
+
+        $superAdmin = User::create([
+            'name' => 'Consistency Super Admin',
+            'email' => 'consistency-super-admin@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'super_admin',
+            'is_active' => true,
+        ]);
+
+        $roadOffice = Office::create([
+            'name' => 'Roads and Drainage Office',
+            'is_active' => true,
+        ]);
+
+        $healthOffice = Office::create([
+            'name' => 'City Health Office',
+            'is_active' => true,
+        ]);
+
+        $roadCategory = Category::create(['name' => 'Road Repair']);
+        $healthCategory = Category::create(['name' => 'Sanitation']);
+
+        foreach ([
+            [$roadOffice->id, $roadCategory->id, 'Pending', 'Barangay 1'],
+            [$roadOffice->id, $roadCategory->id, 'Resolved', 'Barangay 2'],
+            [$healthOffice->id, $healthCategory->id, 'In Progress', 'Barangay 3'],
+            [$healthOffice->id, $healthCategory->id, 'Rejected', 'Barangay 4'],
+        ] as $index => [$officeId, $categoryId, $status, $barangay]) {
+            Report::create([
+                'user_id' => $citizen->id,
+                'office_id' => $officeId,
+                'category_id' => $categoryId,
+                'title' => 'Consistency report '.$index,
+                'description' => 'Consistency coverage '.$index,
+                'location' => 'Tacloban City',
+                'barangay' => $barangay,
+                'status' => $status,
+                'priority' => 'Normal',
+            ]);
+        }
+
+        Sanctum::actingAs($superAdmin);
+
+        $dashboard = $this->getJson('/api/dashboard');
+        $analytics = $this->getJson('/api/admin/analytics');
+        $reports = $this->getJson('/api/admin/reports?paginate=true&per_page=25');
+
+        $dashboard->assertOk()
+            ->assertJsonPath('total_reports', 4)
+            ->assertJsonPath('queue_count', 2)
+            ->assertJsonPath('rejected', 1);
+
+        $analytics->assertOk()
+            ->assertJsonPath('overview.total_reports', 4)
+            ->assertJsonPath('overview.queue_count', 2)
+            ->assertJsonPath('overview.rejected', 1);
+
+        $reports->assertOk()
+            ->assertJsonPath('total', 4);
+    }
 }

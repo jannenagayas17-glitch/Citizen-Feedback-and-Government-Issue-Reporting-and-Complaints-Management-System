@@ -3,24 +3,34 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Office;
 use App\Models\Report;
+use App\Models\SystemSetting;
+use App\Support\ReportQueryService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
+    public function __construct(
+        private readonly ReportQueryService $reportQueries,
+    ) {
+    }
+
     public function index(Request $request)
     {
-        $query = $this->scopedReports($request);
+        $query = $this->reportQueries->scopedForUser($request->user());
+        $overview = $this->reportQueries->buildOverviewCounts($query);
 
         return response()->json([
-            'total_reports' => (clone $query)->count(),
-            'new' => (clone $query)->where('status', 'New')->count(),
-            'pending' => (clone $query)->where('status', 'Pending')->count(),
-            'in_progress' => (clone $query)->where('status', 'In Progress')->count(),
-            'resolved' => (clone $query)->where('status', 'Resolved')->count(),
+            'total_reports' => $overview['total_reports'],
+            'new' => $overview['new'],
+            'pending' => $overview['pending'],
+            'in_progress' => $overview['in_progress'],
+            'resolved' => $overview['resolved'],
+            'rejected' => $overview['rejected'],
+            'queue_count' => $overview['queue_count'],
         ]);
     }
 
@@ -34,22 +44,22 @@ class DashboardController extends Controller
             'office' => ['nullable', 'string', 'max:255'],
             'barangay' => ['nullable', 'string', 'max:255'],
             'category' => ['nullable', 'string', 'max:255'],
+            'status' => ['nullable', 'string', 'in:New,Pending,In Progress,Resolved,Rejected'],
             'date_preset' => ['nullable', 'string', 'in:today,last_7_days,last_30_days,custom'],
             'start_date' => ['nullable', 'date', 'required_if:date_preset,custom'],
             'end_date' => ['nullable', 'date', 'required_if:date_preset,custom', 'after_or_equal:start_date'],
         ]);
 
-        $statuses = ['New', 'Pending', 'In Progress', 'Resolved', 'Rejected'];
-        $priorities = ['Low', 'Normal', 'High', 'Urgent'];
+        $statuses = $this->reportQueries->canonicalStatuses();
+        $priorities = $this->reportQueries->canonicalPriorities();
 
-        $baseQuery = $this->scopedReports($request);
-        $this->applyAnalyticsFilters($baseQuery, $filters);
+        $baseQuery = $this->reportQueries->scopedForUser($request->user());
+        $this->reportQueries->applyFilters($baseQuery, $filters);
 
-        $dateRange = $this->resolveDateRange($filters);
-        $this->applyDateRange($baseQuery, $dateRange);
+        $dateRange = $this->reportQueries->applyDateRangeFilter($baseQuery, $filters);
 
-        $timelineRange = $dateRange ?? $this->fallbackTimelineRange(clone $baseQuery);
-        $overview = $this->buildOverviewCounts($baseQuery);
+        $timelineRange = $dateRange ?? $this->reportQueries->fallbackTimelineRange(clone $baseQuery);
+        $overview = $this->reportQueries->buildOverviewCounts($baseQuery);
         $comparisonOverview = [
             'total_reports' => 0,
             'new' => 0,
@@ -57,13 +67,18 @@ class DashboardController extends Controller
             'in_progress' => 0,
             'resolved' => 0,
             'rejected' => 0,
+            'queue_count' => 0,
         ];
 
         if ($dateRange !== null) {
-            $previousQuery = $this->scopedReports($request);
-            $this->applyAnalyticsFilters($previousQuery, $filters);
-            $this->applyDateRange($previousQuery, $this->previousDateRange($dateRange));
-            $comparisonOverview = $this->buildOverviewCounts($previousQuery);
+            $previousQuery = $this->reportQueries->scopedForUser($request->user());
+            $this->reportQueries->applyFilters($previousQuery, $filters);
+            $previousRange = $this->previousDateRange($dateRange);
+            $previousQuery->whereBetween('reports.created_at', [
+                $previousRange['start'],
+                $previousRange['end'],
+            ]);
+            $comparisonOverview = $this->reportQueries->buildOverviewCounts($previousQuery);
         }
 
         $statusCounts = (clone $baseQuery)
@@ -137,6 +152,38 @@ class DashboardController extends Controller
             })
             ->values();
 
+        $officeBreakdown = (clone $baseQuery)
+            ->leftJoin('offices', 'reports.office_id', '=', 'offices.id')
+            ->selectRaw("
+                COALESCE(offices.name, 'Unassigned Office') as label,
+                COUNT(*) as total,
+                SUM(CASE WHEN reports.status = 'New' THEN 1 ELSE 0 END) as new_total,
+                SUM(CASE WHEN reports.status = 'Pending' THEN 1 ELSE 0 END) as pending_total,
+                SUM(CASE WHEN reports.status = 'In Progress' THEN 1 ELSE 0 END) as in_progress_total,
+                SUM(CASE WHEN reports.status = 'Resolved' THEN 1 ELSE 0 END) as resolved_total,
+                SUM(CASE WHEN reports.status = 'Rejected' THEN 1 ELSE 0 END) as rejected_total
+            ")
+            ->groupBy('label')
+            ->orderByDesc('total')
+            ->limit(6)
+            ->get()
+            ->map(function ($row) {
+                $total = (int) $row->total;
+                $resolved = (int) $row->resolved_total;
+
+                return [
+                    'label' => $row->label,
+                    'count' => $total,
+                    'pending' => (int) $row->pending_total,
+                    'in_progress' => (int) $row->in_progress_total,
+                    'resolved' => $resolved,
+                    'rejected' => (int) $row->rejected_total,
+                    'new' => (int) $row->new_total,
+                    'resolution_rate' => $total === 0 ? 0 : (int) round(($resolved / $total) * 100),
+                ];
+            })
+            ->values();
+
         $monthExpression = $this->monthExpression('created_at');
         $resolvedMonthExpression = $this->monthExpression('COALESCE(resolved_at, created_at)');
         $trendEndMonth = $this->trendEndMonth($baseQuery);
@@ -182,25 +229,47 @@ class DashboardController extends Controller
         $timelineBreakdown = $this->buildTimelineBreakdown(clone $baseQuery, $timelineRange);
 
         $staffPerformance = (clone $baseQuery)
-            ->with('assignedAdmin:id,name')
+            ->leftJoin('users as assigned_admins', 'reports.assigned_to', '=', 'assigned_admins.id')
             ->whereNotNull('assigned_to')
+            ->selectRaw("
+                reports.assigned_to as id,
+                COALESCE(assigned_admins.name, 'Assigned Staff') as name,
+                COUNT(*) as reports_count,
+                SUM(CASE WHEN reports.status = 'Resolved' THEN 1 ELSE 0 END) as resolved_count,
+                SUM(CASE WHEN reports.status = 'In Progress' THEN 1 ELSE 0 END) as in_progress_count
+            ")
+            ->groupBy('reports.assigned_to', 'assigned_admins.name')
+            ->orderByDesc('reports_count')
+            ->limit(5)
             ->get()
-            ->groupBy('assigned_to')
-            ->map(function ($reports, $userId) {
-                $firstReport = $reports->first();
-                $assignedAdmin = $firstReport?->assignedAdmin;
-
+            ->map(function ($row) {
                 return [
-                    'id' => (int) $userId,
-                    'name' => $assignedAdmin?->name ?? 'Assigned Staff',
-                    'reports_count' => $reports->count(),
-                    'resolved_count' => $reports->where('status', 'Resolved')->count(),
-                    'in_progress_count' => $reports->where('status', 'In Progress')->count(),
+                    'id' => (int) $row->id,
+                    'name' => $row->name,
+                    'reports_count' => (int) $row->reports_count,
+                    'resolved_count' => (int) $row->resolved_count,
+                    'in_progress_count' => (int) $row->in_progress_count,
                 ];
             })
-            ->sortByDesc('reports_count')
-            ->take(5)
             ->values();
+
+        $triggerHours = $this->triggerTimeHours();
+        $recentReports = $this->buildReportPreviews(clone $baseQuery, 12);
+        $triageReports = $this->buildReportPreviews(
+            (clone $baseQuery)
+                ->whereIn('reports.status', ['New', 'Pending', 'In Progress'])
+                ->orderByDesc('reports.updated_at')
+                ->orderByDesc('reports.id'),
+            6,
+            applyDefaultOrder: false,
+        );
+        $staleReportsCount = (clone $baseQuery)
+            ->whereIn('reports.status', ['New', 'Pending', 'In Progress'])
+            ->where('reports.created_at', '<=', now()->subHours($triggerHours))
+            ->count();
+        $escalationPreview = $this->buildEscalationPreview(clone $baseQuery, $triggerHours);
+        $monthlyVolume = $this->buildMonthlyVolume(clone $baseQuery);
+        $averageOpenHours = $this->averageOpenHours(clone $baseQuery);
 
         return response()->json([
             'overview' => $overview,
@@ -211,141 +280,29 @@ class DashboardController extends Controller
             'barangay_breakdown' => $barangayBreakdown,
             'top_barangays' => $barangayBreakdown,
             'location_breakdown' => $locationBreakdown,
+            'office_breakdown' => $officeBreakdown,
             'staff_performance' => $staffPerformance,
             'monthly_trend' => $monthlyTrend,
+            'monthly_volume' => $monthlyVolume,
             'timeline_breakdown' => $timelineBreakdown,
+            'recent_reports' => $recentReports,
+            'triage_reports' => $triageReports,
+            'queue_count' => $overview['queue_count'],
+            'stale_reports_count' => $staleReportsCount,
+            'average_open_hours' => $averageOpenHours,
+            'trigger_time_hours' => $triggerHours,
+            'escalations_preview' => $escalationPreview,
             'applied_filters' => [
                 'office' => $filters['office'] ?? null,
                 'barangay' => $filters['barangay'] ?? null,
                 'category' => $filters['category'] ?? null,
+                'status' => $filters['status'] ?? null,
                 'date_preset' => $filters['date_preset'] ?? null,
                 'start_date' => $timelineRange['start']->toDateString(),
                 'end_date' => $timelineRange['end']->toDateString(),
             ],
             'generated_at' => now()->toIso8601String(),
         ]);
-    }
-
-    private function scopedReports(Request $request)
-    {
-        $query = Report::query();
-        $role = $request->user()->role ?? 'citizen';
-
-        if ($role === 'citizen') {
-            $query->where('user_id', $request->user()->id);
-        } elseif ($role === 'admin') {
-            $officeId = $this->resolveAdminOfficeId($request->user());
-
-            if ($officeId === null) {
-                $query->whereRaw('1 = 0');
-            } else {
-                $query->where('reports.office_id', $officeId);
-            }
-        }
-
-        return $query;
-    }
-
-    private function resolveAdminOfficeId($user): ?int
-    {
-        if (($user->role ?? null) !== 'admin') {
-            return null;
-        }
-
-        $directOfficeId = data_get($user, 'office_id') ?? data_get($user, 'office.id');
-        if ($directOfficeId !== null && is_numeric($directOfficeId)) {
-            return (int) $directOfficeId;
-        }
-
-        $department = trim((string) ($user->department ?? ''));
-        if ($department === '') {
-            return null;
-        }
-
-        $resolvedOfficeId = Office::query()
-            ->whereRaw('LOWER(name) = ?', [mb_strtolower($department)])
-            ->value('id');
-
-        return $resolvedOfficeId === null ? null : (int) $resolvedOfficeId;
-    }
-
-    private function applyAnalyticsFilters($query, array $filters): void
-    {
-        if (! empty($filters['office'])) {
-            $office = trim((string) $filters['office']);
-            $query->whereHas('office', function ($officeQuery) use ($office) {
-                $officeQuery->whereRaw('LOWER(name) = ?', [mb_strtolower($office)]);
-            });
-        }
-
-        if (! empty($filters['barangay'])) {
-            $barangay = trim((string) $filters['barangay']);
-            $query->whereRaw('LOWER(reports.barangay) = ?', [mb_strtolower($barangay)]);
-        }
-
-        if (! empty($filters['category'])) {
-            $category = trim((string) $filters['category']);
-            $query->whereHas('category', function ($categoryQuery) use ($category) {
-                $categoryQuery->whereRaw('LOWER(name) = ?', [mb_strtolower($category)]);
-            });
-        }
-    }
-
-    private function resolveDateRange(array $filters): ?array
-    {
-        $preset = (string) ($filters['date_preset'] ?? '');
-        if ($preset === '') {
-            return null;
-        }
-
-        $today = now()->startOfDay();
-
-        return match ($preset) {
-            'today' => [
-                'preset' => $preset,
-                'start' => $today->copy(),
-                'end' => $today->copy()->endOfDay(),
-            ],
-            'last_7_days' => [
-                'preset' => $preset,
-                'start' => $today->copy()->subDays(6),
-                'end' => $today->copy()->endOfDay(),
-            ],
-            'last_30_days' => [
-                'preset' => $preset,
-                'start' => $today->copy()->subDays(29),
-                'end' => $today->copy()->endOfDay(),
-            ],
-            'custom' => [
-                'preset' => $preset,
-                'start' => Carbon::parse((string) $filters['start_date'])->startOfDay(),
-                'end' => Carbon::parse((string) $filters['end_date'])->endOfDay(),
-            ],
-            default => null,
-        };
-    }
-
-    private function applyDateRange($query, ?array $range): void
-    {
-        if ($range === null) {
-            return;
-        }
-
-        $query->whereBetween('reports.created_at', [$range['start'], $range['end']]);
-    }
-
-    private function fallbackTimelineRange($query): array
-    {
-        $latestCreatedAt = (clone $query)->max('created_at');
-        $end = $latestCreatedAt === null
-            ? now()->endOfDay()
-            : Carbon::parse($latestCreatedAt)->endOfDay();
-
-        return [
-            'preset' => 'last_30_days',
-            'start' => $end->copy()->subDays(29)->startOfDay(),
-            'end' => $end,
-        ];
     }
 
     private function previousDateRange(array $range): array
@@ -361,24 +318,7 @@ class DashboardController extends Controller
         ];
     }
 
-    private function buildOverviewCounts($query): array
-    {
-        $statusCounts = (clone $query)
-            ->select('status', DB::raw('COUNT(*) as total'))
-            ->groupBy('status')
-            ->pluck('total', 'status');
-
-        return [
-            'total_reports' => (clone $query)->count(),
-            'new' => (int) ($statusCounts['New'] ?? 0),
-            'pending' => (int) ($statusCounts['Pending'] ?? 0),
-            'in_progress' => (int) ($statusCounts['In Progress'] ?? 0),
-            'resolved' => (int) ($statusCounts['Resolved'] ?? 0),
-            'rejected' => (int) ($statusCounts['Rejected'] ?? 0),
-        ];
-    }
-
-    private function buildTimelineBreakdown($query, array $range): array
+    private function buildTimelineBreakdown(Builder $query, array $range): array
     {
         $start = $range['start']->copy()->startOfDay();
         $end = $range['end']->copy()->endOfDay();
@@ -421,6 +361,144 @@ class DashboardController extends Controller
         }
 
         return $buckets;
+    }
+
+    private function buildReportPreviews(
+        Builder $query,
+        int $limit,
+        bool $applyDefaultOrder = true,
+    ): array
+    {
+        $reportQuery = $query
+            ->select([
+                'reports.id',
+                'reports.user_id',
+                'reports.category_id',
+                'reports.office_id',
+                'reports.title',
+                'reports.location',
+                'reports.barangay',
+                'reports.status',
+                'reports.priority',
+                'reports.assigned_to',
+                'reports.created_at',
+                'reports.updated_at',
+            ])
+            ->with([
+                'user:id,name,email',
+                'category:id,name',
+                'office:id,name',
+                'assignedAdmin:id,name,email',
+            ]);
+
+        if ($applyDefaultOrder) {
+            $reportQuery
+                ->orderByDesc('reports.created_at')
+                ->orderByDesc('reports.id');
+        }
+
+        $reports = $reportQuery
+            ->limit($limit)
+            ->get();
+
+        return $reports->map(function (Report $report) {
+            return [
+                'id' => $report->id,
+                'title' => $report->title,
+                'location' => $report->location,
+                'barangay' => $report->barangay,
+                'status' => $report->status,
+                'priority' => $report->priority,
+                'assigned_to' => $report->assigned_to,
+                'created_at' => optional($report->created_at)?->toIso8601String(),
+                'updated_at' => optional($report->updated_at)?->toIso8601String(),
+                'user' => $report->user === null ? null : [
+                    'id' => $report->user->id,
+                    'name' => $report->user->name,
+                    'email' => $report->user->email,
+                ],
+                'category' => $report->category === null ? null : [
+                    'id' => $report->category->id,
+                    'name' => $report->category->name,
+                ],
+                'office' => $report->office === null ? null : [
+                    'id' => $report->office->id,
+                    'name' => $report->office->name,
+                ],
+                'assigned_admin' => $report->assignedAdmin === null ? null : [
+                    'id' => $report->assignedAdmin->id,
+                    'name' => $report->assignedAdmin->name,
+                    'email' => $report->assignedAdmin->email,
+                ],
+            ];
+        })->values()->all();
+    }
+
+    private function buildEscalationPreview(Builder $query, int $triggerHours): array
+    {
+        return $this->buildReportPreviews(
+            $query
+                ->whereIn('reports.status', ['New', 'Pending', 'In Progress'])
+                ->where('reports.created_at', '<=', now()->subHours($triggerHours))
+                ->orderBy('reports.created_at')
+                ->orderBy('reports.id'),
+            4,
+            applyDefaultOrder: false,
+        );
+    }
+
+    private function buildMonthlyVolume(Builder $query): array
+    {
+        $monthExpression = $this->monthExpression('created_at');
+        $endMonth = $this->trendEndMonth($query);
+        $startMonth = $endMonth->copy()->subMonths(11)->startOfMonth();
+
+        $counts = (clone $query)
+            ->selectRaw("{$monthExpression} as month_key, COUNT(*) as total")
+            ->where('created_at', '>=', $startMonth)
+            ->where('created_at', '<', $endMonth->copy()->addMonth()->startOfMonth())
+            ->groupBy('month_key')
+            ->orderBy('month_key')
+            ->get()
+            ->pluck('total', 'month_key');
+
+        return collect(range(0, 11))->map(function (int $offset) use ($startMonth, $counts) {
+            $date = $startMonth->copy()->addMonths($offset);
+            $key = $date->format('Y-m');
+
+            return [
+                'label' => $date->format('M'),
+                'month' => (int) $date->format('n'),
+                'year' => (int) $date->format('Y'),
+                'count' => (int) ($counts[$key] ?? 0),
+            ];
+        })->values()->all();
+    }
+
+    private function averageOpenHours(Builder $query): int
+    {
+        $openQuery = (clone $query)->whereIn('reports.status', ['New', 'Pending', 'In Progress']);
+
+        if (DB::getDriverName() === 'sqlite') {
+            $average = $openQuery
+                ->selectRaw("AVG((julianday('now') - julianday(created_at)) * 24) as average_hours")
+                ->value('average_hours');
+        } else {
+            $average = $openQuery
+                ->selectRaw('AVG(TIMESTAMPDIFF(HOUR, created_at, NOW())) as average_hours')
+                ->value('average_hours');
+        }
+
+        return (int) round((float) ($average ?? 0));
+    }
+
+    private function triggerTimeHours(): int
+    {
+        $settings = SystemSetting::query()
+            ->where('key', 'super_admin_portal')
+            ->value('value');
+
+        return (int) data_get($settings, 'escalation_settings.trigger_time_hours', 72);
     }
 
     private function monthExpression(string $column): string
