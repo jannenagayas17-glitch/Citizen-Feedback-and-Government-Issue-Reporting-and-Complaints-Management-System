@@ -16,6 +16,97 @@ class DashboardAnalyticsTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_admin_analytics_only_counts_reports_from_the_assigned_office(): void
+    {
+        $citizen = User::create([
+            'name' => 'Citizen Reporter',
+            'email' => 'citizen-analytics-scope@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'citizen',
+            'is_active' => true,
+        ]);
+
+        $adminOffice = Office::create([
+            'name' => 'Roads Department',
+            'is_active' => true,
+        ]);
+
+        $otherOffice = Office::create([
+            'name' => 'Water Department',
+            'is_active' => true,
+        ]);
+
+        $admin = User::create([
+            'name' => 'Roads Admin',
+            'email' => 'roads-admin-analytics@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'admin',
+            'department' => mb_strtolower($adminOffice->name),
+            'is_active' => true,
+        ]);
+
+        $roadCategory = Category::create(['name' => 'Road Damage']);
+        $waterCategory = Category::create(['name' => 'Water Leak']);
+
+        Report::create([
+            'user_id' => $citizen->id,
+            'office_id' => $adminOffice->id,
+            'category_id' => $roadCategory->id,
+            'title' => 'Road issue 1',
+            'description' => 'Road concern for assigned office.',
+            'location' => 'Roads location',
+            'barangay' => 'Barangay 1',
+            'status' => 'Pending',
+            'priority' => 'Normal',
+        ]);
+
+        Report::create([
+            'user_id' => $citizen->id,
+            'office_id' => $adminOffice->id,
+            'category_id' => $roadCategory->id,
+            'title' => 'Road issue 2',
+            'description' => 'Resolved concern for assigned office.',
+            'location' => 'Roads location 2',
+            'barangay' => 'Barangay 3',
+            'status' => 'Resolved',
+            'priority' => 'High',
+        ]);
+
+        Report::create([
+            'user_id' => $citizen->id,
+            'office_id' => $otherOffice->id,
+            'category_id' => $waterCategory->id,
+            'title' => 'Water issue',
+            'description' => 'Concern for another office.',
+            'location' => 'Water location',
+            'barangay' => 'Barangay 9',
+            'status' => 'In Progress',
+            'priority' => 'Urgent',
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $response = $this->getJson('/api/admin/analytics');
+
+        $response->assertOk()
+            ->assertJsonPath('overview.total_reports', 2)
+            ->assertJsonPath('overview.pending', 1)
+            ->assertJsonPath('overview.resolved', 1)
+            ->assertJsonPath('overview.in_progress', 0)
+            ->assertJsonPath('category_breakdown.0.label', 'Road Damage')
+            ->assertJsonPath('category_breakdown.0.count', 2);
+
+        $barangays = collect($response->json('barangay_breakdown'));
+        $this->assertTrue(
+            $barangays->contains(fn (array $row) => $row['label'] === 'Barangay 1'),
+            'Assigned office barangays should appear in analytics.'
+        );
+        $this->assertFalse(
+            $barangays->contains(fn (array $row) => $row['label'] === 'Barangay 9'),
+            'Other office barangays must not appear in admin analytics.'
+        );
+    }
+
     public function test_super_admin_analytics_returns_top_five_barangays_sorted_by_report_count(): void
     {
         $citizen = User::create([

@@ -506,26 +506,12 @@ class ReportController extends Controller
             ->orderByDesc('reports.id');
 
         if (($request->user()->role ?? null) === 'admin') {
-            $officeId = data_get($request->user(), 'office.id');
+            $officeId = $this->resolveAdminOfficeId($request->user());
 
-            if ($officeId !== null) {
-                $query->where('reports.office_id', $officeId);
+            if ($officeId === null) {
+                $query->whereRaw('1 = 0');
             } else {
-                $department = trim((string) ($request->user()->department ?? ''));
-
-                if ($department === '') {
-                    $query->whereRaw('1 = 0');
-                } else {
-                    $resolvedOfficeId = Office::query()
-                        ->where('name', $department)
-                        ->value('id');
-
-                    if ($resolvedOfficeId === null) {
-                        $query->whereRaw('1 = 0');
-                    } else {
-                        $query->where('reports.office_id', $resolvedOfficeId);
-                    }
-                }
+                $query->where('reports.office_id', $officeId);
             }
         }
 
@@ -640,13 +626,35 @@ class ReportController extends Controller
         }
 
         if ($role === 'admin') {
-            $department = trim((string) ($request->user()->department ?? ''));
-            $officeName = trim((string) optional($report->office)->name);
+            $adminOfficeId = $this->resolveAdminOfficeId($request->user());
 
-            if ($department === '' || $officeName === '' || $department !== $officeName) {
+            if ($adminOfficeId === null || (int) $report->office_id !== (int) $adminOfficeId) {
                 abort(403, 'Unauthorized action.');
             }
         }
+    }
+
+    private function resolveAdminOfficeId($user): ?int
+    {
+        if (($user->role ?? null) !== 'admin') {
+            return null;
+        }
+
+        $directOfficeId = data_get($user, 'office_id') ?? data_get($user, 'office.id');
+        if ($directOfficeId !== null && is_numeric($directOfficeId)) {
+            return (int) $directOfficeId;
+        }
+
+        $department = trim((string) ($user->department ?? ''));
+        if ($department === '') {
+            return null;
+        }
+
+        $resolvedOfficeId = Office::query()
+            ->whereRaw('LOWER(name) = ?', [mb_strtolower($department)])
+            ->value('id');
+
+        return $resolvedOfficeId === null ? null : (int) $resolvedOfficeId;
     }
 
     private function validateReportPayload(Request $request): array

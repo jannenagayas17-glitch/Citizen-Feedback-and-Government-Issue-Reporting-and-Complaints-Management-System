@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/auth_service.dart';
+import '../../services/citizen_data_cache.dart';
+import '../../utils/app_theme_controller.dart';
 import '../../utils/app_routes.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -150,13 +152,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await _authService.register(
+      final data = await _authService.register(
         name: name,
         email: email,
         mobileNumber: phone,
         password: password,
         passwordConfirmation: confirmPassword,
       );
+
+      final user = data['user'] as Map<String, dynamic>? ?? const {};
+      final role = (user['role']?.toString() ?? '').trim().toLowerCase();
+
+      if (role != 'citizen') {
+        throw Exception('This app only supports citizen registrations.');
+      }
+
+      if (!mounted) return;
+
+      CitizenDataCache.clear();
+      await AppThemeScope.of(context).loadForUser(user);
 
       if (!mounted) return;
 

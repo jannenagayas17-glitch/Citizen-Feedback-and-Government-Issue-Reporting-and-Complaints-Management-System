@@ -28,7 +28,12 @@ class CitizenDataCache {
 
   static Future<Map<String, dynamic>> getUser({bool refresh = false}) async {
     if (!refresh && _user != null) return _user!;
-    _user = await _authService.getCurrentUser();
+    try {
+      _user = await _authService.getCurrentUser();
+    } on AuthSessionExpiredException {
+      clear();
+      rethrow;
+    }
     return _user!;
   }
 
@@ -43,9 +48,14 @@ class CitizenDataCache {
 
   static Future<List<dynamic>> getReports({bool refresh = false}) async {
     if (!refresh && _reports != null) return _reports!;
-    _reports = CitizenReportModel.normalizeReportList(
-      await _reportService.getReports(),
-    );
+    try {
+      _reports = CitizenReportModel.normalizeReportList(
+        await _reportService.getReports(),
+      );
+    } on AuthSessionExpiredException {
+      clear();
+      rethrow;
+    }
     return _reports!;
   }
 
@@ -69,9 +79,15 @@ class CitizenDataCache {
       return _reportDetails[reportId]!;
     }
 
-    final detail = CitizenReportModel.normalizeReport(
-      await _reportService.getReportDetail(reportId),
-    );
+    late final Map<String, dynamic> detail;
+    try {
+      detail = CitizenReportModel.normalizeReport(
+        await _reportService.getReportDetail(reportId),
+      );
+    } on AuthSessionExpiredException {
+      clear();
+      rethrow;
+    }
     _reportDetails[reportId] = detail;
     return detail;
   }
@@ -79,10 +95,16 @@ class CitizenDataCache {
   static Future<Map<String, dynamic>> getHomePayload({
     bool refresh = false,
   }) async {
-    final values = await Future.wait<dynamic>([
-      getUser(refresh: refresh),
-      getReports(refresh: refresh),
-    ]);
+    late final List<dynamic> values;
+    try {
+      values = await Future.wait<dynamic>([
+        getUser(refresh: refresh),
+        getReports(refresh: refresh),
+      ]);
+    } on AuthSessionExpiredException {
+      clear();
+      rethrow;
+    }
     final reports = CitizenReportModel.normalizeReportList(
       values[1] as List<dynamic>,
     );

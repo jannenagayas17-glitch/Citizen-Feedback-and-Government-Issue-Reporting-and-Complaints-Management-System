@@ -3,13 +3,23 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../../services/citizen_auth_gate.dart';
+import '../../services/citizen_avatar_service.dart';
+import '../../services/citizen_data_cache.dart';
 import '../../services/auth_service.dart';
 import '../../utils/app_routes.dart';
 import '../../utils/app_theme_controller.dart';
 import '../../utils/token_storage.dart';
 
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+  const SplashScreen({
+    super.key,
+    this.authService,
+    this.bootstrapDelay = const Duration(milliseconds: 1400),
+  });
+
+  final AuthService? authService;
+  final Duration bootstrapDelay;
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -21,55 +31,47 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _bootstrapTimer = Timer(const Duration(milliseconds: 1400), _bootstrap);
+    _bootstrapTimer = Timer(widget.bootstrapDelay, _bootstrap);
   }
 
   Future<void> _bootstrap() async {
-    final token = await TokenStorage.getToken();
-    final role = (await TokenStorage.getRole())?.trim().toLowerCase();
-
-    if (!mounted) return;
-
-    if (token == null || token.isEmpty) {
-      _goTo(AppRoutes.login);
-      return;
-    }
-
-    if (role != 'citizen') {
-      await TokenStorage.clearAll();
-      _goTo(AppRoutes.login);
-      return;
-    }
-
     try {
-      final user = await AuthService().getCurrentUser().timeout(
-        const Duration(seconds: 6),
-      );
+      final result = await CitizenAuthGate(
+        authService: widget.authService,
+      ).resolve().timeout(const Duration(seconds: 6));
+
+      if (result.shouldClearStoredSession) {
+        await _clearLocalSession();
+      }
 
       if (!mounted) return;
 
-      final currentRole = (user['role'] ?? '').toString().trim().toLowerCase();
-      if (currentRole != 'citizen') {
-        await TokenStorage.clearAll();
+      if (!result.shouldOpenCitizenHome) {
         _goTo(AppRoutes.login);
         return;
       }
 
-      await AppThemeScope.of(context).loadForUser(user);
-      if (!mounted) return;
-
-      _goTo(AppRoutes.citizenHome);
+      await AppThemeScope.of(context).loadForUser(result.user!);
+      if (mounted) {
+        _goTo(AppRoutes.citizenHome);
+      }
     } catch (_) {
-      await TokenStorage.clearAll();
+      await _clearLocalSession();
       if (mounted) {
         _goTo(AppRoutes.login);
       }
     }
   }
 
+  Future<void> _clearLocalSession() async {
+    await TokenStorage.clearAll();
+    CitizenDataCache.clear();
+    await CitizenAvatarService.clearAvatar();
+  }
+
   void _goTo(String route) {
     if (!mounted) return;
-    Navigator.pushReplacementNamed(context, route);
+    Navigator.pushNamedAndRemoveUntil(context, route, (route) => false);
   }
 
   @override

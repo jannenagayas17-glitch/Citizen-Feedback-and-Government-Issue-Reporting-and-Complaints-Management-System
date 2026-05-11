@@ -3,8 +3,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/api_config.dart';
 import '../../models/report_model.dart';
+import '../../services/auth_service.dart';
+import '../../services/citizen_data_cache.dart';
 import '../../services/report_feedback_service.dart';
-import '../../services/report_service.dart';
+import '../../utils/app_routes.dart';
 import '../../utils/citizen_theme_colors.dart';
 
 class ComplaintDetailScreen extends StatefulWidget {
@@ -17,7 +19,6 @@ class ComplaintDetailScreen extends StatefulWidget {
 }
 
 class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
-  final ReportService _reportService = ReportService();
   late Future<Map<String, dynamic>> _detailFuture;
   int? _selectedRating;
   bool _isSavingRating = false;
@@ -28,9 +29,9 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
     _detailFuture = _loadDetail();
   }
 
-  Future<Map<String, dynamic>> _loadDetail() async {
+  Future<Map<String, dynamic>> _loadDetail({bool refresh = false}) async {
     final detail = CitizenReportModel.normalizeReport(
-      await _reportService.getReportDetail(widget.reportId),
+      await CitizenDataCache.getReportDetail(widget.reportId, refresh: refresh),
     );
     final savedRating = await ReportFeedbackService.getRatingForReport(
       widget.reportId,
@@ -46,9 +47,23 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
   }
 
   Future<void> _refresh() async {
-    final future = _loadDetail();
+    final future = _loadDetail(refresh: true);
     setState(() => _detailFuture = future);
     await future;
+  }
+
+  void _redirectToLogin() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppRoutes.login,
+        (route) => false,
+      );
+    });
   }
 
   @override
@@ -99,12 +114,15 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
               }
 
               if (snapshot.hasError) {
+                final error = snapshot.error;
+                if (error is AuthSessionExpiredException) {
+                  _redirectToLogin();
+                  return _DetailLoadingState(padding: padding);
+                }
+
                 return _DetailErrorState(
                   padding: padding,
-                  message: snapshot.error.toString().replaceFirst(
-                    'Exception: ',
-                    '',
-                  ),
+                  message: error.toString().replaceFirst('Exception: ', ''),
                   onRetry: _refresh,
                 );
               }

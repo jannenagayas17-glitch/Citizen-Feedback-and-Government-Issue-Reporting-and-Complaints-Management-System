@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
+import '../services/auth_service.dart';
 import '../utils/token_storage.dart';
 
 class ApiClient {
@@ -46,9 +47,12 @@ class ApiClient {
     bool authRequired = false,
     Map<String, dynamic>? queryParameters,
   }) async {
-    return await http.get(
-      buildUri(endpoint, queryParameters: queryParameters),
-      headers: await getHeaders(authRequired: authRequired),
+    return _send(
+      () async => http.get(
+        buildUri(endpoint, queryParameters: queryParameters),
+        headers: await getHeaders(authRequired: authRequired),
+      ),
+      authRequired: authRequired,
     );
   }
 
@@ -57,10 +61,13 @@ class ApiClient {
     Map<String, dynamic>? body,
     bool authRequired = false,
   }) async {
-    return await http.post(
-      buildUri(endpoint),
-      headers: await getHeaders(authRequired: authRequired),
-      body: body != null ? jsonEncode(body) : null,
+    return _send(
+      () async => http.post(
+        buildUri(endpoint),
+        headers: await getHeaders(authRequired: authRequired),
+        body: body != null ? jsonEncode(body) : null,
+      ),
+      authRequired: authRequired,
     );
   }
 
@@ -69,10 +76,28 @@ class ApiClient {
     Map<String, dynamic>? body,
     bool authRequired = false,
   }) async {
-    return await http.put(
-      buildUri(endpoint),
-      headers: await getHeaders(authRequired: authRequired),
-      body: body != null ? jsonEncode(body) : null,
+    return _send(
+      () async => http.put(
+        buildUri(endpoint),
+        headers: await getHeaders(authRequired: authRequired),
+        body: body != null ? jsonEncode(body) : null,
+      ),
+      authRequired: authRequired,
     );
+  }
+
+  Future<http.Response> _send(
+    Future<http.Response> Function() request, {
+    required bool authRequired,
+  }) async {
+    final response = await request();
+
+    if (authRequired &&
+        (response.statusCode == 401 || response.statusCode == 403)) {
+      await TokenStorage.clearAll();
+      throw const AuthSessionExpiredException();
+    }
+
+    return response;
   }
 }

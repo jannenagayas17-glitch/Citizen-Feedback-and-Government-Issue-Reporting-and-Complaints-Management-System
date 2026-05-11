@@ -8,6 +8,7 @@ import 'package:mime/mime.dart';
 import '../config/api_config.dart';
 import '../utils/token_storage.dart';
 import 'api_client.dart';
+import 'auth_service.dart';
 
 class ReportService {
   static const int maxAttachmentBytes = 50 * 1024 * 1024;
@@ -206,7 +207,22 @@ class ReportService {
 
   Future<Map<String, dynamic>> getReportDetail(int id) async {
     final response = await _apiClient.get('/reports/$id', authRequired: true);
-    return jsonDecode(response.body);
+    final decoded = jsonDecode(response.body);
+
+    if (response.statusCode == 200 && decoded is Map<String, dynamic>) {
+      return decoded;
+    }
+
+    if (decoded is Map<String, dynamic>) {
+      throw Exception(
+        decoded['message']?.toString() ??
+            (decoded['errors'] != null
+                ? decoded['errors'].toString()
+                : 'Failed to fetch report details'),
+      );
+    }
+
+    throw Exception('Failed to fetch report details');
   }
 
   Future<Map<String, dynamic>> uploadMedia({
@@ -246,6 +262,10 @@ class ReportService {
 
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      await TokenStorage.clearAll();
+      throw const AuthSessionExpiredException();
+    }
     final data = _decodeMapResponse(response.body);
 
     if (response.statusCode == 200 || response.statusCode == 201) {
@@ -328,6 +348,10 @@ class ReportService {
 
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      await TokenStorage.clearAll();
+      throw const AuthSessionExpiredException();
+    }
     final data = _decodeMapResponse(response.body);
 
     if (response.statusCode == 200 || response.statusCode == 201) {

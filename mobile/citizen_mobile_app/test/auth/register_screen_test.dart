@@ -1,6 +1,7 @@
 import 'package:citizen_mobile_app/screens/auth/register_screen.dart';
 import 'package:citizen_mobile_app/services/auth_service.dart';
 import 'package:citizen_mobile_app/utils/app_routes.dart';
+import 'package:citizen_mobile_app/utils/app_theme_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -37,13 +38,18 @@ void main() {
     AuthService? authService,
   }) async {
     configureTestViewport(tester);
+    final themeController = AppThemeController();
+    await themeController.load();
     await tester.pumpWidget(
-      MaterialApp(
-        home: RegisterScreen(authService: authService),
-        routes: {
-          AppRoutes.citizenHome: (_) =>
-              const Scaffold(body: Text('Citizen Home')),
-        },
+      AppThemeScope(
+        controller: themeController,
+        child: MaterialApp(
+          home: RegisterScreen(authService: authService),
+          routes: {
+            AppRoutes.citizenHome: (_) =>
+                const Scaffold(body: Text('Citizen Home')),
+          },
+        ),
       ),
     );
     await tester.pumpAndSettle();

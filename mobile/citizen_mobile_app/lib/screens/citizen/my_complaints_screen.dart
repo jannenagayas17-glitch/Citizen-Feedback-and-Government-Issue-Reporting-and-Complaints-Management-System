@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../../models/report_model.dart';
 import '../../services/citizen_data_cache.dart';
 import '../../services/report_feedback_service.dart';
+import '../../services/auth_service.dart';
 import '../../utils/citizen_theme_colors.dart';
+import '../../utils/app_routes.dart';
 import '../../widgets/citizen_bottom_nav.dart';
 import 'citizen_home_screen.dart';
 import 'citizen_notifications_screen.dart';
@@ -51,7 +53,14 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
   }
 
   Future<void> _openProfile() async {
-    final user = await CitizenDataCache.getUser();
+    late final Map<String, dynamic> user;
+    try {
+      user = await CitizenDataCache.getUser();
+    } on AuthSessionExpiredException {
+      _redirectToLogin();
+      return;
+    }
+
     if (!mounted) {
       return;
     }
@@ -106,6 +115,20 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
     }
   }
 
+  void _redirectToLogin() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppRoutes.login,
+        (route) => false,
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).padding.bottom;
@@ -155,12 +178,15 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
               }
 
               if (snapshot.hasError) {
+                final error = snapshot.error;
+                if (error is AuthSessionExpiredException) {
+                  _redirectToLogin();
+                  return _ReportsLoadingState(padding: contentPadding);
+                }
+
                 return _ReportsErrorState(
                   padding: contentPadding,
-                  message: snapshot.error.toString().replaceFirst(
-                    'Exception: ',
-                    '',
-                  ),
+                  message: error.toString().replaceFirst('Exception: ', ''),
                   onRetry: _refresh,
                 );
               }
@@ -175,13 +201,9 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
                 );
               }
 
-              final summary = _ReportsSummary.fromReports(reports);
-
               return ListView(
                 padding: contentPadding,
                 children: [
-                  _ReportsHeroCard(summary: summary),
-                  const SizedBox(height: 16),
                   Row(
                     children: [
                       Text(
@@ -204,7 +226,7 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Tap a complaint to view the exact status, timeline, and office updates for that report only.',
+                    'Tap a complaint to view its status and details.',
                     style: TextStyle(
                       color: citizenBodyColor(context),
                       fontSize: 12.5,
@@ -442,130 +464,6 @@ class _CitizenReportCard extends StatelessWidget {
   }
 }
 
-class _ReportsHeroCard extends StatelessWidget {
-  const _ReportsHeroCard({required this.summary});
-
-  final _ReportsSummary summary;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = citizenIsDark(context);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isDark
-              ? const [Color(0xFF1A2233), Color(0xFF131B2A)]
-              : const [Color(0xFFFFFFFF), Color(0xFFF4F8FF)],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : const Color(0xFFD8E3F7),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Track every submitted complaint',
-            style: TextStyle(
-              color: citizenTitleColor(context),
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Your list refreshes from the authenticated citizen account only and opens exact complaint details one report at a time.',
-            style: TextStyle(
-              color: citizenBodyColor(context),
-              fontSize: 13,
-              height: 1.45,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _SummaryTile(
-                label: 'Total',
-                value: '${summary.total}',
-                accent: const Color(0xFF3B82F6),
-              ),
-              _SummaryTile(
-                label: 'Active',
-                value: '${summary.active}',
-                accent: const Color(0xFFF59E0B),
-              ),
-              _SummaryTile(
-                label: 'Resolved',
-                value: '${summary.resolved}',
-                accent: const Color(0xFF22C55E),
-              ),
-              _SummaryTile(
-                label: 'Rejected',
-                value: '${summary.rejected}',
-                accent: const Color(0xFFEF4444),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryTile extends StatelessWidget {
-  const _SummaryTile({
-    required this.label,
-    required this.value,
-    required this.accent,
-  });
-
-  final String label;
-  final String value;
-  final Color accent;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 110,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: accent.withValues(alpha: 0.18)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            value,
-            style: TextStyle(
-              color: accent,
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: citizenBodyColor(context),
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _ReportsLoadingState extends StatelessWidget {
   const _ReportsLoadingState({required this.padding});
 
@@ -576,8 +474,6 @@ class _ReportsLoadingState extends StatelessWidget {
     return ListView(
       padding: padding,
       children: [
-        _placeholder(context, height: 180),
-        const SizedBox(height: 16),
         ...List.generate(
           4,
           (index) => Padding(
@@ -853,44 +749,4 @@ class _StatusPill extends StatelessWidget {
       ),
     );
   }
-}
-
-class _ReportsSummary {
-  const _ReportsSummary({
-    required this.total,
-    required this.active,
-    required this.resolved,
-    required this.rejected,
-  });
-
-  factory _ReportsSummary.fromReports(List<Map<String, dynamic>> reports) {
-    var active = 0;
-    var resolved = 0;
-    var rejected = 0;
-
-    for (final report in reports) {
-      switch (CitizenReportModel.displayStatusOf(report)) {
-        case 'Resolved':
-          resolved++;
-          break;
-        case 'Rejected':
-          rejected++;
-          break;
-        default:
-          active++;
-      }
-    }
-
-    return _ReportsSummary(
-      total: reports.length,
-      active: active,
-      resolved: resolved,
-      rejected: rejected,
-    );
-  }
-
-  final int total;
-  final int active;
-  final int resolved;
-  final int rejected;
 }

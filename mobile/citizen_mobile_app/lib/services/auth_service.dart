@@ -413,7 +413,11 @@ class AuthService {
         headers: await _headers(authRequired: true),
       );
     } finally {
-      await GoogleAuthService().signOut();
+      try {
+        await GoogleAuthService().signOut();
+      } catch (_) {
+        // Always clear the local session even if Google/Firebase cleanup fails.
+      }
       await TokenStorage.clearAll();
     }
   }

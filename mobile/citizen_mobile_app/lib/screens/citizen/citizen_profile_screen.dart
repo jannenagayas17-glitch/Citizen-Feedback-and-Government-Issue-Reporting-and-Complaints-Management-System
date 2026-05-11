@@ -103,23 +103,38 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
 
     try {
       await _authService.logout();
-
-      if (!mounted) return;
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        AppRoutes.login,
-        (route) => false,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isLoggingOut = false);
-      }
+    } catch (_) {
+      // Local logout still completes below even if the API call fails.
     }
+
+    CitizenDataCache.clear();
+    await CitizenAvatarService.clearAvatar();
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() => _isLoggingOut = false);
+    Navigator.pushNamedAndRemoveUntil(
+      context,
+      AppRoutes.login,
+      (route) => false,
+    );
+  }
+
+  Future<void> _showSessionExpiredAndRedirect() async {
+    CitizenDataCache.clear();
+    await CitizenAvatarService.clearAvatar();
+
+    if (!mounted) {
+      return;
+    }
+
+    Navigator.pushNamedAndRemoveUntil(
+      context,
+      AppRoutes.login,
+      (route) => false,
+    );
   }
 
   Future<void> _openEditProfile() async {
@@ -443,7 +458,13 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
 
     if (!mounted) return;
     if (created != null) {
-      final refreshedUser = await _authService.getCurrentUser();
+      late final Map<String, dynamic> refreshedUser;
+      try {
+        refreshedUser = await _authService.getCurrentUser();
+      } on AuthSessionExpiredException {
+        await _showSessionExpiredAndRedirect();
+        return;
+      }
       if (!mounted) return;
       setState(() {
         _user = Map<String, dynamic>.from(refreshedUser);

@@ -234,30 +234,39 @@ class DashboardController extends Controller
         if ($role === 'citizen') {
             $query->where('user_id', $request->user()->id);
         } elseif ($role === 'admin') {
-            $officeId = data_get($request->user(), 'office.id');
+            $officeId = $this->resolveAdminOfficeId($request->user());
 
-            if ($officeId !== null) {
-                $query->where('reports.office_id', $officeId);
+            if ($officeId === null) {
+                $query->whereRaw('1 = 0');
             } else {
-                $department = trim((string) ($request->user()->department ?? ''));
-
-                if ($department === '') {
-                    $query->whereRaw('1 = 0');
-                } else {
-                    $resolvedOfficeId = Office::query()
-                        ->where('name', $department)
-                        ->value('id');
-
-                    if ($resolvedOfficeId === null) {
-                        $query->whereRaw('1 = 0');
-                    } else {
-                        $query->where('reports.office_id', $resolvedOfficeId);
-                    }
-                }
+                $query->where('reports.office_id', $officeId);
             }
         }
 
         return $query;
+    }
+
+    private function resolveAdminOfficeId($user): ?int
+    {
+        if (($user->role ?? null) !== 'admin') {
+            return null;
+        }
+
+        $directOfficeId = data_get($user, 'office_id') ?? data_get($user, 'office.id');
+        if ($directOfficeId !== null && is_numeric($directOfficeId)) {
+            return (int) $directOfficeId;
+        }
+
+        $department = trim((string) ($user->department ?? ''));
+        if ($department === '') {
+            return null;
+        }
+
+        $resolvedOfficeId = Office::query()
+            ->whereRaw('LOWER(name) = ?', [mb_strtolower($department)])
+            ->value('id');
+
+        return $resolvedOfficeId === null ? null : (int) $resolvedOfficeId;
     }
 
     private function applyAnalyticsFilters($query, array $filters): void

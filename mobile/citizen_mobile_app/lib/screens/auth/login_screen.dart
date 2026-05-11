@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../services/auth_service.dart';
+import '../../services/citizen_data_cache.dart';
 import '../../services/google_auth_service.dart';
 import '../../utils/app_routes.dart';
 import '../../utils/app_theme_controller.dart';
@@ -117,6 +118,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       if (role != 'citizen') {
+        CitizenDataCache.clear();
         await TokenStorage.clearAll();
         _showSnackBar(
           'This mobile app is for citizen accounts only. Please use the web admin portal for staff access.',
@@ -125,6 +127,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       final themeController = AppThemeScope.of(context);
+      CitizenDataCache.clear();
       await TokenStorage.saveLastEmailForRole(role: 'citizen', email: email);
       await themeController.loadForUser(user);
 
@@ -180,6 +183,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (role != 'citizen') {
         await _resetGoogleSession();
+        CitizenDataCache.clear();
         await TokenStorage.clearAll();
         _showSnackBar(
           'This mobile app is for citizen accounts only. Please use the web admin portal for staff access.',
@@ -188,6 +192,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       final themeController = AppThemeScope.of(context);
+      CitizenDataCache.clear();
       await TokenStorage.saveLastEmailForRole(
         role: 'citizen',
         email: user.email ?? '',

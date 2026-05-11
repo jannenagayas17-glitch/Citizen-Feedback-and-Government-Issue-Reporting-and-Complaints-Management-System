@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../services/auth_service.dart';
 import '../../services/citizen_data_cache.dart';
 import '../../services/report_feedback_service.dart';
+import '../../utils/app_routes.dart';
 import '../../utils/citizen_theme_colors.dart';
 import '../../widgets/citizen_bottom_nav.dart';
 import 'citizen_home_screen.dart';
@@ -50,7 +52,14 @@ class _CitizenNotificationsScreenState
   }
 
   Future<void> _openProfile() async {
-    final user = await CitizenDataCache.getUser();
+    late final Map<String, dynamic> user;
+    try {
+      user = await CitizenDataCache.getUser();
+    } on AuthSessionExpiredException {
+      _redirectToLogin();
+      return;
+    }
+
     if (!mounted) return;
     await Navigator.pushReplacement(
       context,
@@ -73,6 +82,20 @@ class _CitizenNotificationsScreenState
       }
       await _refresh();
     }
+  }
+
+  void _redirectToLogin() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppRoutes.login,
+        (route) => false,
+      );
+    });
   }
 
   @override
@@ -113,11 +136,35 @@ class _CitizenNotificationsScreenState
             }
 
             if (snapshot.hasError) {
+              final error = snapshot.error;
+              if (error is AuthSessionExpiredException) {
+                _redirectToLogin();
+                return ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                  children: List.generate(
+                    4,
+                    (_) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Container(
+                        height: 124,
+                        decoration: BoxDecoration(
+                          color: citizenCardColor(context),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: citizenBorderColor(context),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }
+
               return ListView(
                 padding: const EdgeInsets.all(24),
                 children: [
                   Text(
-                    snapshot.error.toString().replaceFirst('Exception: ', ''),
+                    error.toString().replaceFirst('Exception: ', ''),
                     style: TextStyle(color: citizenTitleColor(context)),
                   ),
                 ],
