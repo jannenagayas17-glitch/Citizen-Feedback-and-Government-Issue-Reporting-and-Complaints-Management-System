@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../models/report_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/citizen_data_cache.dart';
 import '../../utils/app_routes.dart';
@@ -6,6 +7,7 @@ import '../../widgets/citizen_avatar.dart';
 import '../../widgets/citizen_bottom_nav.dart';
 import '../../widgets/theme_mode_toggle.dart';
 import 'citizen_notifications_screen.dart';
+import 'complaint_detail_screen.dart';
 import 'citizen_profile_screen.dart';
 import 'my_complaints_screen.dart';
 import 'submit_complaint_screen.dart';
@@ -94,6 +96,28 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
     if (cachedUser != null) {
       _cachedUser = cachedUser;
     }
+  }
+
+  Future<void> _openReportDetail(Map<String, dynamic> report) async {
+    final reportId = CitizenReportModel.reportIdOf(report);
+    if (reportId == null) {
+      await _openMyReports();
+      return;
+    }
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ComplaintDetailScreen(reportId: reportId),
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() => _currentIndex = 0);
+    await _refresh();
   }
 
   @override
@@ -186,7 +210,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
                               padding: const EdgeInsets.only(bottom: 12),
                               child: _IssueCard(
                                 report: item as Map<String, dynamic>,
-                                onTap: _openMyReports,
+                                onTap: () => _openReportDetail(item),
                               ),
                             ),
                           ),

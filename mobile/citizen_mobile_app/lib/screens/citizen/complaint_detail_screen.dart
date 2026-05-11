@@ -1,11 +1,11 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/api_config.dart';
+import '../../models/report_model.dart';
 import '../../services/report_feedback_service.dart';
 import '../../services/report_service.dart';
+import '../../utils/citizen_theme_colors.dart';
 
 class ComplaintDetailScreen extends StatefulWidget {
   const ComplaintDetailScreen({super.key, required this.reportId});
@@ -29,25 +29,25 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
   }
 
   Future<Map<String, dynamic>> _loadDetail() async {
-    final detail = await _reportService.getReportDetail(widget.reportId);
+    final detail = CitizenReportModel.normalizeReport(
+      await _reportService.getReportDetail(widget.reportId),
+    );
     final savedRating = await ReportFeedbackService.getRatingForReport(
       widget.reportId,
     );
+
     if (mounted) {
-      setState(() {
-        _selectedRating = savedRating;
-      });
+      setState(() => _selectedRating = savedRating);
     } else {
       _selectedRating = savedRating;
     }
+
     return detail;
   }
 
   Future<void> _refresh() async {
     final future = _loadDetail();
-    setState(() {
-      _detailFuture = future;
-    });
+    setState(() => _detailFuture = future);
     await future;
   }
 
@@ -56,18 +56,29 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
     final bottomSafeArea = MediaQuery.of(context).padding.bottom;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0C1727),
+      backgroundColor: citizenScaffoldColor(context),
       appBar: AppBar(
-        title: const Text('Complaint Tracker'),
-        backgroundColor: const Color(0xFF0C1727),
-        foregroundColor: Colors.white,
+        title: const Text('Complaint Details'),
+        backgroundColor: citizenScaffoldColor(context),
+        foregroundColor: citizenTitleColor(context),
+        elevation: 0,
       ),
       body: DecoratedBox(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFF0C1727), Color(0xFF1E293B), Color(0xFF463327)],
+            colors: citizenIsDark(context)
+                ? const [
+                    Color(0xFF0B1322),
+                    Color(0xFF10192E),
+                    Color(0xFF0E1525),
+                  ]
+                : const [
+                    Color(0xFFF8FBFF),
+                    Color(0xFFEFF5FF),
+                    Color(0xFFF6F8FC),
+                  ],
           ),
         ),
         child: RefreshIndicator(
@@ -75,191 +86,219 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
           child: FutureBuilder<Map<String, dynamic>>(
             future: _detailFuture,
             builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const Center(child: CircularProgressIndicator());
+              final padding = EdgeInsets.fromLTRB(
+                14,
+                14,
+                14,
+                bottomSafeArea + 24,
+              );
+
+              if (snapshot.connectionState != ConnectionState.done &&
+                  !snapshot.hasData) {
+                return _DetailLoadingState(padding: padding);
               }
 
               if (snapshot.hasError) {
-                return ListView(
-                  padding: const EdgeInsets.all(24),
-                  children: [
-                    Text(
-                      snapshot.error.toString().replaceFirst('Exception: ', ''),
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                  ],
+                return _DetailErrorState(
+                  padding: padding,
+                  message: snapshot.error.toString().replaceFirst(
+                    'Exception: ',
+                    '',
+                  ),
+                  onRetry: _refresh,
                 );
               }
 
-              final report = snapshot.data ?? const <String, dynamic>{};
-              final statusHistories =
-                  (report['status_histories'] as List<dynamic>? ??
-                  report['statusHistories'] as List<dynamic>? ??
-                  const []);
-              final adminResponses =
-                  (report['admin_responses'] as List<dynamic>? ??
-                  report['adminResponses'] as List<dynamic>? ??
-                  const []);
-              final attachments =
-                  (report['images'] as List<dynamic>? ?? const []);
-              final categoryName =
-                  ((report['category'] as Map<String, dynamic>?)?['name'] ??
-                          'Uncategorized')
-                      .toString();
-              final officeName =
-                  ((report['office'] as Map<String, dynamic>?)?['name'] ??
-                          'Unassigned office')
-                      .toString();
-              final rawStatus = (report['status'] ?? 'New').toString();
-              final status = _normalizedStatus(rawStatus);
+              final report = CitizenReportModel.normalizeReport(
+                snapshot.data ?? const <String, dynamic>{},
+              );
+              final reportId = CitizenReportModel.reportIdOf(report);
+              final trackingId = reportId == null
+                  ? 'Tracking ID pending'
+                  : ReportFeedbackService.buildTrackingId(reportId);
+              final status = CitizenReportModel.displayStatusOf(report);
+              final timeline = CitizenReportModel.timelineFor(report);
+              final adminResponses = CitizenReportModel.adminResponsesOf(
+                report,
+              );
+              final statusHistories = CitizenReportModel.statusHistoriesOf(
+                report,
+              );
+              final attachments = CitizenReportModel.attachmentsOf(report);
+              final latestRemark = CitizenReportModel.latestAdminRemarkOrNull(
+                report,
+              );
               final submittedBy =
-                  ((report['user'] as Map<String, dynamic>?)?['name'] ??
-                          'Unknown')
+                  ((_mapValue(report['user'])?['name'] ?? 'Unknown citizen'))
                       .toString();
-              final location = (report['location'] ?? 'No location').toString();
-              final barangay = (report['barangay'] ?? '').toString();
-              final createdAt = (report['created_at'] ?? '').toString();
-              final latitude = (report['latitude'] ?? '').toString();
-              final longitude = (report['longitude'] ?? '').toString();
-              final trackingId = ReportFeedbackService.buildTrackingId(
-                widget.reportId,
+              final assignedStaff = CitizenReportModel.assignedStaffNameOf(
+                report,
+              );
+              final assignedRole = CitizenReportModel.assignedStaffRoleOf(
+                report,
               );
 
               return ListView(
                 keyboardDismissBehavior:
                     ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: EdgeInsets.fromLTRB(16, 16, 16, bottomSafeArea + 24),
+                padding: padding,
                 children: [
-                  _buildGlassSection(
+                  _HeroCard(
+                    trackingId: trackingId,
+                    status: status,
+                    category: CitizenReportModel.categoryNameOf(report),
+                    title: CitizenReportModel.titleOf(report),
+                    latestRemark: latestRemark,
+                  ),
+                  const SizedBox(height: 16),
+                  _DetailSection(
+                    title: 'Report Information',
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            _InfoBadge(
-                              label: trackingId,
-                              color: const Color(0xFF2563EB),
-                              icon: Icons.tag_outlined,
-                            ),
-                            _InfoBadge(
-                              label: status,
-                              color: _statusColor(status),
-                              icon: Icons.flag_outlined,
-                            ),
-                            _InfoBadge(
-                              label: categoryName,
-                              color: _categoryColor(categoryName),
-                              icon: _categoryIcon(categoryName),
-                            ),
-                          ],
+                        _DetailRow(
+                          label: 'Report ID',
+                          value: reportId == null
+                              ? 'Unavailable'
+                              : '#$reportId',
                         ),
-                        const SizedBox(height: 14),
-                        Text(
-                          (report['title'] ?? 'Untitled report').toString(),
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
+                        _DetailRow(label: 'Tracking ID', value: trackingId),
+                        _DetailRow(
+                          label: 'Department',
+                          value: CitizenReportModel.officeNameOf(report),
+                        ),
+                        _DetailRow(
+                          label: 'Issue type',
+                          value: CitizenReportModel.categoryNameOf(report),
+                        ),
+                        _DetailRow(
+                          label: 'Barangay',
+                          value: _fallbackValue(
+                            CitizenReportModel.barangayOf(report),
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        _DetailRow(label: 'Office', value: officeName),
-                        _DetailRow(label: 'Location', value: location),
-                        if (barangay.isNotEmpty)
-                          _DetailRow(label: 'Barangay', value: barangay),
+                        _DetailRow(
+                          label: 'Location',
+                          value: CitizenReportModel.locationOf(report),
+                        ),
                         _DetailRow(label: 'Submitted by', value: submittedBy),
                         _DetailRow(
-                          label: 'Date created',
-                          value: createdAt.isEmpty
-                              ? 'Not available'
-                              : createdAt.substring(0, 10),
-                        ),
-                        if (latitude.isNotEmpty || longitude.isNotEmpty)
-                          _DetailRow(
-                            label: 'GPS tag',
-                            value: [
-                              latitude,
-                              longitude,
-                            ].where((value) => value.isNotEmpty).join(', '),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildGlassSection(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Flow progress',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
+                          label: 'Submitted date',
+                          value: _formattedDate(
+                            CitizenReportModel.createdAtOf(report),
                           ),
                         ),
-                        const SizedBox(height: 14),
-                        ..._buildStepItems(status),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildGlassSection(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Description',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          (report['description'] ?? 'No description')
-                              .toString(),
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.78),
-                          ),
+                        _DetailRow(
+                          label: 'Current status',
+                          value: status,
+                          highlight: _statusColor(status),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _buildGlassSection(
+                  _DetailSection(
+                    title: 'Description',
+                    child: Text(
+                      CitizenReportModel.descriptionOf(report),
+                      style: TextStyle(
+                        color: citizenBodyColor(context),
+                        height: 1.5,
+                        fontSize: 13.5,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _DetailSection(
+                    title: 'Status Timeline',
+                    subtitle:
+                        'This timeline reflects the selected complaint only.',
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Attachments',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        if (attachments.isEmpty)
-                          Text(
-                            'No attachments uploaded for this report.',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.72),
+                      children: timeline
+                          .asMap()
+                          .entries
+                          .map(
+                            (entry) => _TimelineStepCard(
+                              step: entry.value,
+                              isLast: entry.key == timeline.length - 1,
                             ),
                           )
-                        else
-                          Wrap(
+                          .toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _DetailSection(
+                    title: 'Admin Remarks',
+                    child: Text(
+                      CitizenReportModel.adminRemarkOf(report),
+                      style: TextStyle(
+                        color: citizenBodyColor(context),
+                        height: 1.5,
+                        fontSize: 13.5,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _DetailSection(
+                    title: 'Assigned Staff',
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 46,
+                          height: 46,
+                          decoration: BoxDecoration(
+                            color: const Color(
+                              0xFF3B82F6,
+                            ).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Icon(
+                            Icons.support_agent_rounded,
+                            color: Color(0xFF3B82F6),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                assignedStaff,
+                                style: TextStyle(
+                                  color: citizenTitleColor(context),
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                assignedRole,
+                                style: TextStyle(
+                                  color: citizenBodyColor(context),
+                                  fontSize: 12.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _DetailSection(
+                    title: 'Attachments',
+                    child: attachments.isEmpty
+                        ? _EmptyInfoMessage(
+                            message:
+                                'No attachments uploaded for this complaint.',
+                          )
+                        : Wrap(
                             spacing: 12,
                             runSpacing: 12,
-                            children: attachments.map((item) {
-                              final attachment = item as Map<String, dynamic>;
+                            children: attachments.map((attachment) {
                               final mediaType =
                                   (attachment['media_type'] ?? 'image')
                                       .toString();
-                              final attachmentUrl = _buildImageUrl(
+                              final attachmentUrl = _buildAttachmentUrl(
                                 (attachment['image_path'] ?? '').toString(),
                               );
 
@@ -279,33 +318,26 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                               );
                             }).toList(),
                           ),
-                      ],
-                    ),
                   ),
                   const SizedBox(height: 16),
-                  _buildGlassSection(
+                  _DetailSection(
+                    title: 'Service Rating',
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Service rating',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
                         Text(
                           status == 'Resolved'
-                              ? 'Rate the service you received from 1 to 5 stars.'
-                              : 'Rating will unlock once the complaint reaches Resolved.',
+                              ? 'Rate the service you received for this completed complaint.'
+                              : 'Rating unlocks once this complaint is marked Resolved.',
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.72),
+                            color: citizenBodyColor(context),
+                            fontSize: 13,
+                            height: 1.45,
                           ),
                         ),
-                        const SizedBox(height: 14),
-                        Row(
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 4,
                           children: List.generate(5, (index) {
                             final value = index + 1;
                             final filled = (_selectedRating ?? 0) >= value;
@@ -320,8 +352,8 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                                     : Icons.star_outline_rounded,
                                 color: filled
                                     ? const Color(0xFFFBBF24)
-                                    : Colors.white54,
-                                size: 32,
+                                    : citizenMutedColor(context),
+                                size: 30,
                               ),
                             );
                           }),
@@ -330,52 +362,93 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                           Text(
                             'Your rating: $_selectedRating/5',
                             style: const TextStyle(
-                              color: Color(0xFFFDE68A),
-                              fontWeight: FontWeight.w700,
+                              color: Color(0xFFFBBF24),
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  _buildSectionTitle('Status history'),
-                  const SizedBox(height: 8),
-                  if (statusHistories.isEmpty)
-                    _buildEmptyMessage('No status updates yet.')
-                  else
-                    ...statusHistories.map((item) {
-                      final oldStatus = _normalizedStatus(
-                        (item['old_status'] ?? 'Submitted').toString(),
-                      );
-                      final newStatus = _normalizedStatus(
-                        (item['new_status'] ?? 'Submitted').toString(),
-                      );
-
-                      return _TimelineCard(
-                        title: '$oldStatus -> $newStatus',
-                        subtitle:
-                            ((item['user'] as Map<String, dynamic>?)?['name'] ??
-                                    'System')
-                                .toString(),
-                        details: (item['remarks'] ?? 'No remarks').toString(),
-                      );
-                    }),
-                  const SizedBox(height: 24),
-                  _buildSectionTitle('Office responses'),
-                  const SizedBox(height: 8),
-                  if (adminResponses.isEmpty)
-                    _buildEmptyMessage('No official updates yet.')
-                  else
-                    ...adminResponses.map(
-                      (item) => _TimelineCard(
-                        title:
-                            ((item['user'] as Map<String, dynamic>?)?['name'] ??
-                                    'Admin')
-                                .toString(),
-                        subtitle: 'Official update',
-                        details: (item['response'] ?? '').toString(),
-                      ),
-                    ),
+                  const SizedBox(height: 16),
+                  _DetailSection(
+                    title: 'Status History',
+                    child: statusHistories.isEmpty
+                        ? const _EmptyInfoMessage(
+                            message: 'No status updates recorded yet.',
+                          )
+                        : Column(
+                            children: statusHistories
+                                .map(
+                                  (history) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 10),
+                                    child: _ActivityCard(
+                                      title:
+                                          '${CitizenReportModel.normalizeStatus((history['old_status'] ?? 'Submitted').toString())} -> ${CitizenReportModel.normalizeStatus((history['new_status'] ?? 'Submitted').toString())}',
+                                      subtitle: _activitySubtitle(
+                                        actor:
+                                            (_mapValue(
+                                                      history['user'],
+                                                    )?['name'] ??
+                                                    'System')
+                                                .toString(),
+                                        timestamp:
+                                            CitizenReportModel.timestampOf(
+                                              history['created_at'] ??
+                                                  history['updated_at'],
+                                            ),
+                                      ),
+                                      details: _fallbackValue(
+                                        (history['remarks'] ?? '')
+                                            .toString()
+                                            .trim(),
+                                        fallback: 'No remarks provided.',
+                                      ),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                  ),
+                  const SizedBox(height: 16),
+                  _DetailSection(
+                    title: 'Office Responses',
+                    child: adminResponses.isEmpty
+                        ? const _EmptyInfoMessage(
+                            message: 'No official responses yet.',
+                          )
+                        : Column(
+                            children: adminResponses
+                                .map(
+                                  (response) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 10),
+                                    child: _ActivityCard(
+                                      title:
+                                          (_mapValue(
+                                                    response['user'],
+                                                  )?['name'] ??
+                                                  'Assigned office')
+                                              .toString(),
+                                      subtitle: _activitySubtitle(
+                                        actor: 'Official update',
+                                        timestamp:
+                                            CitizenReportModel.timestampOf(
+                                              response['created_at'] ??
+                                                  response['updated_at'],
+                                            ),
+                                      ),
+                                      details: _fallbackValue(
+                                        (response['response'] ?? '')
+                                            .toString()
+                                            .trim(),
+                                        fallback:
+                                            'No response details provided.',
+                                      ),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                  ),
                 ],
               );
             },
@@ -385,30 +458,8 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
     );
   }
 
-  List<Widget> _buildStepItems(String status) {
-    const steps = ['Submitted', 'In Progress', 'Resolved'];
-    final currentIndex = steps.indexOf(status);
-
-    return List<Widget>.generate(steps.length, (index) {
-      final step = steps[index];
-      final completed = currentIndex >= index;
-      final active = currentIndex == index;
-      return Padding(
-        padding: EdgeInsets.only(bottom: index == steps.length - 1 ? 0 : 12),
-        child: _FlowProgressItem(
-          label: step,
-          active: active,
-          completed: completed,
-          description: _stepDescription(step),
-        ),
-      );
-    });
-  }
-
   Future<void> _saveRating(int rating) async {
-    setState(() {
-      _isSavingRating = true;
-    });
+    setState(() => _isSavingRating = true);
 
     try {
       await ReportFeedbackService.saveRating(
@@ -416,47 +467,26 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
         rating: rating,
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _selectedRating = rating;
         _isSavingRating = false;
       });
-
       _showSnack('Service rating saved.');
     } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _isSavingRating = false;
-      });
+      if (!mounted) {
+        return;
+      }
+
+      setState(() => _isSavingRating = false);
       _showSnack('Unable to save service rating.');
     }
   }
 
-  String _stepDescription(String step) {
-    switch (step) {
-      case 'Submitted':
-        return 'Your complaint was received and assigned a tracking ID.';
-      case 'In Progress':
-        return 'The office is actively working on the concern.';
-      case 'Resolved':
-        return 'The office marked the concern as resolved. You can now rate the service.';
-      default:
-        return '';
-    }
-  }
-
-  String _normalizedStatus(String status) {
-    switch (status) {
-      case 'New':
-      case 'Pending':
-        return 'Submitted';
-      default:
-        return status;
-    }
-  }
-
-  String? _buildImageUrl(String imagePath) {
+  String? _buildAttachmentUrl(String imagePath) {
     final trimmed = imagePath.trim();
     if (trimmed.isEmpty) {
       return null;
@@ -505,186 +535,178 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Widget _buildGlassSection({required Widget child}) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Colors.white.withValues(alpha: 0.18),
-                Colors.white.withValues(alpha: 0.08),
-              ],
-            ),
-          ),
-          child: child,
-        ),
-      ),
-    );
+  static Map<String, dynamic>? _mapValue(dynamic value) {
+    if (value is Map<String, dynamic>) {
+      return value;
+    }
+
+    if (value is Map) {
+      return value.map((key, mapValue) => MapEntry(key.toString(), mapValue));
+    }
+
+    return null;
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontSize: 17,
-        fontWeight: FontWeight.w700,
-        color: Colors.white,
-      ),
-    );
+  static String _fallbackValue(
+    String value, {
+    String fallback = 'Not available',
+  }) {
+    return value.trim().isEmpty ? fallback : value.trim();
   }
 
-  Widget _buildEmptyMessage(String message) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
-      ),
-      child: Text(
-        message,
-        style: TextStyle(color: Colors.white.withValues(alpha: 0.72)),
-      ),
-    );
+  static String _formattedDate(DateTime? date) {
+    if (date == null) {
+      return 'Not available';
+    }
+
+    return CitizenReportModel.formatDateTime(date);
   }
 
-  Color _statusColor(String status) {
+  static String _activitySubtitle({
+    required String actor,
+    required DateTime? timestamp,
+  }) {
+    final timeText = timestamp == null
+        ? 'Time unavailable'
+        : CitizenReportModel.formatDateTime(timestamp);
+    return '$actor . $timeText';
+  }
+
+  static Color _statusColor(String status) {
     switch (status) {
       case 'Resolved':
         return const Color(0xFF22C55E);
       case 'In Progress':
-        return const Color(0xFFF59E0B);
-      case 'Under Review':
-        return const Color(0xFF38BDF8);
-      case 'Submitted':
-        return const Color(0xFFA78BFA);
+        return const Color(0xFF3B82F6);
+      case 'Rejected':
+        return const Color(0xFFEF4444);
       default:
-        return Colors.white70;
+        return const Color(0xFFF59E0B);
     }
-  }
-
-  IconData _categoryIcon(String categoryName) {
-    final normalized = categoryName.toLowerCase();
-    if (normalized.contains('road')) return Icons.construction;
-    if (normalized.contains('water')) return Icons.water_drop;
-    if (normalized.contains('electric')) return Icons.bolt;
-    if (normalized.contains('waste')) return Icons.delete_outline;
-    return Icons.report_problem_outlined;
-  }
-
-  Color _categoryColor(String categoryName) {
-    final normalized = categoryName.toLowerCase();
-    if (normalized.contains('road')) return const Color(0xFFFF8A65);
-    if (normalized.contains('water')) return const Color(0xFF4FC3F7);
-    if (normalized.contains('electric')) return const Color(0xFFFFD54F);
-    if (normalized.contains('waste')) return const Color(0xFFA5D6A7);
-    return const Color(0xFFD8B15A);
   }
 }
 
-class _FlowProgressItem extends StatelessWidget {
-  const _FlowProgressItem({
-    required this.label,
-    required this.active,
-    required this.completed,
-    required this.description,
+class _HeroCard extends StatelessWidget {
+  const _HeroCard({
+    required this.trackingId,
+    required this.status,
+    required this.category,
+    required this.title,
+    required this.latestRemark,
   });
 
-  final String label;
-  final bool active;
-  final bool completed;
-  final String description;
+  final String trackingId;
+  final String status;
+  final String category;
+  final String title;
+  final String? latestRemark;
 
   @override
   Widget build(BuildContext context) {
-    final color = completed
-        ? const Color(0xFF22C55E)
-        : active
-        ? const Color(0xFF38BDF8)
-        : Colors.white24;
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: color.withValues(alpha: 0.16),
-            border: Border.all(color: color),
-          ),
-          alignment: Alignment.center,
-          child: Icon(
-            completed ? Icons.check : Icons.circle,
-            size: completed ? 16 : 10,
-            color: color,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: citizenCardColor(context),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: citizenBorderColor(context)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                ),
+              _HeroPill(
+                icon: Icons.tag_rounded,
+                label: trackingId,
+                accent: const Color(0xFF3B82F6),
               ),
-              const SizedBox(height: 4),
-              Text(
-                description,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.72),
-                  height: 1.3,
-                ),
+              _HeroPill(
+                icon: Icons.flag_outlined,
+                label: status,
+                accent: _ComplaintDetailScreenState._statusColor(status),
+              ),
+              _HeroPill(
+                icon: Icons.category_outlined,
+                label: category,
+                accent: const Color(0xFF8B5CF6),
               ),
             ],
           ),
-        ),
-      ],
+          const SizedBox(height: 14),
+          Text(
+            title,
+            style: TextStyle(
+              color: citizenTitleColor(context),
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              height: 1.2,
+            ),
+          ),
+          if (latestRemark != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF3B82F6).withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: const Color(0xFF3B82F6).withValues(alpha: 0.14),
+                ),
+              ),
+              child: Text(
+                latestRemark!,
+                style: TextStyle(
+                  color: citizenBodyColor(context),
+                  fontSize: 13,
+                  height: 1.45,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
 
-class _DetailRow extends StatelessWidget {
-  const _DetailRow({required this.label, required this.value});
+class _HeroPill extends StatelessWidget {
+  const _HeroPill({
+    required this.icon,
+    required this.label,
+    required this.accent,
+  });
 
+  final IconData icon;
   final String label;
-  final String value;
+  final Color accent;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: accent.withValues(alpha: 0.16)),
+      ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
-            width: 110,
+          Icon(icon, size: 13, color: accent),
+          const SizedBox(width: 6),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 190),
             child: Text(
               label,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: accent,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
               ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.78)),
             ),
           ),
         ],
@@ -693,8 +715,197 @@ class _DetailRow extends StatelessWidget {
   }
 }
 
-class _TimelineCard extends StatelessWidget {
-  const _TimelineCard({
+class _DetailSection extends StatelessWidget {
+  const _DetailSection({
+    required this.title,
+    required this.child,
+    this.subtitle,
+  });
+
+  final String title;
+  final Widget child;
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: citizenCardColor(context),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: citizenBorderColor(context)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              color: citizenTitleColor(context),
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              subtitle!,
+              style: TextStyle(
+                color: citizenBodyColor(context),
+                fontSize: 12.5,
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({required this.label, required this.value, this.highlight});
+
+  final String label;
+  final String value;
+  final Color? highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 118,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: citizenMutedColor(context),
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                color: highlight ?? citizenTitleColor(context),
+                fontSize: 13.5,
+                fontWeight: highlight == null
+                    ? FontWeight.w600
+                    : FontWeight.w800,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TimelineStepCard extends StatelessWidget {
+  const _TimelineStepCard({required this.step, required this.isLast});
+
+  final CitizenReportTimelineStep step;
+  final bool isLast;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = _timelineColor(step);
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: isLast ? 0 : 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Column(
+            children: [
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.14),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: accent),
+                ),
+                child: Icon(
+                  step.completed ? Icons.check_rounded : Icons.circle,
+                  size: step.completed ? 14 : 10,
+                  color: accent,
+                ),
+              ),
+              if (!isLast)
+                Container(
+                  width: 2,
+                  height: 40,
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  color: step.completed ? accent : citizenBorderColor(context),
+                ),
+            ],
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    step.title,
+                    style: TextStyle(
+                      color: accent,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    step.caption,
+                    style: TextStyle(
+                      color: citizenBodyColor(context),
+                      fontSize: 12.5,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Color _timelineColor(CitizenReportTimelineStep step) {
+    switch (step.key) {
+      case 'resolved':
+        return step.completed || step.active
+            ? const Color(0xFF22C55E)
+            : const Color(0xFF64748B);
+      case 'rejected':
+        return step.completed || step.active
+            ? const Color(0xFFEF4444)
+            : const Color(0xFF64748B);
+      case 'in_progress':
+        return step.completed || step.active
+            ? const Color(0xFF3B82F6)
+            : const Color(0xFF64748B);
+      default:
+        return step.completed || step.active
+            ? const Color(0xFFF59E0B)
+            : const Color(0xFF64748B);
+    }
+  }
+}
+
+class _ActivityCard extends StatelessWidget {
+  const _ActivityCard({
     required this.title,
     required this.subtitle,
     required this.details,
@@ -707,32 +918,36 @@ class _TimelineCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+      width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.10),
+        color: citizenInputColor(context),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+        border: Border.all(color: citizenBorderColor(context)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
+            style: TextStyle(
+              color: citizenTitleColor(context),
+              fontWeight: FontWeight.w800,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             subtitle,
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.62)),
+            style: TextStyle(color: citizenMutedColor(context), fontSize: 12),
           ),
           const SizedBox(height: 8),
           Text(
             details,
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.78)),
+            style: TextStyle(
+              color: citizenBodyColor(context),
+              fontSize: 13,
+              height: 1.45,
+            ),
           ),
         ],
       ),
@@ -740,40 +955,28 @@ class _TimelineCard extends StatelessWidget {
   }
 }
 
-class _InfoBadge extends StatelessWidget {
-  const _InfoBadge({
-    required this.label,
-    required this.color,
-    required this.icon,
-  });
+class _EmptyInfoMessage extends StatelessWidget {
+  const _EmptyInfoMessage({required this.message});
 
-  final String label;
-  final Color color;
-  final IconData icon;
+  final String message;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.34)),
+        color: citizenInputColor(context),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: citizenBorderColor(context)),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
+      child: Text(
+        message,
+        style: TextStyle(
+          color: citizenBodyColor(context),
+          fontSize: 13,
+          height: 1.45,
+        ),
       ),
     );
   }
@@ -791,19 +994,22 @@ class _ImageAttachmentCard extends StatelessWidget {
       child: Container(
         width: 180,
         height: 148,
-        color: Colors.white.withValues(alpha: 0.10),
+        color: citizenInputColor(context),
         child: imageUrl == null
             ? Center(
                 child: Text(
                   'Invalid image path',
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.72)),
+                  style: TextStyle(color: citizenBodyColor(context)),
                 ),
               )
             : Image.network(
                 imageUrl!,
                 fit: BoxFit.cover,
                 loadingBuilder: (context, child, progress) {
-                  if (progress == null) return child;
+                  if (progress == null) {
+                    return child;
+                  }
+
                   return const Center(
                     child: SizedBox(
                       width: 22,
@@ -819,9 +1025,7 @@ class _ImageAttachmentCard extends StatelessWidget {
                       child: Text(
                         'Unable to load image',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.72),
-                        ),
+                        style: TextStyle(color: citizenBodyColor(context)),
                       ),
                     ),
                   );
@@ -846,28 +1050,28 @@ class _VideoAttachmentCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
-        color: Colors.white.withValues(alpha: 0.10),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+        color: citizenInputColor(context),
+        border: Border.all(color: citizenBorderColor(context)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.videocam_outlined, color: Colors.white),
+          Icon(Icons.videocam_outlined, color: citizenTitleColor(context)),
           const SizedBox(height: 10),
           Text(
             fileName,
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
+            style: TextStyle(
+              color: citizenTitleColor(context),
+              fontWeight: FontWeight.w700,
             ),
           ),
           const Spacer(),
           FilledButton.icon(
             onPressed: onOpen,
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF2563EB),
+              backgroundColor: const Color(0xFF3B82F6),
               foregroundColor: Colors.white,
             ),
             icon: const Icon(Icons.open_in_new, size: 16),
@@ -875,6 +1079,100 @@ class _VideoAttachmentCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _DetailLoadingState extends StatelessWidget {
+  const _DetailLoadingState({required this.padding});
+
+  final EdgeInsets padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: padding,
+      children: List.generate(
+        6,
+        (index) => Padding(
+          padding: EdgeInsets.only(bottom: index == 5 ? 0 : 14),
+          child: Container(
+            height: index == 0 ? 180 : 150,
+            decoration: BoxDecoration(
+              color: citizenCardColor(context),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: citizenBorderColor(context)),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailErrorState extends StatelessWidget {
+  const _DetailErrorState({
+    required this.padding,
+    required this.message,
+    required this.onRetry,
+  });
+
+  final EdgeInsets padding;
+  final String message;
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: padding,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: citizenCardColor(context),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: citizenBorderColor(context)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                color: Color(0xFFEF4444),
+                size: 30,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Unable to load complaint details',
+                style: TextStyle(
+                  color: citizenTitleColor(context),
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                style: TextStyle(
+                  color: citizenBodyColor(context),
+                  fontSize: 13,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: onRetry,
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF3B82F6),
+                  foregroundColor: Colors.white,
+                ),
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

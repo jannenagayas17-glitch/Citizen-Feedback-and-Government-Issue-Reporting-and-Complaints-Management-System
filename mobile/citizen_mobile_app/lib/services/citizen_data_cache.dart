@@ -1,3 +1,4 @@
+import '../models/report_model.dart';
 import 'auth_service.dart';
 import 'report_service.dart';
 
@@ -42,7 +43,9 @@ class CitizenDataCache {
 
   static Future<List<dynamic>> getReports({bool refresh = false}) async {
     if (!refresh && _reports != null) return _reports!;
-    _reports = _dedupeReports(await _reportService.getReports());
+    _reports = CitizenReportModel.normalizeReportList(
+      await _reportService.getReports(),
+    );
     return _reports!;
   }
 
@@ -66,7 +69,9 @@ class CitizenDataCache {
       return _reportDetails[reportId]!;
     }
 
-    final detail = await _reportService.getReportDetail(reportId);
+    final detail = CitizenReportModel.normalizeReport(
+      await _reportService.getReportDetail(reportId),
+    );
     _reportDetails[reportId] = detail;
     return detail;
   }
@@ -78,7 +83,9 @@ class CitizenDataCache {
       getUser(refresh: refresh),
       getReports(refresh: refresh),
     ]);
-    final reports = _dedupeReports(values[1] as List<dynamic>);
+    final reports = CitizenReportModel.normalizeReportList(
+      values[1] as List<dynamic>,
+    );
     _reports = reports;
     _dashboard = _dashboardFromReports(reports);
 
@@ -94,9 +101,15 @@ class CitizenDataCache {
   }
 
   static void prependReport(Map<String, dynamic> report) {
-    final reportId = _extractId(report);
-    if (reportId != null) _reportDetails[reportId] = report;
-    _reports = _dedupeReports([report, ...?_reports]);
+    final normalized = CitizenReportModel.normalizeReport(report);
+    final reportId = CitizenReportModel.reportIdOf(normalized);
+    if (reportId != null) {
+      _reportDetails[reportId] = normalized;
+    }
+    _reports = CitizenReportModel.normalizeReportList([
+      normalized,
+      ...?_reports,
+    ]);
     _dashboard = _dashboardFromReports(_reports!);
   }
 
@@ -113,35 +126,6 @@ class CitizenDataCache {
     _categories = null;
     _offices = null;
     _reportDetails.clear();
-  }
-
-  static int? _extractId(Map<String, dynamic> report) {
-    final rawId = report['id'];
-    return rawId is int ? rawId : int.tryParse('$rawId');
-  }
-
-  static List<dynamic> _dedupeReports(List<dynamic> reports) {
-    final orderedReports = <dynamic>[];
-    final seenIds = <int>{};
-
-    for (final item in reports) {
-      if (item is! Map<String, dynamic>) {
-        orderedReports.add(item);
-        continue;
-      }
-
-      final reportId = _extractId(item);
-      if (reportId == null) {
-        orderedReports.add(Map<String, dynamic>.from(item));
-        continue;
-      }
-
-      if (seenIds.add(reportId)) {
-        orderedReports.add(Map<String, dynamic>.from(item));
-      }
-    }
-
-    return orderedReports;
   }
 
   static Map<String, dynamic> _dashboardFromReports(List<dynamic> reports) {

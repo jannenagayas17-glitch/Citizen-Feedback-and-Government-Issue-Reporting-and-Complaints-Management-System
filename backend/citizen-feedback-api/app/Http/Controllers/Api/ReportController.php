@@ -29,7 +29,9 @@ class ReportController extends Controller
 
     public function index(Request $request)
     {
-        $query = Report::with($this->listRelations())->latest();
+        $query = Report::with($this->listRelations())
+            ->orderByDesc('reports.created_at')
+            ->orderByDesc('reports.id');
 
         if (($request->user()->role ?? 'citizen') === 'citizen') {
             $query->where('user_id', $request->user()->id);
@@ -43,7 +45,9 @@ class ReportController extends Controller
         $query->where('category_id', $request->category_id);
         }
 
-        return response()->json($query->get());
+        return response()->json(
+            $query->get()->unique('id')->values()
+        );
     }
 
     public function store(Request $request)
@@ -752,6 +756,7 @@ class ReportController extends Controller
             'user',
             'category',
             'office',
+            'assignedAdmin:id,name,job_title',
             'latestStatusHistory.user',
             'latestAdminResponse.user',
         ];
@@ -773,6 +778,7 @@ class ReportController extends Controller
             'user',
             'category',
             'office',
+            'assignedAdmin:id,name,job_title,email',
             'images',
             'statusHistories' => function ($query) {
                 $query->with('user')->latest();
