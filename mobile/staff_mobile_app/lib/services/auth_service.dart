@@ -8,6 +8,10 @@ import '../utils/token_storage.dart';
 class AuthService {
   static const String _passwordEndpoint = '/user/password';
 
+  String _normalizeEmail(String email) {
+    return email.trim().toLowerCase();
+  }
+
   String _extractErrorMessage(Map<String, dynamic> data, String fallback) {
     final errors = data['errors'];
     if (errors is Map<String, dynamic>) {
@@ -53,10 +57,11 @@ class AuthService {
     required String email,
     required String password,
   }) async {
+    final normalizedEmail = _normalizeEmail(email);
     final response = await http.post(
       _buildUri('/auth/login'),
       headers: await _headers(),
-      body: jsonEncode({'email': email, 'password': password}),
+      body: jsonEncode({'email': normalizedEmail, 'password': password}),
     );
 
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -121,14 +126,15 @@ class AuthService {
     required String password,
     required String passwordConfirmation,
   }) async {
+    final normalizedEmail = _normalizeEmail(email);
     final response = await http.post(
       _buildUri('/auth/register'),
       headers: await _headers(),
       body: jsonEncode({
         'name': name,
-        'email': email,
+        'email': normalizedEmail,
         if (mobileNumber != null && mobileNumber.isNotEmpty)
-          'mobile_number': mobileNumber,
+          'mobile_number': mobileNumber.trim(),
         'password': password,
         'password_confirmation': passwordConfirmation,
       }),
@@ -162,18 +168,19 @@ class AuthService {
     required String department,
     required String jobTitle,
   }) async {
+    final normalizedEmail = _normalizeEmail(email);
     final response = await http.post(
       _buildUri('/auth/request-government-account'),
       headers: await _headers(),
       body: jsonEncode({
         'name': name,
-        'email': email,
+        'email': normalizedEmail,
         if (mobileNumber != null && mobileNumber.isNotEmpty)
-          'mobile_number': mobileNumber,
+          'mobile_number': mobileNumber.trim(),
         'password': password,
         'password_confirmation': passwordConfirmation,
-        'department': department,
-        'job_title': jobTitle,
+        'department': department.trim(),
+        'job_title': jobTitle.trim(),
       }),
     );
 
@@ -197,10 +204,11 @@ class AuthService {
   }
 
   Future<Map<String, dynamic>> forgotPassword({required String email}) async {
+    final normalizedEmail = _normalizeEmail(email);
     final response = await http.post(
       _buildUri('/forgot-password'),
       headers: await _headers(),
-      body: jsonEncode({'email': email}),
+      body: jsonEncode({'email': normalizedEmail}),
     );
 
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -359,12 +367,13 @@ class AuthService {
     String? department,
     String? jobTitle,
   }) async {
+    final normalizedEmail = _normalizeEmail(email);
     final response = await http.post(
       _buildUri('/admin/users'),
       headers: await _headers(authRequired: true),
       body: jsonEncode({
-        'name': name,
-        'email': email,
+        'name': name.trim(),
+        'email': normalizedEmail,
         'mobile_number': mobileNumber?.trim() ?? '',
         'password': password,
         'password_confirmation': passwordConfirmation,
@@ -396,12 +405,13 @@ class AuthService {
     String? password,
     String? passwordConfirmation,
   }) async {
+    final normalizedEmail = _normalizeEmail(email);
     final response = await http.put(
       _buildUri('/admin/users/$id'),
       headers: await _headers(authRequired: true),
       body: jsonEncode({
-        'name': name,
-        'email': email,
+        'name': name.trim(),
+        'email': normalizedEmail,
         'mobile_number': mobileNumber?.trim() ?? '',
         'role': role,
         if (department != null && department.trim().isNotEmpty)

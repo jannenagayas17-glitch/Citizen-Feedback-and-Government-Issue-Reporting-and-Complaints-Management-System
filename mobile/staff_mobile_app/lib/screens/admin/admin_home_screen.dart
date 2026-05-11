@@ -4,12 +4,12 @@ import '../../services/auth_service.dart';
 import '../../services/dashboard_service.dart';
 import '../../services/report_service.dart';
 import '../../utils/admin_theme.dart';
-import '../citizen/complaint_detail_screen.dart';
 import 'analytics_reports_screen.dart';
 import '../auth/login_screen.dart';
 import '../super_admin/feedback_management_screen.dart';
 import 'admin_profile_screen.dart';
 import 'complaint_management_screen.dart';
+import 'report_detail_dialog.dart';
 
 class AdminHomeScreen extends StatefulWidget {
   const AdminHomeScreen({super.key});
@@ -18,13 +18,7 @@ class AdminHomeScreen extends StatefulWidget {
   State<AdminHomeScreen> createState() => _AdminHomeScreenState();
 }
 
-enum _AdminDesktopSection {
-  dashboard,
-  reports,
-  analytics,
-  feedback,
-  profile,
-}
+enum _AdminDesktopSection { dashboard, reports, analytics, feedback, profile }
 
 class _AdminHomeScreenState extends State<AdminHomeScreen> {
   final DashboardService _dashboardService = DashboardService();
@@ -92,12 +86,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   }
 
   Future<void> _openReportDetail(int reportId) async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ComplaintDetailScreen(reportId: reportId),
-      ),
-    );
+    await showAdminReportDetailDialog(context: context, reportId: reportId);
     await _refresh();
   }
 
@@ -709,9 +698,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         .toList();
     final rejectedCount = _statusCount(reportList, 'Rejected');
     final colors = AdminThemeColors.of(context);
-    final panelGradient = LinearGradient(
-      colors: [colors.panel, colors.panel],
-    );
+    final panelGradient = LinearGradient(colors: [colors.panel, colors.panel]);
 
     return ListView(
       padding: EdgeInsets.fromLTRB(14, 12, 14, 28 + bottomSafeArea),
@@ -726,10 +713,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         const SizedBox(height: 4),
         Text(
           '$departmentName | Tacloban City',
-          style: TextStyle(
-            color: colors.mutedText,
-            fontSize: 13,
-          ),
+          style: TextStyle(color: colors.mutedText, fontSize: 13),
         ),
         const SizedBox(height: 18),
         Row(
@@ -1418,13 +1402,7 @@ class _SectionTitle extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        Text(
-          subtitle,
-          style: TextStyle(
-            color: colors.mutedText,
-            height: 1.4,
-          ),
-        ),
+        Text(subtitle, style: TextStyle(color: colors.mutedText, height: 1.4)),
       ],
     );
   }
@@ -1477,10 +1455,7 @@ class _ActionCard extends StatelessWidget {
                   child: Icon(icon, color: iconColor),
                 ),
                 const Spacer(),
-                Icon(
-                  Icons.arrow_forward_rounded,
-                  color: colors.mutedText,
-                ),
+                Icon(Icons.arrow_forward_rounded, color: colors.mutedText),
               ],
             ),
             const SizedBox(height: 14),
@@ -1495,10 +1470,7 @@ class _ActionCard extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               subtitle,
-              style: TextStyle(
-                color: colors.mutedText,
-                height: 1.4,
-              ),
+              style: TextStyle(color: colors.mutedText, height: 1.4),
             ),
             const SizedBox(height: 14),
             Text(
@@ -1595,10 +1567,7 @@ class _ReportPreviewCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        citizen,
-                        style: TextStyle(color: colors.mutedText),
-                      ),
+                      Text(citizen, style: TextStyle(color: colors.mutedText)),
                     ],
                   ),
                 ),
@@ -1709,13 +1678,7 @@ class _GlassMessageCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          Text(
-            message,
-            style: TextStyle(
-              color: colors.mutedText,
-              height: 1.4,
-            ),
-          ),
+          Text(message, style: TextStyle(color: colors.mutedText, height: 1.4)),
         ],
       ),
     );
@@ -2175,13 +2138,7 @@ class _PanelEmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 6),
           ],
-          Text(
-            body,
-            style: TextStyle(
-              color: colors.mutedText,
-              height: 1.4,
-            ),
-          ),
+          Text(body, style: TextStyle(color: colors.mutedText, height: 1.4)),
         ],
       ),
     );

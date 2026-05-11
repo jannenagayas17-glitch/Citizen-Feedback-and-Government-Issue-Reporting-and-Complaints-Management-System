@@ -24,18 +24,25 @@ class AuthController extends Controller
 
     public function register(Request $request)
     {
-        $request->validate([
+        $this->normalizeCredentialRequest($request);
+
+        $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', 'regex:'.self::FULL_NAME_REGEX, 'not_regex:'.self::EMOJI_REGEX],
             'email' => ['required', 'string', 'email', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/', 'max:255', 'unique:users,email', 'not_regex:'.self::EMOJI_REGEX],
             'mobile_number' => ['nullable', 'regex:/^\d{11}$/'],
             'password' => ['required', 'string', 'min:8', 'confirmed', 'not_regex:'.self::EMOJI_REGEX],
         ], $this->validationMessages());
 
+        $this->ensureUniqueCredentials(
+            $validated['email'],
+            $validated['mobile_number'] ?? null
+        );
+
         $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'mobile_number' => $request->mobile_number,
-            'password' => Hash::make($request->password),
+            'name' => trim((string) $validated['name']),
+            'email' => $validated['email'],
+            'mobile_number' => $validated['mobile_number'] ?? null,
+            'password' => Hash::make($validated['password']),
         ]);
 
         $token = $user->createToken('mobile-token')->plainTextToken;
@@ -49,7 +56,9 @@ class AuthController extends Controller
 
     public function requestGovernmentAccount(Request $request)
     {
-        $request->validate([
+        $this->normalizeCredentialRequest($request);
+
+        $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', 'regex:'.self::FULL_NAME_REGEX, 'not_regex:'.self::EMOJI_REGEX],
             'email' => ['required', 'string', 'email', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/', 'max:255', 'unique:users,email', 'not_regex:'.self::EMOJI_REGEX],
             'mobile_number' => ['required', 'regex:/^\d{11}$/'],
@@ -58,8 +67,13 @@ class AuthController extends Controller
             'job_title' => ['required', 'string', 'max:255', 'not_regex:'.self::EMOJI_REGEX],
         ], $this->validationMessages());
 
+        $this->ensureUniqueCredentials(
+            $validated['email'],
+            $validated['mobile_number'] ?? null
+        );
+
         $office = Office::query()
-            ->where('name', trim((string) $request->department))
+            ->where('name', trim((string) $validated['department']))
             ->where('is_active', true)
             ->first();
 
@@ -70,13 +84,13 @@ class AuthController extends Controller
         }
 
         $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'mobile_number' => $request->mobile_number,
-            'password' => Hash::make($request->password),
+            'name' => trim((string) $validated['name']),
+            'email' => $validated['email'],
+            'mobile_number' => $validated['mobile_number'],
+            'password' => Hash::make($validated['password']),
             'role' => 'pending_admin',
             'department' => $office->name,
-            'job_title' => $request->job_title,
+            'job_title' => trim((string) $validated['job_title']),
         ]);
 
         return response()->json([
@@ -87,12 +101,14 @@ class AuthController extends Controller
 
     public function login(Request $request)
     {
+        $this->normalizeCredentialRequest($request);
+
         $request->validate([
             'email' => ['required', 'email', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/', 'not_regex:'.self::EMOJI_REGEX],
             'password' => ['required', 'not_regex:'.self::EMOJI_REGEX],
         ], $this->validationMessages());
 
-        $user = User::where('email', $request->email)->first();
+        $user = $this->findUserByNormalizedEmail((string) $request->email);
 
         if (! $user || ! Hash::check($request->password, $user->password)) {
             throw ValidationException::withMessages([
@@ -164,7 +180,7 @@ class AuthController extends Controller
         }
 
         $firebaseUser = $lookupResponse->json('users.0');
-        $email = $firebaseUser['email'] ?? null;
+        $email = $this->normalizeEmail($firebaseUser['email'] ?? null);
 
         if (! $firebaseUser || ! $email) {
             throw ValidationException::withMessages([
@@ -223,7 +239,7 @@ class AuthController extends Controller
 
     private function resolveCitizenGoogleUser(string $email): User
     {
-        $user = User::query()->where('email', $email)->first();
+        $user = $this->findUserByNormalizedEmail($email);
 
         if (! $user) {
             throw ValidationException::withMessages([
@@ -242,7 +258,7 @@ class AuthController extends Controller
 
     private function resolveStaffGoogleUser(string $email): User
     {
-        $user = User::query()->where('email', $email)->first();
+        $user = $this->findUserByNormalizedEmail($email);
 
         if (! $user) {
             throw ValidationException::withMessages([
@@ -295,16 +311,24 @@ class AuthController extends Controller
             ]);
         }
 
-        $request->validate([
+        $this->normalizeCredentialRequest($request);
+
+        $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', 'regex:'.self::FULL_NAME_REGEX, 'not_regex:'.self::EMOJI_REGEX],
             'email' => ['required', 'email', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/', 'max:255', 'unique:users,email,'.$user->id, 'not_regex:'.self::EMOJI_REGEX],
             'mobile_number' => ['nullable', 'regex:/^\d{11}$/'],
         ], $this->validationMessages());
 
+        $this->ensureUniqueCredentials(
+            $validated['email'],
+            $validated['mobile_number'] ?? null,
+            $user->id
+        );
+
         $user->update([
-            'name' => $request->name,
-            'email' => $request->email,
-            'mobile_number' => $request->mobile_number,
+            'name' => trim((string) $validated['name']),
+            'email' => $validated['email'],
+            'mobile_number' => $validated['mobile_number'] ?? null,
         ]);
 
         return response()->json([
@@ -361,6 +385,8 @@ class AuthController extends Controller
     {
         $this->ensureSuperAdmin($request);
 
+        $this->normalizeCredentialRequest($request);
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', 'regex:'.self::FULL_NAME_REGEX, 'not_regex:'.self::EMOJI_REGEX],
             'email' => ['required', 'string', 'email', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/', 'max:255', 'unique:users,email', 'not_regex:'.self::EMOJI_REGEX],
@@ -370,6 +396,11 @@ class AuthController extends Controller
             'department' => ['nullable', 'required_if:role,pending_admin,admin', 'string', 'max:255', 'not_regex:'.self::EMOJI_REGEX, 'exists:offices,name'],
             'job_title' => ['nullable', 'required_if:role,pending_admin,admin', 'string', 'max:255', 'not_regex:'.self::EMOJI_REGEX],
         ], $this->validationMessages());
+
+        $this->ensureUniqueCredentials(
+            $validated['email'],
+            $validated['mobile_number'] ?? null
+        );
 
         $role = $validated['role'];
         $department = null;
@@ -429,6 +460,8 @@ class AuthController extends Controller
             ]);
         }
 
+        $this->normalizeCredentialRequest($request);
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', 'regex:'.self::FULL_NAME_REGEX, 'not_regex:'.self::EMOJI_REGEX],
             'email' => ['required', 'string', 'email', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/', 'max:255', 'unique:users,email,'.$user->id, 'not_regex:'.self::EMOJI_REGEX],
@@ -438,6 +471,12 @@ class AuthController extends Controller
             'job_title' => ['nullable', 'required_if:role,pending_admin,admin', 'string', 'max:255', 'not_regex:'.self::EMOJI_REGEX],
             'password' => ['nullable', 'string', 'min:8', 'confirmed', 'not_regex:'.self::EMOJI_REGEX],
         ], $this->validationMessages());
+
+        $this->ensureUniqueCredentials(
+            $validated['email'],
+            $validated['mobile_number'] ?? null,
+            $user->id
+        );
 
         $role = $validated['role'];
         $department = null;
@@ -630,10 +669,104 @@ class AuthController extends Controller
         }
     }
 
+    private function normalizeCredentialRequest(Request $request): void
+    {
+        $normalized = [];
+
+        if ($request->exists('name')) {
+            $normalized['name'] = trim((string) $request->input('name'));
+        }
+
+        if ($request->exists('email')) {
+            $normalized['email'] = $this->normalizeEmail($request->input('email'));
+        }
+
+        if ($request->exists('mobile_number')) {
+            $normalized['mobile_number'] = $this->normalizeMobileNumber(
+                $request->input('mobile_number')
+            );
+        }
+
+        if ($request->exists('department')) {
+            $normalized['department'] = trim((string) $request->input('department'));
+        }
+
+        if ($request->exists('job_title')) {
+            $normalized['job_title'] = trim((string) $request->input('job_title'));
+        }
+
+        if ($normalized !== []) {
+            $request->merge($normalized);
+        }
+    }
+
+    private function normalizeEmail($value): string
+    {
+        return mb_strtolower(trim((string) $value));
+    }
+
+    private function normalizeMobileNumber($value): ?string
+    {
+        $normalized = trim((string) $value);
+
+        return $normalized === '' ? null : $normalized;
+    }
+
+    private function ensureUniqueCredentials(
+        string $email,
+        ?string $mobileNumber,
+        ?int $ignoreUserId = null
+    ): void {
+        $emailQuery = User::withTrashed()
+            ->whereRaw('LOWER(email) = ?', [$this->normalizeEmail($email)]);
+
+        if ($ignoreUserId !== null) {
+            $emailQuery->where('id', '!=', $ignoreUserId);
+        }
+
+        if ($emailQuery->exists()) {
+            throw ValidationException::withMessages([
+                'email' => ['This email is already registered.'],
+            ]);
+        }
+
+        if ($mobileNumber === null || $mobileNumber === '') {
+            return;
+        }
+
+        $mobileQuery = User::withTrashed()->where('mobile_number', $mobileNumber);
+
+        if ($ignoreUserId !== null) {
+            $mobileQuery->where('id', '!=', $ignoreUserId);
+        }
+
+        if ($mobileQuery->exists()) {
+            throw ValidationException::withMessages([
+                'mobile_number' => ['This mobile number is already registered.'],
+            ]);
+        }
+    }
+
+    private function findUserByNormalizedEmail(string $email): ?User
+    {
+        $normalizedEmail = $this->normalizeEmail($email);
+        if ($normalizedEmail === '') {
+            return null;
+        }
+
+        return User::query()
+            ->whereRaw('LOWER(email) = ?', [$normalizedEmail])
+            ->orderByDesc('is_active')
+            ->orderByDesc('id')
+            ->first();
+    }
+
     private function validationMessages(): array
     {
         return [
             'mobile_number.regex' => 'Mobile number must be exactly 11 digits.',
+            'mobile_number.unique' => 'This mobile number is already registered.',
+            'email.unique' => 'This email is already registered.',
             'name.regex' => 'Enter your full name with first and last name.',
             'name.not_regex' => 'Emoji characters are not allowed.',
             'email.not_regex' => 'Emoji characters are not allowed.',

@@ -33,6 +33,28 @@ class RegisterTest extends TestCase
         ]);
     }
 
+    public function test_citizen_registration_rejects_duplicate_email_after_normalization(): void
+    {
+        $this->postJson('/api/auth/register', [
+            'name' => 'Juan Dela Cruz',
+            'email' => 'Juan.DelaCruz@example.com',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+            'mobile_number' => '09171234567',
+        ])->assertCreated();
+
+        $this->postJson('/api/auth/register', [
+            'name' => 'Juana Dela Cruz',
+            'email' => '  juan.delacruz@EXAMPLE.com  ',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+            'mobile_number' => '09170000001',
+        ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('email')
+            ->assertJsonPath('errors.email.0', 'This email is already registered.');
+    }
+
     public function test_citizen_registration_validates_bad_full_name(): void
     {
         $response = $this->postJson('/api/auth/register', [

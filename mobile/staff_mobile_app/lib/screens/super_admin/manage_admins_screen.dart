@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../services/auth_service.dart';
 import '../../services/report_service.dart';
 import '../../utils/admin_theme.dart';
+import '../../utils/user_account_deduplicator.dart';
 
 class ManageAdminsScreen extends StatefulWidget {
   const ManageAdminsScreen({super.key, this.embedded = false});
@@ -264,6 +265,21 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
       return (user['department'] ?? '').toString().trim() == currentDepartment;
     }).toList();
 
+    return users;
+  }
+
+  List<Map<String, dynamic>> _displayUsers(_StaffPayload payload) {
+    final accountGroup = _selectedAccountGroup;
+    final groupUsers = _staffUsers(payload).where((user) {
+      final role = (user['role'] ?? '').toString().trim();
+      if (accountGroup == 'Citizen Accounts') {
+        return role == 'citizen';
+      }
+
+      return role != 'citizen';
+    });
+
+    final users = deduplicateManagedUsers(groupUsers);
     users.sort((a, b) {
       final aName = (a['name'] ?? '').toString().toLowerCase();
       final bName = (b['name'] ?? '').toString().toLowerCase();
@@ -320,7 +336,7 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
         departmentFilters.contains(_selectedDepartmentFilter)
         ? _selectedDepartmentFilter
         : 'All Department';
-    final rows = _staffUsers(payload).map((user) {
+    final rows = _displayUsers(payload).map((user) {
       final userId = user['id'] is int
           ? user['id'] as int
           : int.tryParse('${user['id']}') ?? 0;
@@ -373,15 +389,6 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
         row.jobTitle,
       ].join(' ').toLowerCase();
       if (search.isNotEmpty && !haystack.contains(search)) {
-        return false;
-      }
-
-      if (_selectedAccountGroup == 'Admin Accounts' && row.role == 'citizen') {
-        return false;
-      }
-
-      if (_selectedAccountGroup == 'Citizen Accounts' &&
-          row.role != 'citizen') {
         return false;
       }
 
@@ -714,16 +721,16 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
             ? 'System Administrator'
             : _departmentLabel(currentUser);
         final allAccessibleUsers = _staffUsers(payload);
-        final adminAccountCount = allAccessibleUsers
-            .where(
-              (user) => (user['role'] ?? '').toString().trim() != 'citizen',
-            )
-            .length;
-        final citizenCount = allAccessibleUsers
-            .where(
-              (user) => (user['role'] ?? '').toString().trim() == 'citizen',
-            )
-            .length;
+        final adminAccountCount = deduplicateManagedUsers(
+          allAccessibleUsers.where(
+            (user) => (user['role'] ?? '').toString().trim() != 'citizen',
+          ),
+        ).length;
+        final citizenCount = deduplicateManagedUsers(
+          allAccessibleUsers.where(
+            (user) => (user['role'] ?? '').toString().trim() == 'citizen',
+          ),
+        ).length;
         final activeCount = rows
             .where((row) => row.user['is_active'] != false)
             .length;

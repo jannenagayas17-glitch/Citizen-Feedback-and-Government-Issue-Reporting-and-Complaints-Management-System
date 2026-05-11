@@ -7,7 +7,7 @@ import '../../services/report_service.dart';
 import '../../utils/admin_theme.dart';
 import '../../utils/department_issue_types.dart';
 import '../../utils/file_download.dart';
-import '../citizen/complaint_detail_screen.dart';
+import 'report_detail_dialog.dart';
 
 class ComplaintManagementScreen extends StatefulWidget {
   const ComplaintManagementScreen({
@@ -460,7 +460,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
     return number + ((suffix.toLowerCase().codeUnitAt(0) - 96) / 10);
   }
 
-  Future<void> _openStatusDialog(Map<String, dynamic> report) async {
+  Future<bool> _openStatusDialog(Map<String, dynamic> report) async {
     String selectedStatus = _status(report);
     final remarksController = TextEditingController();
     final confirmed = await showDialog<bool>(
@@ -538,7 +538,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
 
     if (confirmed != true) {
       remarksController.dispose();
-      return;
+      return false;
     }
 
     try {
@@ -547,19 +547,36 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
         status: selectedStatus,
         remarks: remarksController.text,
       );
-      if (!mounted) return;
+      if (!mounted) return true;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Report status updated successfully.')),
       );
       await _refresh();
+      return true;
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
       );
+      return false;
     } finally {
       remarksController.dispose();
     }
+  }
+
+  Future<void> _openReportDetails(Map<String, dynamic> report) async {
+    final reportId = report['id'] is int
+        ? report['id'] as int
+        : int.tryParse('${report['id']}');
+    if (reportId == null) {
+      return;
+    }
+
+    await showAdminReportDetailDialog(
+      context: context,
+      reportId: reportId,
+      onUpdateStatus: _openStatusDialog,
+    );
   }
 
   InputDecoration _dialogDecoration(String label) => InputDecoration(
@@ -998,15 +1015,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
         : assignee.substring(0, 1).toUpperCase();
 
     return InkWell(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) =>
-                ComplaintDetailScreen(reportId: report['id'] as int),
-          ),
-        );
-      },
+      onTap: () => _openReportDetails(report),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(

@@ -61,7 +61,7 @@ class AdminReportListingTest extends TestCase
             'priority' => 'Normal',
         ]);
 
-        Report::create([
+        $hiddenReport = Report::create([
             'user_id' => $citizen->id,
             'office_id' => $otherOffice->id,
             'category_id' => $category->id,
@@ -94,6 +94,57 @@ class AdminReportListingTest extends TestCase
         $this->assertStringContainsString('Visible office report', $content);
         $this->assertStringNotContainsString($otherOffice->name, $content);
         $this->assertStringNotContainsString('Hidden office report', $content);
+    }
+
+    public function test_admin_cannot_view_report_detail_for_another_office(): void
+    {
+        $citizen = User::create([
+            'name' => 'Citizen Reporter',
+            'email' => 'citizen-scope-detail@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'citizen',
+            'is_active' => true,
+        ]);
+
+        $adminOffice = Office::create([
+            'name' => "City Engineer's Office",
+            'is_active' => true,
+        ]);
+
+        $otherOffice = Office::create([
+            'name' => 'City Social Welfare Office',
+            'is_active' => true,
+        ]);
+
+        $admin = User::create([
+            'name' => 'Scoped Admin',
+            'email' => 'scoped-detail-admin@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'admin',
+            'department' => $adminOffice->name,
+            'is_active' => true,
+        ]);
+
+        $category = Category::create([
+            'name' => 'Road Damage',
+        ]);
+
+        $hiddenReport = Report::create([
+            'user_id' => $citizen->id,
+            'office_id' => $otherOffice->id,
+            'category_id' => $category->id,
+            'title' => 'Hidden office report detail',
+            'description' => 'Should not be viewable outside the assigned office.',
+            'location' => 'Downtown Tacloban',
+            'barangay' => 'Barangay 2',
+            'status' => 'Pending',
+            'priority' => 'Normal',
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $this->getJson("/api/reports/{$hiddenReport->id}")
+            ->assertForbidden();
     }
 
     public function test_admin_reports_pagination_returns_distinct_stable_pages(): void

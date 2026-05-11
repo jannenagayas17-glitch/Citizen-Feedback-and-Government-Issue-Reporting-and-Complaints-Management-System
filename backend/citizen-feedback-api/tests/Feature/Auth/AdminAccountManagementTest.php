@@ -174,6 +174,78 @@ class AdminAccountManagementTest extends TestCase
         $this->assertTrue(Hash::check('citizen123', $citizen->password));
     }
 
+    public function test_super_admin_cannot_create_duplicate_account_with_normalized_email(): void
+    {
+        $superAdmin = User::create([
+            'name' => 'Super Admin',
+            'email' => 'normalized-super-admin@test.com',
+            'password' => 'password123',
+            'role' => 'super_admin',
+            'is_active' => true,
+        ]);
+
+        User::create([
+            'name' => 'Existing Citizen',
+            'email' => 'Citizen.Duplicate@Test.com',
+            'password' => 'password123',
+            'role' => 'citizen',
+            'is_active' => true,
+        ]);
+
+        Sanctum::actingAs($superAdmin);
+
+        $this->postJson('/api/admin/users', [
+            'name' => 'Duplicate Citizen',
+            'email' => '  citizen.duplicate@test.com ',
+            'mobile_number' => '09174561234',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+            'role' => 'citizen',
+        ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('email')
+            ->assertJsonPath('errors.email.0', 'This email is already registered.');
+    }
+
+    public function test_super_admin_cannot_create_duplicate_account_with_existing_mobile_number(): void
+    {
+        $superAdmin = User::create([
+            'name' => 'Super Admin',
+            'email' => 'mobile-super-admin@test.com',
+            'password' => 'password123',
+            'role' => 'super_admin',
+            'is_active' => true,
+        ]);
+
+        User::create([
+            'name' => 'Existing Admin',
+            'email' => 'existing-admin@test.com',
+            'mobile_number' => '09170000003',
+            'password' => 'password123',
+            'role' => 'admin',
+            'department' => 'City Engineering Office',
+            'job_title' => 'Office Head',
+            'is_active' => true,
+        ]);
+
+        Sanctum::actingAs($superAdmin);
+
+        $this->postJson('/api/admin/users', [
+            'name' => 'New Citizen Account',
+            'email' => 'new-mobile-clash@test.com',
+            'mobile_number' => '09170000003',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+            'role' => 'citizen',
+        ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('mobile_number')
+            ->assertJsonPath(
+                'errors.mobile_number.0',
+                'This mobile number is already registered.'
+            );
+    }
+
     public function test_super_admin_user_list_includes_archived_accounts_until_permanent_delete(): void
     {
         $superAdmin = User::create([
