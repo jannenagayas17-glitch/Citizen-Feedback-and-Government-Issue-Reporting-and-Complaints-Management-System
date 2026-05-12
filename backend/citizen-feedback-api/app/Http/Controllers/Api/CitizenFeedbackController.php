@@ -324,20 +324,20 @@ class CitizenFeedbackController extends Controller
 
     private function feedbackBaseQuery(Request $request): Builder
     {
-        return $this->feedbackQueries
-            ->scopedForUser($request->user())
-            ->orderByDesc('citizen_feedback.created_at')
-            ->orderByDesc('citizen_feedback.id');
+        return $this->feedbackQueries->scopedForUser($request->user());
     }
 
     private function feedbackListQuery(Request $request): Builder
     {
-        return $this->feedbackBaseQuery($request)->with([
-            'user:id,name,email',
-            'office:id,name',
-            'report:id,title,barangay,status,location,office_id,user_id',
-            'report.office:id,name',
-        ]);
+        return $this->feedbackBaseQuery($request)
+            ->with([
+                'user:id,name,email',
+                'office:id,name',
+                'report:id,title,barangay,status,location,office_id,user_id',
+                'report.office:id,name',
+            ])
+            ->orderByDesc('citizen_feedback.created_at')
+            ->orderByDesc('citizen_feedback.id');
     }
 
     private function buildTrendBreakdown(Builder $query, array $range): array
