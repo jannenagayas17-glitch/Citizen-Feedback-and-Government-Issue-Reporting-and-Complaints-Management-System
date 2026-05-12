@@ -1,8 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
-import 'google_auth_service.dart';
+import '../utils/portal_session_controller.dart';
 import '../utils/token_storage.dart';
 
 class AuthService {
@@ -545,14 +546,12 @@ class AuthService {
   }
 
   Future<void> logout() async {
-    try {
-      await http.post(
-        _buildUri('/logout'),
-        headers: await _headers(authRequired: true),
-      );
-    } finally {
-      await GoogleAuthService().signOut();
-      await TokenStorage.clearAll();
+    final token = await TokenStorage.getToken();
+
+    await PortalSessionController.clearStoredSession(signOutGoogle: true);
+
+    if (token != null && token.trim().isNotEmpty) {
+      unawaited(_sendLogoutRequest(token.trim()));
     }
   }
 
@@ -580,5 +579,23 @@ class AuthService {
 
     final message = data?['message']?.toString().toLowerCase() ?? '';
     return message.contains('route') && message.contains('user/password');
+  }
+
+  Future<void> _sendLogoutRequest(String token) async {
+    try {
+      await http
+          .post(
+            _buildUri('/logout'),
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+          )
+          .timeout(const Duration(seconds: 3));
+    } catch (_) {
+      // Local logout has already completed. Remote logout failures must not
+      // block portal sign-out.
+    }
   }
 }

@@ -713,7 +713,7 @@ class DocumentedSystemWorkflowTest extends TestCase
             ->assertJsonMissing(['message' => 'Water department feedback']);
     }
 
-    public function test_tc_fb_regular_department_staff_cannot_view_department_feedback(): void
+    public function test_tc_fb_department_admin_is_scoped_to_own_department_feedback(): void
     {
         [$officeA] = $this->seedTwoDepartmentFeedbackEntries();
         $staff = $this->makeUser('Roads Staff', 'roads-staff@example.com', 'admin', [
@@ -723,7 +723,11 @@ class DocumentedSystemWorkflowTest extends TestCase
 
         Sanctum::actingAs($staff);
 
-        $this->getJson('/api/feedback')->assertForbidden();
+        $this->getJson('/api/feedback')
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonFragment(['message' => 'Roads department feedback'])
+            ->assertJsonMissing(['message' => 'Water department feedback']);
     }
 
     public function test_tc_fb_super_admin_can_view_feedback_from_all_departments(): void

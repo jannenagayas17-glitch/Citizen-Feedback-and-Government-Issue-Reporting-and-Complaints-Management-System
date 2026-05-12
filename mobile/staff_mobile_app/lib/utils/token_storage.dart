@@ -1,11 +1,15 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'web_auth_storage.dart';
+
 class TokenStorage {
   static const String _tokenKey = 'auth_token';
   static const String _roleKey = 'user_role';
   static const String _lastCitizenEmailKey = 'last_citizen_email';
   static const String _lastAdminEmailKey = 'last_admin_email';
   static const String _lastSuperAdminEmailKey = 'last_super_admin_email';
+
+  static const List<String> _authStorageKeys = <String>[_tokenKey, _roleKey];
 
   static Future<void> saveToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
@@ -63,5 +67,6 @@ class TokenStorage {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_tokenKey);
     await prefs.remove(_roleKey);
+    await clearWebAuthStorage(_authStorageKeys);
   }
 }

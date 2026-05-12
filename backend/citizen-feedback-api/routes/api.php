@@ -99,9 +99,11 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::prefix('feedback')->group(function () {
+        Route::get('/summary', [CitizenFeedbackController::class, 'summary']);
+        Route::get('/charts', [CitizenFeedbackController::class, 'charts']);
+        Route::get('/export', [CitizenFeedbackController::class, 'export']);
         Route::get('/', [CitizenFeedbackController::class, 'index']);
         Route::post('/', [CitizenFeedbackController::class, 'store']);
-        Route::get('/export', [CitizenFeedbackController::class, 'export']);
     });
 
     /*

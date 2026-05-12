@@ -1,9 +1,13 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
+import '../utils/portal_session_controller.dart';
 import '../utils/token_storage.dart';
 
 class ApiClient {
+  static const Duration _requestTimeout = Duration(seconds: 20);
+
   Future<Map<String, String>> getHeaders({bool authRequired = false}) async {
     final headers = {
       'Accept': 'application/json',
@@ -46,9 +50,12 @@ class ApiClient {
     bool authRequired = false,
     Map<String, dynamic>? queryParameters,
   }) async {
-    return await http.get(
-      buildUri(endpoint, queryParameters: queryParameters),
-      headers: await getHeaders(authRequired: authRequired),
+    return _send(
+      () async => http.get(
+        buildUri(endpoint, queryParameters: queryParameters),
+        headers: await getHeaders(authRequired: authRequired),
+      ),
+      authRequired: authRequired,
     );
   }
 
@@ -57,10 +64,13 @@ class ApiClient {
     Map<String, dynamic>? body,
     bool authRequired = false,
   }) async {
-    return await http.post(
-      buildUri(endpoint),
-      headers: await getHeaders(authRequired: authRequired),
-      body: body != null ? jsonEncode(body) : null,
+    return _send(
+      () async => http.post(
+        buildUri(endpoint),
+        headers: await getHeaders(authRequired: authRequired),
+        body: body != null ? jsonEncode(body) : null,
+      ),
+      authRequired: authRequired,
     );
   }
 
@@ -69,10 +79,73 @@ class ApiClient {
     Map<String, dynamic>? body,
     bool authRequired = false,
   }) async {
-    return await http.put(
-      buildUri(endpoint),
-      headers: await getHeaders(authRequired: authRequired),
-      body: body != null ? jsonEncode(body) : null,
+    return _send(
+      () async => http.put(
+        buildUri(endpoint),
+        headers: await getHeaders(authRequired: authRequired),
+        body: body != null ? jsonEncode(body) : null,
+      ),
+      authRequired: authRequired,
     );
+  }
+
+  Future<http.Response> _send(
+    Future<http.Response> Function() request, {
+    required bool authRequired,
+  }) async {
+    try {
+      final response = await request().timeout(_requestTimeout);
+
+      if (authRequired && response.statusCode == 401) {
+        await PortalSessionController.expireSession(
+          message:
+              _extractErrorMessage(response.body) ??
+              'Session expired. Please log in again.',
+        );
+      }
+
+      return response;
+    } on TimeoutException {
+      throw Exception('The request timed out. Please try again.');
+    } on http.ClientException {
+      throw Exception(
+        'Unable to reach the server. Make sure Laravel is running on port 8000.',
+      );
+    }
+  }
+
+  String? _extractErrorMessage(String body) {
+    final trimmed = body.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+
+    try {
+      final decoded = jsonDecode(trimmed);
+      if (decoded is Map<String, dynamic>) {
+        final errors = decoded['errors'];
+        if (errors is Map<String, dynamic>) {
+          for (final value in errors.values) {
+            if (value is List && value.isNotEmpty) {
+              return value.first.toString();
+            }
+
+            final text = value?.toString().trim() ?? '';
+            if (text.isNotEmpty) {
+              return text;
+            }
+          }
+        }
+
+        final message = decoded['message']?.toString().trim();
+        if (message != null && message.isNotEmpty) {
+          return message;
+        }
+      }
+    } on FormatException {
+      return null;
+    }
+
+    return null;
   }
 }

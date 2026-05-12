@@ -311,4 +311,74 @@ class DashboardAnalyticsTest extends TestCase
         $reports->assertOk()
             ->assertJsonPath('total', 4);
     }
+
+    public function test_department_admin_dashboard_analytics_and_report_listing_match_within_office_scope(): void
+    {
+        $citizen = User::create([
+            'name' => 'Scoped Citizen',
+            'email' => 'scoped-citizen@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'citizen',
+            'is_active' => true,
+        ]);
+
+        $adminOffice = Office::create([
+            'name' => 'Traffic Management Office',
+            'is_active' => true,
+        ]);
+
+        $otherOffice = Office::create([
+            'name' => 'Water Services Office',
+            'is_active' => true,
+        ]);
+
+        $admin = User::create([
+            'name' => 'Traffic Admin',
+            'email' => 'traffic-admin@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'admin',
+            'department' => mb_strtolower($adminOffice->name),
+            'is_active' => true,
+        ]);
+
+        $category = Category::create(['name' => 'Operations']);
+
+        foreach ([
+            [$adminOffice->id, 'Pending', 'Barangay 1'],
+            [$adminOffice->id, 'Resolved', 'Barangay 2'],
+            [$otherOffice->id, 'In Progress', 'Barangay 9'],
+        ] as $index => [$officeId, $status, $barangay]) {
+            Report::create([
+                'user_id' => $citizen->id,
+                'office_id' => $officeId,
+                'category_id' => $category->id,
+                'title' => 'Scoped report '.$index,
+                'description' => 'Scoped analytics report '.$index,
+                'location' => 'Tacloban City',
+                'barangay' => $barangay,
+                'status' => $status,
+                'priority' => 'Normal',
+            ]);
+        }
+
+        Sanctum::actingAs($admin);
+
+        $dashboard = $this->getJson('/api/dashboard');
+        $analytics = $this->getJson('/api/admin/analytics');
+        $reports = $this->getJson('/api/admin/reports?paginate=true&per_page=25');
+
+        $dashboard->assertOk()
+            ->assertJsonPath('total_reports', 2)
+            ->assertJsonPath('queue_count', 1)
+            ->assertJsonPath('resolved', 1);
+
+        $analytics->assertOk()
+            ->assertJsonPath('overview.total_reports', 2)
+            ->assertJsonPath('overview.queue_count', 1)
+            ->assertJsonPath('overview.resolved', 1);
+
+        $reports->assertOk()
+            ->assertJsonPath('total', 2)
+            ->assertJsonMissing(['barangay' => 'Barangay 9']);
+    }
 }

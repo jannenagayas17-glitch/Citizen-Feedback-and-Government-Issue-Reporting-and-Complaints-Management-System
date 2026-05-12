@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
 import '../../services/dashboard_service.dart';
+import '../../services/feedback_service.dart';
 import '../../utils/admin_theme.dart';
+import '../../utils/app_routes.dart';
 import 'analytics_reports_screen.dart';
-import '../auth/login_screen.dart';
 import '../super_admin/feedback_management_screen.dart';
 import 'admin_profile_screen.dart';
 import 'complaint_management_screen.dart';
@@ -22,6 +23,7 @@ enum _AdminDesktopSection { dashboard, reports, analytics, feedback, profile }
 class _AdminHomeScreenState extends State<AdminHomeScreen> {
   final DashboardService _dashboardService = DashboardService();
   final AuthService _authService = AuthService();
+  final FeedbackService _feedbackService = FeedbackService();
 
   late Future<_AdminHomeData> _homeFuture;
   _AdminDesktopSection _desktopSection = _AdminDesktopSection.dashboard;
@@ -40,11 +42,13 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       _dashboardService.getDashboardStats(),
       _dashboardService.getAnalytics(),
       _authService.getCurrentUser(),
+      _feedbackService.getFeedbackSummary(),
     ]);
 
     final stats = Map<String, dynamic>.from(results[0] as Map);
     final analytics = Map<String, dynamic>.from(results[1] as Map);
     final user = Map<String, dynamic>.from(results[2] as Map);
+    final feedbackSummary = results[3] as FeedbackSummaryData;
 
     return _AdminHomeData(
       stats: stats,
@@ -53,6 +57,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         analytics['recent_reports'] as List<dynamic>? ?? const [],
       ),
       user: user,
+      feedbackSummary: feedbackSummary,
     );
   }
 
@@ -162,8 +167,9 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   Future<void> _logout() async {
     await _authService.logout();
     if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
+    Navigator.pushNamedAndRemoveUntil(
+      context,
+      AppRoutes.login,
       (route) => false,
     );
   }
@@ -1086,15 +1092,14 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                       subtitle: 'Latest analytics snapshot',
                     ),
                     const SizedBox(height: 16),
-                    if (categoryBreakdown.isEmpty)
+                    if (!data.feedbackSummary.hasData)
                       const _PanelEmptyState(
                         title: 'No feedback data yet',
                         subtitle:
                             'Citizen praise, suggestions, and complaints will appear here.',
                       )
                     else
-                      ...categoryBreakdown.take(3).map((item) {
-                        final record = item as Map<String, dynamic>;
+                      ...data.feedbackSummary.typeBreakdown.map((record) {
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 10),
                           child: ListTile(
@@ -1106,25 +1111,35 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                               ),
                             ),
                             title: Text(
-                              (record['label'] ?? 'Feedback').toString(),
+                              record.label,
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
                             subtitle: Text(
-                              '${record['count'] ?? 0} records in analytics',
+                              '${record.count} entries in scoped feedback',
                               style: TextStyle(
                                 color: Colors.white.withValues(alpha: 0.56),
                               ),
                             ),
                             trailing: TextButton(
-                              onPressed: _openAnalytics,
+                              onPressed: _openFeedback,
                               child: const Text('View'),
                             ),
                           ),
                         );
                       }),
+                    if (data.feedbackSummary.hasData) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Average rating ${data.feedbackSummary.averageRating.toStringAsFixed(1)} • Last 7 days ${data.feedbackSummary.recentFeedbackCount}',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.60),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -1142,12 +1157,14 @@ class _AdminHomeData {
     required this.analytics,
     required this.reports,
     required this.user,
+    required this.feedbackSummary,
   });
 
   final Map<String, dynamic> stats;
   final Map<String, dynamic> analytics;
   final List<dynamic> reports;
   final Map<String, dynamic> user;
+  final FeedbackSummaryData feedbackSummary;
 }
 
 class _AdminHeroCard extends StatelessWidget {

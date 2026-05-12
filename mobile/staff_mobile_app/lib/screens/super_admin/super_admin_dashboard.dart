@@ -4,11 +4,11 @@ import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
 import '../../services/dashboard_service.dart';
-import '../../services/system_settings_service.dart';
+import '../../services/feedback_service.dart';
 import '../admin/analytics_reports_screen.dart';
-import '../auth/login_screen.dart';
 import '../admin/complaint_management_screen.dart';
 import '../../utils/admin_theme.dart';
+import '../../utils/app_routes.dart';
 import 'escalation_management_screen.dart';
 import 'feedback_management_screen.dart';
 import 'manage_admins_screen.dart';
@@ -36,11 +36,12 @@ enum _SuperAdminDesktopSection {
 class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
   final AuthService _authService = AuthService();
   final DashboardService _dashboardService = DashboardService();
-  final SystemSettingsService _settingsService = SystemSettingsService();
+  final FeedbackService _feedbackService = FeedbackService();
 
   late Future<_SuperDashboardData> _statsFuture;
   _SuperDashboardData? _cachedDashboardData;
   bool _refreshingDashboard = false;
+  bool _isLoggingOut = false;
   _SuperAdminDesktopSection _desktopSection =
       _SuperAdminDesktopSection.dashboard;
   final Set<_SuperAdminDesktopSection> _loadedDesktopSections = {};
@@ -56,30 +57,18 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
       _authService.getCurrentUser(),
       _dashboardService.getDashboardStats(),
       _dashboardService.getAnalytics(),
-      _authService.getAdminUsers(),
-      _authService.getOffices(includeInactive: true),
-      _settingsService.getSettings(),
+      _feedbackService.getFeedbackSummary(),
     ]);
     final user = Map<String, dynamic>.from(results[0] as Map);
     final stats = Map<String, dynamic>.from(results[1] as Map);
     final analytics = Map<String, dynamic>.from(results[2] as Map);
-    final users = (results[3] as List)
-        .whereType<Map<String, dynamic>>()
-        .map(Map<String, dynamic>.from)
-        .toList();
-    final offices = (results[4] as List)
-        .whereType<Map<String, dynamic>>()
-        .map(Map<String, dynamic>.from)
-        .toList();
-    final settings = Map<String, dynamic>.from(results[5] as Map);
+    final feedbackSummary = results[3] as FeedbackSummaryData;
 
     final data = _SuperDashboardData(
       user: user,
       stats: stats,
       analytics: analytics,
-      users: users,
-      offices: offices,
-      settings: settings,
+      feedbackSummary: feedbackSummary,
     );
     _cachedDashboardData = data;
 
@@ -220,12 +209,25 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
   }
 
   Future<void> _logout() async {
-    await _authService.logout();
-    if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-      (route) => false,
-    );
+    if (_isLoggingOut) {
+      return;
+    }
+
+    setState(() => _isLoggingOut = true);
+
+    try {
+      await _authService.logout();
+      if (!mounted) return;
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppRoutes.login,
+        (route) => false,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoggingOut = false);
+      }
+    }
   }
 
   double? _barangayNumber(String value) {
@@ -293,10 +295,6 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
     final overview = Map<String, dynamic>.from(
       analytics['overview'] as Map? ?? const {},
     );
-    final priorityBreakdown =
-        (analytics['priority_breakdown'] as List<dynamic>? ?? const [])
-            .whereType<Map<String, dynamic>>()
-            .toList();
     final officeBreakdown =
         (analytics['office_breakdown'] as List<dynamic>? ?? const [])
             .whereType<Map<String, dynamic>>()
@@ -313,24 +311,19 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
         (analytics['escalations_preview'] as List<dynamic>? ?? const [])
             .whereType<Map<String, dynamic>>()
             .toList();
-    final offices = data.offices;
-    final elevatedUsers = data.users
-        .where((user) => ['admin', 'super_admin'].contains(user['role']))
-        .toList();
+    final adminPreview =
+        (analytics['admin_preview'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
+    final feedbackSummary = data.feedbackSummary;
     final totalReports =
         int.tryParse(
           '${overview['total_reports'] ?? data.stats['total_reports'] ?? 0}',
         ) ??
         0;
     final resolved = int.tryParse('${overview['resolved'] ?? 0}') ?? 0;
-    final pending = int.tryParse('${overview['pending'] ?? 0}') ?? 0;
-    final inProgress = int.tryParse('${overview['in_progress'] ?? 0}') ?? 0;
-    final rejected = int.tryParse('${overview['rejected'] ?? 0}') ?? 0;
     final triggerHours =
-        int.tryParse(
-          '${analytics['trigger_time_hours'] ?? data.settings['escalation_settings']?['trigger_time_hours'] ?? 72}',
-        ) ??
-        72;
+        int.tryParse('${analytics['trigger_time_hours'] ?? 72}') ?? 72;
     final avgHours =
         int.tryParse('${analytics['average_open_hours'] ?? 0}') ?? 0;
     final avgResponseLabel = _formatResponseTime(avgHours);
@@ -384,34 +377,10 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
       (a, b) => (b['count'] as int).compareTo(a['count'] as int),
     );
 
-    final adminRows =
-        elevatedUsers.map((user) {
-          final department = (user['department'] ?? '').toString().trim();
-          return {
-            'name': (user['name'] ?? 'Admin User').toString(),
-            'department': department.isEmpty ? 'No department' : department,
-            'active': user['is_active'] == true,
-            'role': (user['role'] ?? 'admin').toString(),
-          };
-        }).toList()..sort(
-          (a, b) => (a['name'] as String).compareTo(b['name'] as String),
-        );
-
-    final priorityWeights = {'Low': 1, 'Normal': 2, 'High': 3, 'Urgent': 4};
-    final weightedSeverity = priorityBreakdown.fold<double>(0, (sum, item) {
-      final label = (item['label'] ?? '').toString();
-      final count = int.tryParse('${item['count'] ?? 0}') ?? 0;
-      return sum + ((priorityWeights[label] ?? 2) * count);
-    });
-    final avgSeverity = totalReports == 0
-        ? 0.0
-        : weightedSeverity / totalReports;
-
     return {
       'totalReports': totalReports,
-      'totalDepartments': offices
-          .where((office) => office['is_active'] != false)
-          .length,
+      'totalDepartments':
+          int.tryParse('${analytics['active_offices_count'] ?? 0}') ?? 0,
       'avgResponseHours': avgHours,
       'avgResponseLabel': avgResponseLabel,
       'resolutionRate': resolutionRate,
@@ -419,13 +388,14 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
       'barangays': hottestBarangays.take(5).toList(),
       'officePerformance': officePerformance,
       'officeStats': officeStats.take(6).toList(),
-      'adminRows': adminRows.take(4).toList(),
+      'adminRows': adminPreview.take(4).toList(),
       'feedback': {
-        'total': totalReports,
-        'avgStars': avgSeverity,
-        'praise': resolved,
-        'suggestion': pending,
-        'complaint': inProgress + rejected,
+        'total': feedbackSummary.totalFeedback,
+        'avgStars': feedbackSummary.averageRating,
+        'recent': feedbackSummary.recentFeedbackCount,
+        'praise': feedbackSummary.typeCounts['Praise'] ?? 0,
+        'suggestion': feedbackSummary.typeCounts['Suggestion'] ?? 0,
+        'complaint': feedbackSummary.typeCounts['Complaint'] ?? 0,
       },
       'monthlySeries': monthlyVolume,
       'escalationTriggerHours': triggerHours,
@@ -548,7 +518,8 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
                                 onUsers: _openUsers,
                                 onOffices: _openOffices,
                                 onEscalations: _openEscalations,
-                                onLogout: _logout,
+                                onLogout: _isLoggingOut ? null : _logout,
+                                isLoggingOut: _isLoggingOut,
                               ),
                             ),
                             Expanded(
@@ -879,17 +850,13 @@ class _SuperDashboardData {
     required this.user,
     required this.stats,
     required this.analytics,
-    required this.users,
-    required this.offices,
-    required this.settings,
+    required this.feedbackSummary,
   });
 
   final Map<String, dynamic> user;
   final Map<String, dynamic> stats;
   final Map<String, dynamic> analytics;
-  final List<Map<String, dynamic>> users;
-  final List<Map<String, dynamic>> offices;
-  final Map<String, dynamic> settings;
+  final FeedbackSummaryData feedbackSummary;
 }
 
 class _SuperDashboardTopBar extends StatelessWidget {
@@ -1116,6 +1083,7 @@ class _SuperDashboardSidebar extends StatelessWidget {
     required this.onOffices,
     required this.onEscalations,
     required this.onLogout,
+    required this.isLoggingOut,
   });
 
   final String adminName;
@@ -1128,7 +1096,8 @@ class _SuperDashboardSidebar extends StatelessWidget {
   final VoidCallback onUsers;
   final VoidCallback onOffices;
   final VoidCallback onEscalations;
-  final VoidCallback onLogout;
+  final VoidCallback? onLogout;
+  final bool isLoggingOut;
 
   @override
   Widget build(BuildContext context) {
@@ -1216,8 +1185,9 @@ class _SuperDashboardSidebar extends StatelessWidget {
               ),
               _SuperSidebarNavItem(
                 icon: Icons.logout_rounded,
-                label: 'Logout',
+                label: isLoggingOut ? 'Logging out...' : 'Logout',
                 isDestructive: true,
+                isLoading: isLoggingOut,
                 onTap: onLogout,
               ),
             ],
@@ -1235,13 +1205,15 @@ class _SuperSidebarNavItem extends StatelessWidget {
     required this.onTap,
     this.isActive = false,
     this.isDestructive = false,
+    this.isLoading = false,
   });
 
   final IconData icon;
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final bool isActive;
   final bool isDestructive;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -1278,7 +1250,17 @@ class _SuperSidebarNavItem extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(icon, color: iconColor, size: 18),
+              if (isLoading)
+                SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: iconColor,
+                  ),
+                )
+              else
+                Icon(icon, color: iconColor, size: 18),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
@@ -2606,6 +2588,7 @@ class _FeedbackAnalyticsCard extends StatelessWidget {
     final praise = (feedback['praise'] ?? 0) as int;
     final suggestion = (feedback['suggestion'] ?? 0) as int;
     final complaint = (feedback['complaint'] ?? 0) as int;
+    final recent = (feedback['recent'] ?? 0) as int;
     final denominator = math.max(1, praise + suggestion + complaint);
 
     return Column(
@@ -2619,7 +2602,7 @@ class _FeedbackAnalyticsCard extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: _InfoTile(
-                label: 'Avg. Signal',
+                label: 'Avg. Rating',
                 value: avgStars.toStringAsFixed(1),
               ),
             ),
@@ -2650,10 +2633,10 @@ class _FeedbackAnalyticsCard extends StatelessWidget {
           runSpacing: 8,
           children:
               [
-                    'Slow response',
-                    'Helped citizen',
-                    'Poor service',
-                    'Role clarity',
+                    'Last 7 days: $recent',
+                    'Praise: $praise',
+                    'Suggestions: $suggestion',
+                    'Complaints: $complaint',
                   ]
                   .map(
                     (tag) => Container(

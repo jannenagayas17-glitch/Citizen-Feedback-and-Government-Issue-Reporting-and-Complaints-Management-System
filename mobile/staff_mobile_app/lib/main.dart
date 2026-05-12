@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'utils/app_theme_controller.dart';
 import 'utils/app_routes.dart';
+import 'utils/portal_session_controller.dart';
 
 final ThemeData _lightTheme = ThemeData(
   colorScheme: ColorScheme.fromSeed(
@@ -48,6 +49,7 @@ class MyApp extends StatelessWidget {
           return MaterialApp(
             debugShowCheckedModeBanner: false,
             title: 'Admin Portal',
+            navigatorKey: PortalSessionController.navigatorKey,
             themeMode: themeController.themeMode,
             theme: _lightTheme,
             darkTheme: _darkTheme,

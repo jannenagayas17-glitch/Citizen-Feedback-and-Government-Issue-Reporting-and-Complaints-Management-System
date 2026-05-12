@@ -3,9 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Office;
 use App\Models\Report;
 use App\Models\SystemSetting;
+use App\Models\User;
 use App\Support\ReportQueryService;
+use App\Support\UserEmailDeduplicationService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -15,6 +18,7 @@ class DashboardController extends Controller
 {
     public function __construct(
         private readonly ReportQueryService $reportQueries,
+        private readonly UserEmailDeduplicationService $userEmailDeduplication,
     ) {
     }
 
@@ -270,6 +274,8 @@ class DashboardController extends Controller
         $escalationPreview = $this->buildEscalationPreview(clone $baseQuery, $triggerHours);
         $monthlyVolume = $this->buildMonthlyVolume(clone $baseQuery);
         $averageOpenHours = $this->averageOpenHours(clone $baseQuery);
+        $activeOfficesCount = $this->activeOfficesCountForUser($request->user());
+        $adminPreview = $this->buildAdminPreview($request->user());
 
         return response()->json([
             'overview' => $overview,
@@ -291,6 +297,8 @@ class DashboardController extends Controller
             'stale_reports_count' => $staleReportsCount,
             'average_open_hours' => $averageOpenHours,
             'trigger_time_hours' => $triggerHours,
+            'active_offices_count' => $activeOfficesCount,
+            'admin_preview' => $adminPreview,
             'escalations_preview' => $escalationPreview,
             'applied_filters' => [
                 'office' => $filters['office'] ?? null,
@@ -506,6 +514,46 @@ class DashboardController extends Controller
         return DB::getDriverName() === 'sqlite'
             ? "strftime('%Y-%m', {$column})"
             : "DATE_FORMAT({$column}, '%Y-%m')";
+    }
+
+    private function activeOfficesCountForUser($user): int
+    {
+        if (($user->role ?? null) === 'admin') {
+            return $this->reportQueries->resolveAdminOfficeId($user) === null ? 0 : 1;
+        }
+
+        return Office::query()
+            ->where('is_active', true)
+            ->count();
+    }
+
+    private function buildAdminPreview($user): array
+    {
+        if (($user->role ?? null) !== 'super_admin') {
+            return [];
+        }
+
+        $users = User::withTrashed()
+            ->whereIn('role', ['super_admin', 'admin'])
+            ->orderByRaw("case when role = 'super_admin' then 0 else 1 end")
+            ->orderBy('name')
+            ->get();
+
+        return $this->userEmailDeduplication
+            ->deduplicateUsersForDisplay($users)
+            ->take(4)
+            ->map(function ($user) {
+                $department = trim((string) ($user->department ?? ''));
+
+                return [
+                    'name' => (string) ($user->name ?? 'Admin User'),
+                    'department' => $department === '' ? 'No department' : $department,
+                    'active' => $user->is_active == true,
+                    'role' => (string) ($user->role ?? 'admin'),
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     private function trendEndMonth($baseQuery): Carbon
