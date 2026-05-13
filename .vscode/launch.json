@@ -1,0 +1,77 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Citizen Mobile (Edge)",
+      "request": "launch",
+      "type": "dart",
+      "cwd": "${workspaceFolder}/mobile/citizen_mobile_app",
+      "program": "lib/main.dart",
+      "deviceId": "edge",
+      "toolArgs": [
+        "--web-hostname",
+        "127.0.0.1",
+        "--web-port",
+        "7350",
+        "--dart-define",
+        "API_HOST=127.0.0.1",
+        "--dart-define",
+        "API_PORT=8000"
+      ]
+    },
+    {
+      "name": "Citizen Mobile (Chrome)",
+      "request": "launch",
+      "type": "dart",
+      "cwd": "${workspaceFolder}/mobile/citizen_mobile_app",
+      "program": "lib/main.dart",
+      "deviceId": "chrome",
+      "toolArgs": [
+        "--web-hostname",
+        "127.0.0.1",
+        "--web-port",
+        "7350",
+        "--dart-define",
+        "API_HOST=127.0.0.1",
+        "--dart-define",
+        "API_PORT=8000"
+      ]
+    },
+    {
+      "name": "Admin Portal (Edge)",
+      "request": "launch",
+      "type": "dart",
+      "cwd": "${workspaceFolder}/mobile/staff_mobile_app",
+      "program": "lib/main.dart",
+      "deviceId": "edge",
+      "toolArgs": [
+        "--web-hostname",
+        "127.0.0.1",
+        "--web-port",
+        "7351",
+        "--dart-define",
+        "API_HOST=127.0.0.1",
+        "--dart-define",
+        "API_PORT=8000"
+      ]
+    },
+    {
+      "name": "Admin Portal (Chrome)",
+      "request": "launch",
+      "type": "dart",
+      "cwd": "${workspaceFolder}/mobile/staff_mobile_app",
+      "program": "lib/main.dart",
+      "deviceId": "chrome",
+      "toolArgs": [
+        "--web-hostname",
+        "127.0.0.1",
+        "--web-port",
+        "7351",
+        "--dart-define",
+        "API_HOST=127.0.0.1",
+        "--dart-define",
+        "API_PORT=8000"
+      ]
+    }
+  ]
+}
