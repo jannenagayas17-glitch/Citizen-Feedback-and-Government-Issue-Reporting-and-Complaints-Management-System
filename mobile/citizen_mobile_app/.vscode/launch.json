@@ -2,19 +2,35 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Citizen Mobile",
+      "name": "Citizen Mobile (Edge)",
       "request": "launch",
       "type": "dart",
+      "program": "lib/main.dart",
+      "deviceId": "edge",
       "toolArgs": [
+        "--web-hostname",
+        "127.0.0.1",
+        "--web-port",
+        "7350",
+        "--dart-define",
+        "API_HOST=127.0.0.1",
         "--dart-define",
         "API_PORT=8000"
       ]
     },
     {
-      "name": "Citizen Mobile (Debug)",
+      "name": "Citizen Mobile (Chrome)",
       "request": "launch",
       "type": "dart",
+      "program": "lib/main.dart",
+      "deviceId": "chrome",
       "toolArgs": [
+        "--web-hostname",
+        "127.0.0.1",
+        "--web-port",
+        "7350",
+        "--dart-define",
+        "API_HOST=127.0.0.1",
         "--dart-define",
         "API_PORT=8000"
       ]
