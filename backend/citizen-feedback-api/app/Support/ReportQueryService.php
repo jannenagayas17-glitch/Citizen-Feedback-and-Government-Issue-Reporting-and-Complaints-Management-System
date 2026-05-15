@@ -9,6 +9,11 @@ use Illuminate\Support\Carbon;
 
 class ReportQueryService
 {
+    public function __construct(
+        private readonly DemoAccountService $demoAccounts,
+    ) {
+    }
+
     /**
      * @return list<string>
      */
@@ -25,9 +30,27 @@ class ReportQueryService
         return ['Low', 'Normal', 'High', 'Urgent'];
     }
 
+    /**
+     * @return list<string>
+     */
+    public function allowedDatePresets(): array
+    {
+        return [
+            'all_time',
+            'weekly',
+            'monthly',
+            'yearly',
+            'today',
+            'last_7_days',
+            'last_30_days',
+            'custom',
+        ];
+    }
+
     public function scopedForUser($user): Builder
     {
         $query = Report::query();
+        $this->excludeDemoSeedData($query);
         $role = $user->role ?? 'citizen';
 
         if ($role === 'citizen') {
@@ -43,6 +66,19 @@ class ReportQueryService
         }
 
         return $query;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function demoSeedEmailPatterns(): array
+    {
+        return $this->demoAccounts->emailPatterns();
+    }
+
+    public function demoUserIdsQuery(): Builder
+    {
+        return $this->demoAccounts->demoUserIdsQuery();
     }
 
     public function applyFilters(Builder $query, array $filters): void
@@ -117,6 +153,23 @@ class ReportQueryService
         return $range;
     }
 
+    public function canonicalDatePreset(?string $preset): string
+    {
+        $normalized = trim((string) $preset);
+
+        return match ($normalized) {
+            '', 'all_time' => 'all_time',
+            'today' => 'today',
+            'weekly' => 'weekly',
+            'last_7_days' => 'last_7_days',
+            'monthly' => 'monthly',
+            'last_30_days' => 'last_30_days',
+            'yearly' => 'yearly',
+            'custom' => 'custom',
+            default => 'all_time',
+        };
+    }
+
     public function resolveDateRange(array $filters): ?array
     {
         $preset = trim((string) ($filters['date_preset'] ?? ''));
@@ -132,14 +185,29 @@ class ReportQueryService
                 'start' => $today->copy(),
                 'end' => $today->copy()->endOfDay(),
             ],
+            'weekly' => [
+                'preset' => $preset,
+                'start' => $today->copy()->startOfWeek(Carbon::MONDAY),
+                'end' => $today->copy()->endOfDay(),
+            ],
             'last_7_days' => [
                 'preset' => $preset,
                 'start' => $today->copy()->subDays(6),
                 'end' => $today->copy()->endOfDay(),
             ],
+            'monthly' => [
+                'preset' => $preset,
+                'start' => $today->copy()->startOfMonth(),
+                'end' => $today->copy()->endOfDay(),
+            ],
             'last_30_days' => [
                 'preset' => $preset,
                 'start' => $today->copy()->subDays(29),
+                'end' => $today->copy()->endOfDay(),
+            ],
+            'yearly' => [
+                'preset' => $preset,
+                'start' => $today->copy()->startOfYear(),
                 'end' => $today->copy()->endOfDay(),
             ],
             'custom' => [
@@ -220,5 +288,10 @@ class ReportQueryService
             ->value('id');
 
         return $resolvedOfficeId === null ? null : (int) $resolvedOfficeId;
+    }
+
+    private function excludeDemoSeedData(Builder $query): void
+    {
+        $query->whereNotIn('reports.user_id', $this->demoUserIdsQuery());
     }
 }

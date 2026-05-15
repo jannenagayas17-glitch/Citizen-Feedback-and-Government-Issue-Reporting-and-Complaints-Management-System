@@ -25,12 +25,13 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
   final ReportService _reportService = ReportService();
 
   late Future<_Payload> _payloadFuture;
+  _Payload? _cachedPayload;
   bool _exporting = false;
   String _department = 'All Departments';
   String _barangay = 'All Barangays';
   String _category = 'All Categories';
   String _status = 'All Statuses';
-  String? _datePreset;
+  String _datePreset = 'all_time';
   late DateTimeRange _range;
 
   @override
@@ -69,6 +70,7 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
           .toList(),
       analytics: Map<String, dynamic>.from(results[2] as Map),
     );
+    _cachedPayload = payload;
 
     return payload;
   }
@@ -128,7 +130,7 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
     final today = DateTime(now.year, now.month, now.day);
 
     return DateTimeRange(
-      start: today.subtract(const Duration(days: 29)),
+      start: DateTime(today.year, today.month, 1),
       end: today,
     );
   }
@@ -138,11 +140,21 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
     final today = DateTime(now.year, now.month, now.day);
 
     switch (preset) {
-      case 'today':
-        return DateTimeRange(start: today, end: today);
+      case 'weekly':
+        final start = today.subtract(Duration(days: today.weekday - 1));
+        return DateTimeRange(start: start, end: today);
+      case 'monthly':
+        return DateTimeRange(start: DateTime(today.year, today.month, 1), end: today);
+      case 'yearly':
+        return DateTimeRange(start: DateTime(today.year, 1, 1), end: today);
       case 'last_7_days':
         return DateTimeRange(
           start: today.subtract(const Duration(days: 6)),
+          end: today,
+        );
+      case 'last_30_days':
+        return DateTimeRange(
+          start: today.subtract(const Duration(days: 29)),
           end: today,
         );
       case 'custom':
@@ -154,44 +166,36 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
 
   String _datePresetLabel() {
     switch (_datePreset) {
-      case null:
-        return 'All Time';
-      case 'today':
-        return 'Today';
-      case 'last_7_days':
-        return 'Last 7 Days';
+      case 'weekly':
+        return 'Weekly';
+      case 'monthly':
+        return 'Monthly';
+      case 'yearly':
+        return 'Yearly';
       case 'custom':
         return 'Custom Range';
       default:
-        return 'Last 30 Days';
+        return 'All Time';
     }
   }
 
-  Future<void> _setDatePreset(String label) async {
+  void _setDatePreset(String label) {
     switch (label) {
       case 'All Time':
-        _datePreset = null;
+        _datePreset = 'all_time';
         _range = _defaultRange();
         break;
-      case 'Today':
-        _datePreset = 'today';
+      case 'Weekly':
+        _datePreset = 'weekly';
         _range = _rangeForPreset(_datePreset);
         break;
-      case 'Last 7 Days':
-        _datePreset = 'last_7_days';
+      case 'Monthly':
+        _datePreset = 'monthly';
         _range = _rangeForPreset(_datePreset);
         break;
-      case 'Last 30 Days':
-        _datePreset = 'last_30_days';
+      case 'Yearly':
+        _datePreset = 'yearly';
         _range = _rangeForPreset(_datePreset);
-        break;
-      case 'Custom Range':
-        final picked = await _pickRange();
-        if (picked == null) {
-          return;
-        }
-        _datePreset = 'custom';
-        _range = picked;
         break;
     }
 
@@ -335,87 +339,27 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
     return (((current - previous) / previous) * 100).round();
   }
 
-  Future<DateTimeRange?> _pickRange() async {
-    final picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2024),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-      initialDateRange: _range,
-      builder: (context, child) {
-        final colors = AdminThemeColors.of(context);
-        final size = MediaQuery.of(context).size;
-        final dialogWidth = math.min(760.0, size.width - 48);
-        final dialogHeight = math.min(620.0, size.height - 48);
-
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(context).colorScheme.copyWith(
-              primary: const Color(0xFF2557D6),
-              secondary: const Color(0xFF38BDF8),
-              surface: colors.panel,
-              onSurface: colors.text,
-            ),
-            dialogTheme: DialogThemeData(backgroundColor: colors.panel),
-            datePickerTheme: DatePickerThemeData(
-              backgroundColor: colors.panel,
-              surfaceTintColor: Colors.transparent,
-              headerBackgroundColor: colors.panel,
-              headerForegroundColor: colors.text,
-              rangeSelectionBackgroundColor: const Color(
-                0xFF2557D6,
-              ).withValues(alpha: 0.16),
-              rangeSelectionOverlayColor: WidgetStateProperty.all(
-                const Color(0xFF2557D6).withValues(alpha: 0.10),
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(28),
-              ),
-            ),
-          ),
-          child: Center(
-            child: Container(
-              width: dialogWidth,
-              height: dialogHeight,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(color: colors.border),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.28),
-                    blurRadius: 34,
-                    offset: const Offset(0, 18),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(28),
-                child: Material(
-                  color: colors.panel,
-                  child: child ?? const SizedBox.shrink(),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-    return picked;
-  }
-
   @override
   Widget build(BuildContext context) {
     final themeColors = AdminThemeColors.of(context);
-    final bottom = MediaQuery.of(context).padding.bottom;
+    final body = LayoutBuilder(
+      builder: (context, viewportConstraints) {
+        final bottom = MediaQuery.of(context).padding.bottom;
+        final contentWidth = viewportConstraints.maxWidth;
 
-    return Scaffold(
-      backgroundColor: themeColors.background,
-      body: SafeArea(
-        child: RefreshIndicator(
+        return RefreshIndicator(
           onRefresh: _refresh,
           child: FutureBuilder<_Payload>(
             future: _payloadFuture,
+            initialData: _cachedPayload,
             builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
+              final resolvedPayload = snapshot.data ?? _cachedPayload;
+              final isLoading =
+                  snapshot.connectionState != ConnectionState.done &&
+                  resolvedPayload != null;
+
+              if (resolvedPayload == null &&
+                  snapshot.connectionState != ConnectionState.done) {
                 return const Center(child: CircularProgressIndicator());
               }
 
@@ -433,7 +377,11 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                 );
               }
 
-              final payload = snapshot.data!;
+              if (resolvedPayload == null) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              final payload = resolvedPayload;
               final analytics = payload.analytics;
               final departments = _departmentOptions(payload);
               if (!departments.contains(_department)) {
@@ -449,6 +397,12 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
               );
               final comparisonOverview = Map<String, dynamic>.from(
                 analytics['comparison_overview'] as Map? ?? const {},
+              );
+              final timelineMeta = Map<String, dynamic>.from(
+                analytics['timeline_meta'] as Map? ?? const {},
+              );
+              final roleScope = Map<String, dynamic>.from(
+                analytics['role_scope'] as Map? ?? const {},
               );
               final counts = <String, int>{
                 'total': _intValue(overview['total_reports']),
@@ -473,17 +427,29 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
               final timelineBuckets = _bucketsFromAnalytics(
                 analytics['timeline_breakdown'] as List?,
               );
+              final officeBreakdown =
+                  (analytics['office_breakdown'] as List<dynamic>? ?? const [])
+                      .whereType<Map<String, dynamic>>()
+                      .map(Map<String, dynamic>.from)
+                      .toList();
+              final departmentTrend = _DepartmentTrendData.fromAnalytics(
+                analytics['department_trend'] as Map?,
+              );
               final totalCount = counts['total'] ?? 0;
               final resolvedCount = counts['resolved'] ?? 0;
               final resolutionRate = totalCount == 0
                   ? 0
                   : ((resolvedCount / totalCount) * 100).round();
-              final screenWidth = MediaQuery.of(context).size.width;
-              final isWide = screenWidth >= 1180;
-              final useWideFilters = screenWidth >= 1380;
+              final isWide = contentWidth >= 1120;
+              final useWideFilters = contentWidth >= 1320;
               final superAdmin = _isSuperAdmin(payload.user);
-              final dateLabel = _datePresetLabel();
-              final hasComparison = _datePreset != null;
+              final dateLabel =
+                  (timelineMeta['range_label'] ?? _datePresetLabel()).toString();
+              final groupingLabel =
+                  (timelineMeta['grouping_label'] ?? '').toString();
+              final scopeLabel =
+                  (roleScope['selected_department'] ?? _department).toString();
+              final hasComparison = _datePreset != 'all_time';
               final statuses = _statusOptions();
               if (!statuses.contains(_status)) {
                 _status = statuses.first;
@@ -629,20 +595,15 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                                 _datePresetLabel(),
                                 const [
                                   'All Time',
-                                  'Last 30 Days',
-                                  'Today',
-                                  'Last 7 Days',
-                                  'Custom Range',
+                                  'Weekly',
+                                  'Monthly',
+                                  'Yearly',
                                 ],
                                 (v) {
                                   if (v == null) return;
                                   _setDatePreset(v);
                                 },
                               ),
-                              if (_datePreset == 'custom') ...[
-                                const SizedBox(height: 10),
-                                _rangeButton(),
-                              ],
                             ],
                           ),
                         ),
@@ -690,20 +651,15 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                                 _datePresetLabel(),
                                 const [
                                   'All Time',
-                                  'Last 30 Days',
-                                  'Today',
-                                  'Last 7 Days',
-                                  'Custom Range',
+                                  'Weekly',
+                                  'Monthly',
+                                  'Yearly',
                                 ],
                                 (v) {
                                   if (v == null) return;
                                   _setDatePreset(v);
                                 },
                               ),
-                              if (_datePreset == 'custom') ...[
-                                const SizedBox(height: 10),
-                                _rangeButton(),
-                              ],
                             ],
                           ),
                         ),
@@ -787,7 +743,10 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                       ],
                     );
 
-              final analyticsPanels = isWide
+              final chartTrailing = groupingLabel.isEmpty
+                  ? dateLabel
+                  : '$groupingLabel • $dateLabel';
+              final analyticsPanelsCore = isWide
                   ? Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -798,7 +757,7 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                               _metricPanel(
                                 'Reports Overview',
                                 _trendBuckets(timelineBuckets),
-                                trailing: dateLabel,
+                                trailing: chartTrailing,
                               ),
                               const SizedBox(height: 16),
                               _metricPanel(
@@ -823,7 +782,7 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                                   const Color(0xFF6678FF),
                                   usePalette: true,
                                 ),
-                                trailing: dateLabel,
+                                trailing: chartTrailing,
                               ),
                               const SizedBox(height: 16),
                               _metricPanel(
@@ -832,7 +791,7 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                                   barangayBreakdown,
                                   const Color(0xFF557DFF),
                                 ),
-                                trailing: dateLabel,
+                                trailing: chartTrailing,
                               ),
                             ],
                           ),
@@ -844,7 +803,7 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                         _metricPanel(
                           'Reports Overview',
                           _trendBuckets(timelineBuckets),
-                          trailing: dateLabel,
+                          trailing: chartTrailing,
                         ),
                         const SizedBox(height: 16),
                         _metricPanel(
@@ -854,7 +813,7 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                             const Color(0xFF6678FF),
                             usePalette: true,
                           ),
-                          trailing: dateLabel,
+                          trailing: chartTrailing,
                         ),
                         const SizedBox(height: 16),
                         _metricPanel(
@@ -865,116 +824,210 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                         _metricPanel(
                           'Issues by Barangay',
                           _bars(barangayBreakdown, const Color(0xFF557DFF)),
-                          trailing: dateLabel,
+                          trailing: chartTrailing,
                         ),
                       ],
                     );
+              final analyticsPanels = AnimatedSwitcher(
+                duration: const Duration(milliseconds: 240),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                child: Column(
+                  key: ValueKey(
+                    [
+                      analytics['generated_at'],
+                      _department,
+                      _barangay,
+                      _category,
+                      _status,
+                      _datePreset,
+                    ].join('|'),
+                  ),
+                  children: [
+                    _metricPanel(
+                      superAdmin
+                          ? 'Department Activity Trends'
+                          : 'Assigned Department Trend',
+                      _departmentTrendPanel(
+                        departmentTrend: departmentTrend,
+                        officeBreakdown: officeBreakdown,
+                        scopeLabel: scopeLabel,
+                      ),
+                      trailing: chartTrailing,
+                    ),
+                    const SizedBox(height: 16),
+                    analyticsPanelsCore,
+                  ],
+                ),
+              );
 
-              return ListView(
-                padding: EdgeInsets.fromLTRB(14, 14, 14, bottom + 24),
+              return Stack(
                 children: [
-                  if (!widget.embedded) _topBar(payload.user, superAdmin),
-                  if (!widget.embedded) const SizedBox(height: 18),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  ListView(
+                    padding: EdgeInsets.fromLTRB(14, 14, 14, bottom + 24),
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Analytics',
-                              style: TextStyle(
-                                color: themeColors.text,
-                                fontSize: 22,
-                                fontWeight: FontWeight.w800,
+                      if (!widget.embedded) _topBar(payload.user, superAdmin),
+                      if (!widget.embedded) const SizedBox(height: 18),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Analytics',
+                                  style: TextStyle(
+                                    color: themeColors.text,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  superAdmin
+                                      ? 'Compare departments and track live citywide report behavior.'
+                                      : 'Live analytics for $scopeLabel using real scoped report records.',
+                                  style: TextStyle(color: themeColors.mutedText),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (isWide) ...[
+                            const SizedBox(width: 16),
+                            FilledButton.icon(
+                              onPressed: _exporting ? null : _export,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFF2557D6),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 18,
+                                  vertical: 16,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              icon: _exporting
+                                  ? const SizedBox(
+                                      width: 14,
+                                      height: 14,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Icon(Icons.download_rounded, size: 16),
+                              label: Text(
+                                _exporting ? 'Exporting...' : 'Export Excel',
                               ),
                             ),
-                            const SizedBox(height: 6),
-                            Text(
-                              superAdmin
-                                  ? 'View and manage all issue reports from across the city.'
-                                  : 'Live analytics from your assigned office.',
-                              style: TextStyle(color: themeColors.mutedText),
-                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                      _panel(
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            filterRow,
+                            const SizedBox(height: 16),
+                            summaryRow,
                           ],
                         ),
                       ),
-                      if (isWide) ...[
-                        const SizedBox(width: 16),
-                        FilledButton.icon(
-                          onPressed: _exporting ? null : _export,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFF2557D6),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 18,
-                              vertical: 16,
+                      const SizedBox(height: 18),
+                      analyticsPanels,
+                      if (!isWide) ...[
+                        const SizedBox(height: 16),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: FilledButton.icon(
+                            onPressed: _exporting ? null : _export,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF2557D6),
                             ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
+                            icon: _exporting
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Icon(Icons.download_rounded, size: 16),
+                            label: Text(
+                              _exporting ? 'Exporting...' : 'Export Excel',
                             ),
-                          ),
-                          icon: _exporting
-                              ? const SizedBox(
-                                  width: 14,
-                                  height: 14,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Icon(Icons.download_rounded, size: 16),
-                          label: Text(
-                            _exporting ? 'Exporting...' : 'Export Excel',
                           ),
                         ),
                       ],
                     ],
                   ),
-                  const SizedBox(height: 18),
-                  _panel(
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        filterRow,
-                        const SizedBox(height: 16),
-                        summaryRow,
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  analyticsPanels,
-                  if (!isWide) ...[
-                    const SizedBox(height: 16),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: FilledButton.icon(
-                        onPressed: _exporting ? null : _export,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF2557D6),
+                  if (isLoading)
+                    Positioned(
+                      right: 18,
+                      top: 18,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
                         ),
-                        icon: _exporting
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
+                        decoration: BoxDecoration(
+                          color: themeColors.panel,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: themeColors.border),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.10),
+                              blurRadius: 14,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.2,
+                                valueColor: const AlwaysStoppedAnimation<Color>(
+                                  Color(0xFF2557D6),
                                 ),
-                              )
-                            : const Icon(Icons.download_rounded, size: 16),
-                        label: Text(
-                          _exporting ? 'Exporting...' : 'Export Excel',
+                                backgroundColor: themeColors.border,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Updating analytics...',
+                              style: TextStyle(
+                                color: themeColors.text,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                  ],
                 ],
               );
             },
           ),
-        ),
-      ),
+        );
+      },
+    );
+
+    if (widget.embedded) {
+      return ColoredBox(color: themeColors.background, child: body);
+    }
+
+    return Scaffold(
+      backgroundColor: themeColors.background,
+      body: SafeArea(child: body),
     );
   }
 
@@ -1076,39 +1129,6 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
       border: Border.all(color: AdminThemeColors.of(context).border),
     ),
     child: child,
-  );
-
-  Widget _rangeButton() => OutlinedButton(
-    onPressed: () async {
-      final picked = await _pickRange();
-      if (picked == null) return;
-      setState(() {
-        _datePreset = 'custom';
-        _range = picked;
-        _payloadFuture = _load();
-      });
-    },
-    style: OutlinedButton.styleFrom(
-      backgroundColor: AdminThemeColors.of(context).input,
-      side: BorderSide(color: AdminThemeColors.of(context).border),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-    ),
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(
-            '${_range.start.month}/${_range.start.day}/${_range.start.year}   \u2192   ${_range.end.month}/${_range.end.day}/${_range.end.year}',
-            style: TextStyle(color: AdminThemeColors.of(context).text),
-          ),
-        ),
-        Icon(
-          Icons.calendar_month_rounded,
-          color: AdminThemeColors.of(context).mutedText,
-          size: 18,
-        ),
-      ],
-    ),
   );
 
   Widget _metricPanel(String title, Widget child, {String? trailing}) => _panel(
@@ -1498,6 +1518,205 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
     );
   }
 
+  Widget _departmentTrendPanel({
+    required _DepartmentTrendData departmentTrend,
+    required List<Map<String, dynamic>> officeBreakdown,
+    required String scopeLabel,
+  }) {
+    final colors = AdminThemeColors.of(context);
+    final series = departmentTrend.series;
+    final labels = departmentTrend.labels;
+    final maxValue = series.isEmpty
+        ? 1
+        : series
+              .expand((item) => item.counts)
+              .fold<int>(1, (current, value) => math.max(current, value));
+
+    if (series.isEmpty && officeBreakdown.isEmpty) {
+      return Text(
+        'No department activity data is available for the selected filters.',
+        style: TextStyle(color: colors.mutedText),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 860;
+        final labelWidth = compact ? 120.0 : 180.0;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              compact
+                  ? scopeLabel
+                  : '$scopeLabel • Real report activity by time period',
+              style: TextStyle(color: colors.mutedText, fontSize: 12),
+            ),
+            if (labels.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  SizedBox(width: labelWidth + 20),
+                  Expanded(
+                    child: Row(
+                      children: labels
+                          .map(
+                            (label) => Expanded(
+                              child: Text(
+                                label,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: colors.mutedText,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            if (series.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              ...series.asMap().entries.map((entry) {
+                final index = entry.key;
+                final item = entry.value;
+                final color = _palette(index);
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      SizedBox(
+                        width: labelWidth,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.label,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: colors.text,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${item.total} reports • ${item.resolutionRate}% resolved',
+                              style: TextStyle(
+                                color: colors.mutedText,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: SizedBox(
+                          height: 54,
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: item.counts.asMap().entries.map((point) {
+                              final count = point.value;
+                              final pointLabel = point.key < labels.length
+                                  ? labels[point.key]
+                                  : 'Period ${point.key + 1}';
+                              final height = maxValue == 0
+                                  ? 8.0
+                                  : math.max(8.0, (count / maxValue) * 42);
+                              return Expanded(
+                                child: Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 3),
+                                  child: Tooltip(
+                                    message:
+                                        '${item.label} • $pointLabel: $count',
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.end,
+                                      children: [
+                                        Text(
+                                          '$count',
+                                          style: TextStyle(
+                                            color: colors.mutedText,
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        AnimatedContainer(
+                                          duration:
+                                              const Duration(milliseconds: 220),
+                                          curve: Curves.easeOutCubic,
+                                          height: height,
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              begin: Alignment.topCenter,
+                                              end: Alignment.bottomCenter,
+                                              colors: [
+                                                color.withValues(alpha: 0.55),
+                                                color,
+                                              ],
+                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(999),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+            if (officeBreakdown.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: officeBreakdown.take(4).map((item) {
+                  final label = (item['label'] ?? 'Department').toString();
+                  final total = _intValue(item['count']);
+                  final resolution = _intValue(item['resolution_rate']);
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colors.input,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: colors.border),
+                    ),
+                    child: Text(
+                      '$label • $total reports • $resolution% resolved',
+                      style: TextStyle(
+                        color: colors.text,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
   Color _colorFor(String key) {
     switch (key) {
       case 'pending':
@@ -1555,6 +1774,61 @@ class _Bucket {
   final int progress;
   final int resolved;
   final int rejected;
+}
+
+class _DepartmentTrendData {
+  const _DepartmentTrendData({
+    required this.labels,
+    required this.series,
+  });
+
+  factory _DepartmentTrendData.fromAnalytics(Map<dynamic, dynamic>? raw) {
+    final data = raw == null ? const <dynamic, dynamic>{} : Map<dynamic, dynamic>.from(raw);
+    final labels = (data['labels'] as List<dynamic>? ?? const [])
+        .map((value) => value.toString())
+        .where((value) => value.trim().isNotEmpty)
+        .toList();
+    final series = (data['series'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(_DepartmentTrendSeries.fromJson)
+        .toList();
+
+    return _DepartmentTrendData(labels: labels, series: series);
+  }
+
+  final List<String> labels;
+  final List<_DepartmentTrendSeries> series;
+}
+
+class _DepartmentTrendSeries {
+  const _DepartmentTrendSeries({
+    required this.label,
+    required this.counts,
+    required this.total,
+    required this.resolutionRate,
+  });
+
+  factory _DepartmentTrendSeries.fromJson(Map<String, dynamic> json) {
+    int parseInt(dynamic value) {
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      return int.tryParse('$value') ?? 0;
+    }
+
+    return _DepartmentTrendSeries(
+      label: (json['label'] ?? '').toString(),
+      counts: (json['counts'] as List<dynamic>? ?? const [])
+          .map(parseInt)
+          .toList(),
+      total: parseInt(json['total']),
+      resolutionRate: parseInt(json['resolution_rate']),
+    );
+  }
+
+  final String label;
+  final List<int> counts;
+  final int total;
+  final int resolutionRate;
 }
 
 class _TrendLegend extends StatelessWidget {
