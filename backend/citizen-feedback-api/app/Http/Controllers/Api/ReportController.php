@@ -185,13 +185,15 @@ class ReportController extends Controller
             abort(403, 'Unauthorized action.');
         }
 
+        $datePresetRule = 'in:' . implode(',', $this->reportQueries->allowedDatePresets());
+
         $validated = $request->validate([
             'status' => ['nullable', 'string', 'in:New,Pending,In Progress,Resolved,Rejected'],
             'search' => ['nullable', 'string', 'max:255'],
             'category' => ['nullable', 'string', 'max:255'],
             'barangay' => ['nullable', 'string', 'max:255'],
             'office' => ['nullable', 'string', 'max:255'],
-            'date_preset' => ['nullable', 'string', 'in:today,last_7_days,last_30_days,custom'],
+            'date_preset' => ['nullable', 'string', $datePresetRule],
             'start_date' => ['nullable', 'date', 'required_if:date_preset,custom'],
             'end_date' => ['nullable', 'date', 'required_if:date_preset,custom', 'after_or_equal:start_date'],
             'page' => ['nullable', 'integer', 'min:1'],
@@ -269,13 +271,15 @@ class ReportController extends Controller
             abort(403, 'Unauthorized action.');
         }
 
+        $datePresetRule = 'in:' . implode(',', $this->reportQueries->allowedDatePresets());
+
         $validated = $request->validate([
             'status' => ['nullable', 'string', 'in:New,Pending,In Progress,Resolved,Rejected'],
             'search' => ['nullable', 'string', 'max:255'],
             'category' => ['nullable', 'string', 'max:255'],
             'barangay' => ['nullable', 'string', 'max:255'],
             'office' => ['nullable', 'string', 'max:255'],
-            'date_preset' => ['nullable', 'string', 'in:today,last_7_days,last_30_days,custom'],
+            'date_preset' => ['nullable', 'string', $datePresetRule],
             'start_date' => ['nullable', 'date', 'required_if:date_preset,custom'],
             'end_date' => ['nullable', 'date', 'required_if:date_preset,custom', 'after_or_equal:start_date'],
         ]);

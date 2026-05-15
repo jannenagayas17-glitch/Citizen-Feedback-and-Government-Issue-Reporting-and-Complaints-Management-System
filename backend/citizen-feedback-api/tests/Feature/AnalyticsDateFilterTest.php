@@ -180,4 +180,92 @@ class AnalyticsDateFilterTest extends TestCase
             'Timeline totals should match the custom-range overview count.'
         );
     }
+
+    public function test_new_analytics_presets_update_scope_and_grouping_from_real_report_dates(): void
+    {
+        Carbon::setTestNow(Carbon::create(2026, 5, 15, 10, 0, 0, 'Asia/Manila'));
+
+        $citizen = User::create([
+            'name' => 'Preset Citizen',
+            'email' => 'preset-citizen@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'citizen',
+            'is_active' => true,
+        ]);
+
+        $superAdmin = User::create([
+            'name' => 'Preset Super Admin',
+            'email' => 'preset-super-admin@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'super_admin',
+            'is_active' => true,
+        ]);
+
+        $office = Office::create([
+            'name' => 'Business Permit Office',
+            'is_active' => true,
+        ]);
+
+        $category = Category::create([
+            'name' => 'Permits',
+        ]);
+
+        foreach ([
+            ['date' => '2025-12-20 09:00:00', 'status' => 'Resolved'],
+            ['date' => '2026-01-08 09:00:00', 'status' => 'Pending'],
+            ['date' => '2026-05-01 09:00:00', 'status' => 'Pending'],
+            ['date' => '2026-05-05 09:00:00', 'status' => 'Resolved'],
+            ['date' => '2026-05-12 09:00:00', 'status' => 'In Progress'],
+            ['date' => '2026-05-14 09:00:00', 'status' => 'Pending'],
+        ] as $index => $item) {
+            $createdAt = Carbon::parse($item['date'], 'Asia/Manila');
+            $report = new Report([
+                'user_id' => $citizen->id,
+                'office_id' => $office->id,
+                'category_id' => $category->id,
+                'title' => 'Preset report '.$index,
+                'description' => 'Preset analytics coverage',
+                'location' => 'Tacloban City',
+                'barangay' => 'Barangay 8',
+                'status' => $item['status'],
+                'priority' => 'Normal',
+                'resolved_at' => $item['status'] === 'Resolved' ? $createdAt->copy()->addDay() : null,
+            ]);
+            $report->created_at = $createdAt;
+            $report->updated_at = $createdAt;
+            $report->save();
+        }
+
+        Sanctum::actingAs($superAdmin);
+
+        $weekly = $this->getJson('/api/admin/analytics?date_preset=weekly');
+        $monthly = $this->getJson('/api/admin/analytics?date_preset=monthly');
+        $yearly = $this->getJson('/api/admin/analytics?date_preset=yearly');
+        $allTime = $this->getJson('/api/admin/analytics?date_preset=all_time');
+
+        $weekly->assertOk()
+            ->assertJsonPath('overview.total_reports', 2)
+            ->assertJsonPath('applied_filters.date_preset', 'weekly')
+            ->assertJsonPath('timeline_meta.grouping', 'day');
+
+        $monthly->assertOk()
+            ->assertJsonPath('overview.total_reports', 4)
+            ->assertJsonPath('applied_filters.date_preset', 'monthly')
+            ->assertJsonPath('timeline_meta.grouping', 'week');
+
+        $yearly->assertOk()
+            ->assertJsonPath('overview.total_reports', 5)
+            ->assertJsonPath('applied_filters.date_preset', 'yearly')
+            ->assertJsonPath('timeline_meta.grouping', 'month');
+
+        $allTime->assertOk()
+            ->assertJsonPath('overview.total_reports', 6)
+            ->assertJsonPath('applied_filters.date_preset', 'all_time')
+            ->assertJsonPath('timeline_meta.grouping', 'month');
+
+        $this->assertSame(2, collect($weekly->json('timeline_breakdown'))->sum('total'));
+        $this->assertSame(4, collect($monthly->json('timeline_breakdown'))->sum('total'));
+        $this->assertSame(5, collect($yearly->json('timeline_breakdown'))->sum('total'));
+        $this->assertSame(6, collect($allTime->json('timeline_breakdown'))->sum('total'));
+    }
 }

@@ -381,4 +381,252 @@ class DashboardAnalyticsTest extends TestCase
             ->assertJsonPath('total', 2)
             ->assertJsonMissing(['barangay' => 'Barangay 9']);
     }
+
+    public function test_super_admin_department_trend_series_are_unique_per_office(): void
+    {
+        Carbon::setTestNow(Carbon::create(2026, 5, 15, 10, 0, 0, 'Asia/Manila'));
+
+        $citizen = User::create([
+            'name' => 'Trend Citizen',
+            'email' => 'trend-citizen@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'citizen',
+            'is_active' => true,
+        ]);
+
+        $superAdmin = User::create([
+            'name' => 'Trend Super Admin',
+            'email' => 'trend-super-admin@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'super_admin',
+            'is_active' => true,
+        ]);
+
+        $engineerOffice = Office::create([
+            'name' => "City Engineer's Office",
+            'is_active' => true,
+        ]);
+
+        $permitOffice = Office::create([
+            'name' => 'Business Permit Office',
+            'is_active' => true,
+        ]);
+
+        $category = Category::create(['name' => 'Operations']);
+
+        foreach ([
+            [$engineerOffice->id, '2026-05-12 08:00:00', 'Pending'],
+            [$engineerOffice->id, '2026-05-12 10:00:00', 'Resolved'],
+            [$engineerOffice->id, '2026-05-13 11:00:00', 'In Progress'],
+            [$permitOffice->id, '2026-05-14 08:00:00', 'Pending'],
+            [$permitOffice->id, '2026-05-14 09:00:00', 'Pending'],
+            [$permitOffice->id, '2026-05-15 09:00:00', 'Resolved'],
+        ] as $index => [$officeId, $date, $status]) {
+            $createdAt = Carbon::parse($date, 'Asia/Manila');
+            $report = new Report([
+                'user_id' => $citizen->id,
+                'office_id' => $officeId,
+                'category_id' => $category->id,
+                'title' => 'Department trend report '.$index,
+                'description' => 'Department trend analytics coverage',
+                'location' => 'Tacloban City',
+                'barangay' => 'Barangay 10',
+                'status' => $status,
+                'priority' => 'Normal',
+                'resolved_at' => $status === 'Resolved' ? $createdAt->copy()->addDay() : null,
+            ]);
+            $report->created_at = $createdAt;
+            $report->updated_at = $createdAt;
+            $report->save();
+        }
+
+        Sanctum::actingAs($superAdmin);
+
+        $response = $this->getJson('/api/admin/analytics?date_preset=weekly');
+
+        $response->assertOk()
+            ->assertJsonPath('overview.total_reports', 6)
+            ->assertJsonPath('applied_filters.date_preset', 'weekly')
+            ->assertJsonPath('timeline_meta.grouping', 'day');
+
+        $series = collect($response->json('department_trend.series'))->keyBy('label');
+
+        $this->assertTrue($series->has("City Engineer's Office"));
+        $this->assertTrue($series->has('Business Permit Office'));
+        $this->assertSame(
+            3,
+            array_sum($series["City Engineer's Office"]['counts']),
+            'City Engineer analytics should reflect only its own weekly reports.'
+        );
+        $this->assertSame(
+            3,
+            array_sum($series['Business Permit Office']['counts']),
+            'Business Permit analytics should reflect only its own weekly reports.'
+        );
+        $this->assertNotSame(
+            $series["City Engineer's Office"]['counts'],
+            $series['Business Permit Office']['counts'],
+            'Department trend series must differ between offices.'
+        );
+    }
+
+    public function test_super_admin_dashboard_analytics_and_report_listing_exclude_demo_seeded_reports(): void
+    {
+        $citizen = User::create([
+            'name' => 'Real Citizen',
+            'email' => 'real-dashboard-citizen@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'citizen',
+            'is_active' => true,
+        ]);
+
+        $demoCitizen = User::create([
+            'name' => 'Demo Citizen',
+            'email' => 'demo.citizen.777@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'citizen',
+            'is_active' => true,
+        ]);
+
+        $superAdmin = User::create([
+            'name' => 'Dashboard Super Admin',
+            'email' => 'dashboard-super-admin@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'super_admin',
+            'is_active' => true,
+        ]);
+
+        $office = Office::create([
+            'name' => 'Environment Office',
+            'is_active' => true,
+        ]);
+
+        $category = Category::create(['name' => 'Sanitation']);
+
+        Report::create([
+            'user_id' => $citizen->id,
+            'office_id' => $office->id,
+            'category_id' => $category->id,
+            'title' => 'Real report',
+            'description' => 'Real report that should remain visible.',
+            'location' => 'Tacloban City',
+            'barangay' => 'Barangay 1',
+            'status' => 'Pending',
+            'priority' => 'Normal',
+        ]);
+
+        Report::create([
+            'user_id' => $demoCitizen->id,
+            'office_id' => $office->id,
+            'category_id' => $category->id,
+            'title' => 'Demo seeded report',
+            'description' => 'Demo seeded report that must stay hidden from portal analytics.',
+            'location' => 'Tacloban City',
+            'barangay' => 'Barangay 9',
+            'status' => 'Resolved',
+            'priority' => 'Normal',
+        ]);
+
+        Sanctum::actingAs($superAdmin);
+
+        $dashboard = $this->getJson('/api/dashboard');
+        $analytics = $this->getJson('/api/admin/analytics');
+        $reports = $this->getJson('/api/admin/reports?paginate=true&per_page=25');
+
+        $dashboard->assertOk()
+            ->assertJsonPath('total_reports', 1)
+            ->assertJsonPath('pending', 1)
+            ->assertJsonPath('resolved', 0);
+
+        $analytics->assertOk()
+            ->assertJsonPath('overview.total_reports', 1)
+            ->assertJsonPath('overview.pending', 1)
+            ->assertJsonPath('overview.resolved', 0);
+
+        $reports->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonMissing(['title' => 'Demo seeded report'])
+            ->assertJsonMissing(['barangay' => 'Barangay 9']);
+    }
+
+    public function test_super_admin_dashboard_analytics_keep_excluding_demo_reports_after_demo_accounts_are_archived(): void
+    {
+        $citizen = User::create([
+            'name' => 'Real Citizen',
+            'email' => 'real-archived-dashboard@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'citizen',
+            'is_active' => true,
+        ]);
+
+        $demoCitizen = User::create([
+            'name' => 'Demo Citizen',
+            'email' => 'demo.citizen.778@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'citizen',
+            'is_active' => false,
+        ]);
+
+        $superAdmin = User::create([
+            'name' => 'Dashboard Super Admin',
+            'email' => 'dashboard-archived-super-admin@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'super_admin',
+            'is_active' => true,
+        ]);
+
+        $office = Office::create([
+            'name' => 'Environment Office',
+            'is_active' => true,
+        ]);
+
+        $category = Category::create(['name' => 'Sanitation']);
+
+        Report::create([
+            'user_id' => $citizen->id,
+            'office_id' => $office->id,
+            'category_id' => $category->id,
+            'title' => 'Real report',
+            'description' => 'Real report that should remain visible.',
+            'location' => 'Tacloban City',
+            'barangay' => 'Barangay 1',
+            'status' => 'Pending',
+            'priority' => 'Normal',
+        ]);
+
+        Report::create([
+            'user_id' => $demoCitizen->id,
+            'office_id' => $office->id,
+            'category_id' => $category->id,
+            'title' => 'Archived demo seeded report',
+            'description' => 'Archived demo seeded report that must stay hidden from portal analytics.',
+            'location' => 'Tacloban City',
+            'barangay' => 'Barangay 9',
+            'status' => 'Resolved',
+            'priority' => 'Normal',
+        ]);
+
+        $demoCitizen->delete();
+
+        Sanctum::actingAs($superAdmin);
+
+        $dashboard = $this->getJson('/api/dashboard');
+        $analytics = $this->getJson('/api/admin/analytics');
+        $reports = $this->getJson('/api/admin/reports?paginate=true&per_page=25');
+
+        $dashboard->assertOk()
+            ->assertJsonPath('total_reports', 1)
+            ->assertJsonPath('pending', 1)
+            ->assertJsonPath('resolved', 0);
+
+        $analytics->assertOk()
+            ->assertJsonPath('overview.total_reports', 1)
+            ->assertJsonPath('overview.pending', 1)
+            ->assertJsonPath('overview.resolved', 0);
+
+        $reports->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonMissing(['title' => 'Archived demo seeded report'])
+            ->assertJsonMissing(['barangay' => 'Barangay 9']);
+    }
 }

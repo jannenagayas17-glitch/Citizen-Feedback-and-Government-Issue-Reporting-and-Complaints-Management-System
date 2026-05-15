@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Office;
 use App\Models\Report;
 use App\Models\SystemSetting;
 use App\Models\User;
+use App\Support\DemoAccountService;
 use App\Support\ReportQueryService;
 use App\Support\UserEmailDeduplicationService;
 use Illuminate\Database\Eloquent\Builder;
@@ -19,6 +19,7 @@ class DashboardController extends Controller
     public function __construct(
         private readonly ReportQueryService $reportQueries,
         private readonly UserEmailDeduplicationService $userEmailDeduplication,
+        private readonly DemoAccountService $demoAccounts,
     ) {
     }
 
@@ -44,18 +45,21 @@ class DashboardController extends Controller
             abort(403, 'Unauthorized action.');
         }
 
+        $datePresetRule = 'in:' . implode(',', $this->reportQueries->allowedDatePresets());
+
         $filters = $request->validate([
             'office' => ['nullable', 'string', 'max:255'],
             'barangay' => ['nullable', 'string', 'max:255'],
             'category' => ['nullable', 'string', 'max:255'],
             'status' => ['nullable', 'string', 'in:New,Pending,In Progress,Resolved,Rejected'],
-            'date_preset' => ['nullable', 'string', 'in:today,last_7_days,last_30_days,custom'],
+            'date_preset' => ['nullable', 'string', $datePresetRule],
             'start_date' => ['nullable', 'date', 'required_if:date_preset,custom'],
             'end_date' => ['nullable', 'date', 'required_if:date_preset,custom', 'after_or_equal:start_date'],
         ]);
 
         $statuses = $this->reportQueries->canonicalStatuses();
         $priorities = $this->reportQueries->canonicalPriorities();
+        $canonicalPreset = $this->reportQueries->canonicalDatePreset($filters['date_preset'] ?? null);
 
         $baseQuery = $this->reportQueries->scopedForUser($request->user());
         $this->reportQueries->applyFilters($baseQuery, $filters);
@@ -63,6 +67,7 @@ class DashboardController extends Controller
         $dateRange = $this->reportQueries->applyDateRangeFilter($baseQuery, $filters);
 
         $timelineRange = $dateRange ?? $this->reportQueries->fallbackTimelineRange(clone $baseQuery);
+        $timelineMode = $this->resolveTimelineMode($canonicalPreset, $timelineRange);
         $overview = $this->reportQueries->buildOverviewCounts($baseQuery);
         $comparisonOverview = [
             'total_reports' => 0,
@@ -188,49 +193,14 @@ class DashboardController extends Controller
             })
             ->values();
 
-        $monthExpression = $this->monthExpression('created_at');
-        $resolvedMonthExpression = $this->monthExpression('COALESCE(resolved_at, created_at)');
-        $trendEndMonth = $this->trendEndMonth($baseQuery);
-        $trendStartMonth = $trendEndMonth->copy()->subMonths(5)->startOfMonth();
-
-        $monthlyCounts = (clone $baseQuery)
-            ->selectRaw("{$monthExpression} as month_key, COUNT(*) as total")
-            ->where('created_at', '>=', $trendStartMonth)
-            ->where('created_at', '<', $trendEndMonth->copy()->addMonth()->startOfMonth())
-            ->groupBy('month_key')
-            ->orderBy('month_key')
-            ->get()
-            ->pluck('total', 'month_key');
-
-        $monthlyResolvedCounts = (clone $baseQuery)
-            ->selectRaw("{$resolvedMonthExpression} as month_key, COUNT(*) as total")
-            ->where('status', 'Resolved')
-            ->where(function ($query) use ($trendStartMonth, $trendEndMonth) {
-                $query->where('resolved_at', '>=', $trendStartMonth)
-                    ->where('resolved_at', '<', $trendEndMonth->copy()->addMonth()->startOfMonth())
-                    ->orWhere(function ($fallbackQuery) use ($trendStartMonth, $trendEndMonth) {
-                        $fallbackQuery->whereNull('resolved_at')
-                            ->where('created_at', '>=', $trendStartMonth)
-                            ->where('created_at', '<', $trendEndMonth->copy()->addMonth()->startOfMonth());
-                    });
-            })
-            ->groupBy('month_key')
-            ->orderBy('month_key')
-            ->get()
-            ->pluck('total', 'month_key');
-
-        $monthlyTrend = collect(range(0, 5))->map(function (int $offset) use ($monthlyCounts, $monthlyResolvedCounts, $trendStartMonth) {
-            $date = $trendStartMonth->copy()->addMonths($offset);
-            $key = $date->format('Y-m');
-
-            return [
-                'label' => $date->format('M'),
-                'new_reports' => (int) ($monthlyCounts[$key] ?? 0),
-                'resolved_reports' => (int) ($monthlyResolvedCounts[$key] ?? 0),
-            ];
-        })->values();
-
-        $timelineBreakdown = $this->buildTimelineBreakdown(clone $baseQuery, $timelineRange);
+        $monthlyTrend = $this->buildMonthlyTrend(clone $baseQuery);
+        $timelineBreakdown = $this->buildTimelineBreakdown(clone $baseQuery, $timelineRange, $timelineMode);
+        $departmentTrend = $this->buildDepartmentTrend(
+            clone $baseQuery,
+            $timelineRange,
+            $timelineMode,
+            $officeBreakdown->take(4)->all(),
+        );
 
         $staffPerformance = (clone $baseQuery)
             ->leftJoin('users as assigned_admins', 'reports.assigned_to', '=', 'assigned_admins.id')
@@ -274,7 +244,10 @@ class DashboardController extends Controller
         $escalationPreview = $this->buildEscalationPreview(clone $baseQuery, $triggerHours);
         $monthlyVolume = $this->buildMonthlyVolume(clone $baseQuery);
         $averageOpenHours = $this->averageOpenHours(clone $baseQuery);
-        $activeOfficesCount = $this->activeOfficesCountForUser($request->user());
+        $activeOfficesCount = (clone $baseQuery)
+            ->whereNotNull('reports.office_id')
+            ->distinct()
+            ->count('reports.office_id');
         $adminPreview = $this->buildAdminPreview($request->user());
 
         return response()->json([
@@ -287,10 +260,17 @@ class DashboardController extends Controller
             'top_barangays' => $barangayBreakdown,
             'location_breakdown' => $locationBreakdown,
             'office_breakdown' => $officeBreakdown,
+            'department_trend' => $departmentTrend,
             'staff_performance' => $staffPerformance,
             'monthly_trend' => $monthlyTrend,
             'monthly_volume' => $monthlyVolume,
             'timeline_breakdown' => $timelineBreakdown,
+            'timeline_meta' => [
+                'preset' => $canonicalPreset,
+                'grouping' => $timelineMode['grouping'],
+                'grouping_label' => $timelineMode['grouping_label'],
+                'range_label' => $this->formatTimelineRangeLabel($timelineRange, $timelineMode['grouping']),
+            ],
             'recent_reports' => $recentReports,
             'triage_reports' => $triageReports,
             'queue_count' => $overview['queue_count'],
@@ -300,12 +280,17 @@ class DashboardController extends Controller
             'active_offices_count' => $activeOfficesCount,
             'admin_preview' => $adminPreview,
             'escalations_preview' => $escalationPreview,
+            'role_scope' => [
+                'role' => (string) ($request->user()->role ?? 'admin'),
+                'department_locked' => ($request->user()->role ?? null) === 'admin',
+                'selected_department' => $this->selectedDepartmentLabel($request->user(), $filters['office'] ?? null),
+            ],
             'applied_filters' => [
                 'office' => $filters['office'] ?? null,
                 'barangay' => $filters['barangay'] ?? null,
                 'category' => $filters['category'] ?? null,
                 'status' => $filters['status'] ?? null,
-                'date_preset' => $filters['date_preset'] ?? null,
+                'date_preset' => $canonicalPreset,
                 'start_date' => $timelineRange['start']->toDateString(),
                 'end_date' => $timelineRange['end']->toDateString(),
             ],
@@ -326,49 +311,541 @@ class DashboardController extends Controller
         ];
     }
 
-    private function buildTimelineBreakdown(Builder $query, array $range): array
+    private function resolveTimelineMode(string $canonicalPreset, array $range): array
+    {
+        $spanDays = max(
+            1,
+            $range['start']->copy()->startOfDay()->diffInDays($range['end']->copy()->startOfDay()) + 1
+        );
+        $spanMonths = max(
+            1,
+            $range['start']->copy()->startOfMonth()->diffInMonths($range['end']->copy()->startOfMonth()) + 1
+        );
+
+        return match ($canonicalPreset) {
+            'today',
+            'weekly' => [
+                'grouping' => 'day',
+                'grouping_label' => 'Daily',
+            ],
+            'last_7_days' => [
+                'grouping' => 'day',
+                'grouping_label' => 'Daily',
+            ],
+            'monthly',
+            'last_30_days',
+            'custom' => [
+                'grouping' => $spanDays <= 14 ? 'day' : 'week',
+                'grouping_label' => $spanDays <= 14 ? 'Daily' : 'Weekly',
+            ],
+            'yearly' => [
+                'grouping' => 'month',
+                'grouping_label' => 'Monthly',
+            ],
+            default => [
+                'grouping' => $spanMonths <= 18 ? 'month' : 'year',
+                'grouping_label' => $spanMonths <= 18 ? 'Monthly' : 'Yearly',
+            ],
+        };
+    }
+
+    private function buildTimelineBreakdown(Builder $query, array $range, array $mode): array
+    {
+        $definitions = $this->buildBucketDefinitions($range, $mode['grouping']);
+        if ($definitions === []) {
+            return [];
+        }
+
+        return match ($mode['grouping']) {
+            'day' => $this->mapDirectRowsToBuckets(
+                $definitions,
+                $this->fetchTimelineRows($query, $range, $this->dateExpression('reports.created_at')),
+            ),
+            'week' => $this->mapWeeklyRowsToBuckets(
+                $definitions,
+                $this->fetchTimelineRows($query, $range, $this->dateExpression('reports.created_at')),
+            ),
+            'month' => $this->mapDirectRowsToBuckets(
+                $definitions,
+                $this->fetchTimelineRows($query, $range, $this->monthExpression('reports.created_at')),
+            ),
+            default => $this->mapDirectRowsToBuckets(
+                $definitions,
+                $this->fetchTimelineRows($query, $range, $this->yearExpression('reports.created_at')),
+            ),
+        };
+    }
+
+    private function buildDepartmentTrend(
+        Builder $query,
+        array $range,
+        array $mode,
+        array $departments,
+    ): array {
+        $definitions = $this->buildBucketDefinitions($range, $mode['grouping']);
+        $seriesMeta = collect($departments)
+            ->map(function (array $department) {
+                $label = trim((string) ($department['label'] ?? ''));
+                if ($label === '') {
+                    return null;
+                }
+
+                return [
+                    'label' => $label,
+                    'total' => (int) ($department['count'] ?? 0),
+                    'resolved' => (int) ($department['resolved'] ?? 0),
+                    'resolution_rate' => (int) ($department['resolution_rate'] ?? 0),
+                ];
+            })
+            ->filter()
+            ->values();
+
+        if ($definitions === [] || $seriesMeta->isEmpty()) {
+            return [
+                'grouping' => $mode['grouping'],
+                'grouping_label' => $mode['grouping_label'],
+                'labels' => array_column($definitions, 'label'),
+                'series' => [],
+            ];
+        }
+
+        $departmentLabels = $seriesMeta->pluck('label')->all();
+
+        $rows = match ($mode['grouping']) {
+            'day', 'week' => $this->fetchDepartmentRows(
+                $query,
+                $range,
+                $this->dateExpression('reports.created_at'),
+                $departmentLabels,
+            ),
+            'month' => $this->fetchDepartmentRows(
+                $query,
+                $range,
+                $this->monthExpression('reports.created_at'),
+                $departmentLabels,
+            ),
+            default => $this->fetchDepartmentRows(
+                $query,
+                $range,
+                $this->yearExpression('reports.created_at'),
+                $departmentLabels,
+            ),
+        };
+
+        $series = $seriesMeta->map(function (array $department) use ($definitions, $rows, $mode) {
+            return [
+                'label' => $department['label'],
+                'counts' => collect($definitions)
+                    ->map(function (array $definition) use ($rows, $department, $mode) {
+                        return $this->departmentCountForBucket(
+                            $rows,
+                            $department['label'],
+                            $definition,
+                            $mode['grouping'],
+                        );
+                    })
+                    ->all(),
+                'total' => $department['total'],
+                'resolved' => $department['resolved'],
+                'resolution_rate' => $department['resolution_rate'],
+            ];
+        })->values()->all();
+
+        return [
+            'grouping' => $mode['grouping'],
+            'grouping_label' => $mode['grouping_label'],
+            'labels' => array_column($definitions, 'label'),
+            'series' => $series,
+        ];
+    }
+
+    private function buildMonthlyTrend(Builder $query): array
+    {
+        $monthExpression = $this->monthExpression('created_at');
+        $resolvedMonthExpression = $this->monthExpression('COALESCE(resolved_at, created_at)');
+        $trendEndMonth = $this->trendEndMonth($query);
+        $trendStartMonth = $trendEndMonth->copy()->subMonths(5)->startOfMonth();
+
+        $monthlyCounts = (clone $query)
+            ->selectRaw("{$monthExpression} as month_key, COUNT(*) as total")
+            ->where('created_at', '>=', $trendStartMonth)
+            ->where('created_at', '<', $trendEndMonth->copy()->addMonth()->startOfMonth())
+            ->groupBy('month_key')
+            ->orderBy('month_key')
+            ->get()
+            ->pluck('total', 'month_key');
+
+        $monthlyResolvedCounts = (clone $query)
+            ->selectRaw("{$resolvedMonthExpression} as month_key, COUNT(*) as total")
+            ->where('status', 'Resolved')
+            ->where(function ($query) use ($trendStartMonth, $trendEndMonth) {
+                $query->where('resolved_at', '>=', $trendStartMonth)
+                    ->where('resolved_at', '<', $trendEndMonth->copy()->addMonth()->startOfMonth())
+                    ->orWhere(function ($fallbackQuery) use ($trendStartMonth, $trendEndMonth) {
+                        $fallbackQuery->whereNull('resolved_at')
+                            ->where('created_at', '>=', $trendStartMonth)
+                            ->where('created_at', '<', $trendEndMonth->copy()->addMonth()->startOfMonth());
+                    });
+            })
+            ->groupBy('month_key')
+            ->orderBy('month_key')
+            ->get()
+            ->pluck('total', 'month_key');
+
+        return collect(range(0, 5))->map(function (int $offset) use ($monthlyCounts, $monthlyResolvedCounts, $trendStartMonth) {
+            $date = $trendStartMonth->copy()->addMonths($offset);
+            $key = $date->format('Y-m');
+
+            return [
+                'label' => $date->format('M'),
+                'new_reports' => (int) ($monthlyCounts[$key] ?? 0),
+                'resolved_reports' => (int) ($monthlyResolvedCounts[$key] ?? 0),
+            ];
+        })->values()->all();
+    }
+
+    private function buildBucketDefinitions(array $range, string $grouping): array
     {
         $start = $range['start']->copy()->startOfDay();
         $end = $range['end']->copy()->endOfDay();
-        $segments = 7;
-        $spanDays = max(1, $start->diffInDays($end) + 1);
-        $bucketSize = max(1, (int) ceil($spanDays / $segments));
-        $reports = (clone $query)->get(['status', 'created_at']);
-        $buckets = [];
 
-        for ($index = 0; $index < $segments; $index++) {
-            $bucketStart = $start->copy()->addDays($bucketSize * $index);
-            if ($bucketStart->gt($end)) {
-                break;
-            }
+        if ($start->gt($end)) {
+            return [];
+        }
 
-            $bucketEnd = $bucketStart->copy()->addDays($bucketSize - 1)->endOfDay();
+        return match ($grouping) {
+            'day' => $this->buildDailyBucketDefinitions($start, $end),
+            'week' => $this->buildWeeklyBucketDefinitions($start, $end),
+            'month' => $this->buildMonthlyBucketDefinitions($start, $end),
+            default => $this->buildYearlyBucketDefinitions($start, $end),
+        };
+    }
+
+    private function buildDailyBucketDefinitions(Carbon $start, Carbon $end): array
+    {
+        $definitions = [];
+        $cursor = $start->copy();
+        $useYear = $start->year !== $end->year;
+
+        while ($cursor->lte($end)) {
+            $definitions[] = [
+                'key' => $cursor->format('Y-m-d'),
+                'label' => $cursor->format($useYear ? 'M j, Y' : 'M j'),
+                'start' => $cursor->copy()->startOfDay(),
+                'end' => $cursor->copy()->endOfDay(),
+            ];
+
+            $cursor->addDay();
+        }
+
+        return $definitions;
+    }
+
+    private function buildWeeklyBucketDefinitions(Carbon $start, Carbon $end): array
+    {
+        $definitions = [];
+        $cursor = $start->copy();
+
+        while ($cursor->lte($end)) {
+            $bucketStart = $cursor->copy()->startOfDay();
+            $bucketEnd = $bucketStart->copy()->addDays(6)->endOfDay();
             if ($bucketEnd->gt($end)) {
                 $bucketEnd = $end->copy();
             }
 
-            $items = $reports->filter(function (Report $report) use ($bucketStart, $bucketEnd) {
-                $createdAt = $report->created_at;
-                if ($createdAt === null) {
-                    return false;
-                }
-
-                $createdDate = $createdAt->toDateString();
-                return $createdDate >= $bucketStart->toDateString()
-                    && $createdDate <= $bucketEnd->toDateString();
-            });
-
-            $buckets[] = [
-                'label' => $bucketStart->format('n/j'),
-                'total' => $items->count(),
-                'pending' => $items->whereIn('status', ['New', 'Pending'])->count(),
-                'progress' => $items->where('status', 'In Progress')->count(),
-                'resolved' => $items->where('status', 'Resolved')->count(),
-                'rejected' => $items->where('status', 'Rejected')->count(),
+            $definitions[] = [
+                'key' => $bucketStart->format('Y-m-d'),
+                'label' => $this->formatWeekLabel($bucketStart, $bucketEnd),
+                'start' => $bucketStart,
+                'end' => $bucketEnd,
             ];
+
+            $cursor = $bucketEnd->copy()->addDay()->startOfDay();
         }
 
-        return $buckets;
+        return $definitions;
+    }
+
+    private function buildMonthlyBucketDefinitions(Carbon $start, Carbon $end): array
+    {
+        $definitions = [];
+        $cursor = $start->copy()->startOfMonth();
+        $lastMonth = $end->copy()->startOfMonth();
+        $useYear = $cursor->year !== $lastMonth->year;
+
+        while ($cursor->lte($lastMonth)) {
+            $bucketStart = $cursor->copy()->startOfMonth();
+            $bucketEnd = $cursor->copy()->endOfMonth();
+
+            if ($bucketStart->lt($start)) {
+                $bucketStart = $start->copy();
+            }
+
+            if ($bucketEnd->gt($end)) {
+                $bucketEnd = $end->copy();
+            }
+
+            $definitions[] = [
+                'key' => $cursor->format('Y-m'),
+                'label' => $cursor->format($useYear ? 'M Y' : 'M'),
+                'start' => $bucketStart,
+                'end' => $bucketEnd,
+            ];
+
+            $cursor->addMonth();
+        }
+
+        return $definitions;
+    }
+
+    private function buildYearlyBucketDefinitions(Carbon $start, Carbon $end): array
+    {
+        $definitions = [];
+        $cursor = $start->copy()->startOfYear();
+        $lastYear = $end->copy()->startOfYear();
+
+        while ($cursor->lte($lastYear)) {
+            $bucketStart = $cursor->copy()->startOfYear();
+            $bucketEnd = $cursor->copy()->endOfYear();
+
+            if ($bucketStart->lt($start)) {
+                $bucketStart = $start->copy();
+            }
+
+            if ($bucketEnd->gt($end)) {
+                $bucketEnd = $end->copy();
+            }
+
+            $definitions[] = [
+                'key' => $cursor->format('Y'),
+                'label' => $cursor->format('Y'),
+                'start' => $bucketStart,
+                'end' => $bucketEnd,
+            ];
+
+            $cursor->addYear();
+        }
+
+        return $definitions;
+    }
+
+    private function fetchTimelineRows(Builder $query, array $range, string $bucketExpression): array
+    {
+        return (clone $query)
+            ->selectRaw("
+                {$bucketExpression} as bucket_key,
+                COUNT(*) as total,
+                SUM(CASE WHEN reports.status IN ('New', 'Pending') THEN 1 ELSE 0 END) as pending,
+                SUM(CASE WHEN reports.status = 'In Progress' THEN 1 ELSE 0 END) as progress,
+                SUM(CASE WHEN reports.status = 'Resolved' THEN 1 ELSE 0 END) as resolved,
+                SUM(CASE WHEN reports.status = 'Rejected' THEN 1 ELSE 0 END) as rejected
+            ")
+            ->whereBetween('reports.created_at', [
+                $range['start']->copy()->startOfDay(),
+                $range['end']->copy()->endOfDay(),
+            ])
+            ->groupBy('bucket_key')
+            ->orderBy('bucket_key')
+            ->get()
+            ->map(function ($row) {
+                return [
+                    'bucket_key' => (string) $row->bucket_key,
+                    'total' => (int) $row->total,
+                    'pending' => (int) $row->pending,
+                    'progress' => (int) $row->progress,
+                    'resolved' => (int) $row->resolved,
+                    'rejected' => (int) $row->rejected,
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    private function fetchDepartmentRows(
+        Builder $query,
+        array $range,
+        string $bucketExpression,
+        array $departments,
+    ): array {
+        if ($departments === []) {
+            return [];
+        }
+
+        return (clone $query)
+            ->leftJoin('offices', 'reports.office_id', '=', 'offices.id')
+            ->selectRaw("
+                {$bucketExpression} as bucket_key,
+                COALESCE(offices.name, 'Unassigned Office') as department_label,
+                COUNT(*) as total
+            ")
+            ->whereBetween('reports.created_at', [
+                $range['start']->copy()->startOfDay(),
+                $range['end']->copy()->endOfDay(),
+            ])
+            ->where(function ($departmentQuery) use ($departments) {
+                foreach ($departments as $index => $department) {
+                    if ($department === 'Unassigned Office') {
+                        if ($index === 0) {
+                            $departmentQuery->whereNull('reports.office_id');
+                        } else {
+                            $departmentQuery->orWhereNull('reports.office_id');
+                        }
+
+                        continue;
+                    }
+
+                    if ($index === 0) {
+                        $departmentQuery->where('offices.name', $department);
+                    } else {
+                        $departmentQuery->orWhere('offices.name', $department);
+                    }
+                }
+            })
+            ->groupBy('bucket_key', 'department_label')
+            ->orderBy('bucket_key')
+            ->orderBy('department_label')
+            ->get()
+            ->map(function ($row) {
+                return [
+                    'bucket_key' => (string) $row->bucket_key,
+                    'department_label' => (string) $row->department_label,
+                    'total' => (int) $row->total,
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    private function mapDirectRowsToBuckets(array $definitions, array $rows): array
+    {
+        $indexed = [];
+        foreach ($rows as $row) {
+            $indexed[$row['bucket_key']] = $row;
+        }
+
+        return array_map(function (array $definition) use ($indexed) {
+            $row = $indexed[$definition['key']] ?? null;
+
+            return [
+                'label' => $definition['label'],
+                'total' => (int) ($row['total'] ?? 0),
+                'pending' => (int) ($row['pending'] ?? 0),
+                'progress' => (int) ($row['progress'] ?? 0),
+                'resolved' => (int) ($row['resolved'] ?? 0),
+                'rejected' => (int) ($row['rejected'] ?? 0),
+            ];
+        }, $definitions);
+    }
+
+    private function mapWeeklyRowsToBuckets(array $definitions, array $rows): array
+    {
+        return array_map(function (array $definition) use ($rows) {
+            $bucket = [
+                'label' => $definition['label'],
+                'total' => 0,
+                'pending' => 0,
+                'progress' => 0,
+                'resolved' => 0,
+                'rejected' => 0,
+            ];
+
+            foreach ($rows as $row) {
+                $date = Carbon::parse($row['bucket_key'])->startOfDay();
+                if ($date->lt($definition['start']) || $date->gt($definition['end'])) {
+                    continue;
+                }
+
+                $bucket['total'] += (int) $row['total'];
+                $bucket['pending'] += (int) $row['pending'];
+                $bucket['progress'] += (int) $row['progress'];
+                $bucket['resolved'] += (int) $row['resolved'];
+                $bucket['rejected'] += (int) $row['rejected'];
+            }
+
+            return $bucket;
+        }, $definitions);
+    }
+
+    private function departmentCountForBucket(
+        array $rows,
+        string $departmentLabel,
+        array $definition,
+        string $grouping,
+    ): int {
+        if ($grouping === 'week') {
+            $total = 0;
+
+            foreach ($rows as $row) {
+                if ($row['department_label'] !== $departmentLabel) {
+                    continue;
+                }
+
+                $date = Carbon::parse($row['bucket_key'])->startOfDay();
+                if ($date->lt($definition['start']) || $date->gt($definition['end'])) {
+                    continue;
+                }
+
+                $total += (int) $row['total'];
+            }
+
+            return $total;
+        }
+
+        foreach ($rows as $row) {
+            if ($row['department_label'] === $departmentLabel && $row['bucket_key'] === $definition['key']) {
+                return (int) $row['total'];
+            }
+        }
+
+        return 0;
+    }
+
+    private function formatWeekLabel(Carbon $start, Carbon $end): string
+    {
+        if ($start->isSameDay($end)) {
+            return $start->format('M j');
+        }
+
+        if ($start->year !== $end->year) {
+            return $start->format('M j, Y') . ' - ' . $end->format('M j, Y');
+        }
+
+        if ($start->month !== $end->month) {
+            return $start->format('M j') . ' - ' . $end->format('M j');
+        }
+
+        return $start->format('M j') . '-' . $end->format('j');
+    }
+
+    private function formatTimelineRangeLabel(array $range, string $grouping): string
+    {
+        $start = $range['start']->copy();
+        $end = $range['end']->copy();
+
+        return match ($grouping) {
+            'year' => $start->format('Y') === $end->format('Y')
+                ? $start->format('Y')
+                : $start->format('Y') . ' - ' . $end->format('Y'),
+            'month' => $start->format('M Y') === $end->format('M Y')
+                ? $start->format('M Y')
+                : $start->format('M Y') . ' - ' . $end->format('M Y'),
+            default => $start->isSameDay($end)
+                ? $start->format('M j, Y')
+                : $start->format('M j') . ' - ' . $end->format('M j, Y'),
+        };
+    }
+
+    private function selectedDepartmentLabel($user, ?string $officeFilter): string
+    {
+        if (($user->role ?? null) === 'super_admin') {
+            $office = trim((string) ($officeFilter ?? ''));
+
+            return $office === '' ? 'All Departments' : $office;
+        }
+
+        $department = trim((string) ($user->department ?? ''));
+
+        return $department === '' ? 'Assigned Department' : $department;
     }
 
     private function buildReportPreviews(
@@ -516,15 +993,18 @@ class DashboardController extends Controller
             : "DATE_FORMAT({$column}, '%Y-%m')";
     }
 
-    private function activeOfficesCountForUser($user): int
+    private function dateExpression(string $column): string
     {
-        if (($user->role ?? null) === 'admin') {
-            return $this->reportQueries->resolveAdminOfficeId($user) === null ? 0 : 1;
-        }
+        return DB::getDriverName() === 'sqlite'
+            ? "strftime('%Y-%m-%d', {$column})"
+            : "DATE_FORMAT({$column}, '%Y-%m-%d')";
+    }
 
-        return Office::query()
-            ->where('is_active', true)
-            ->count();
+    private function yearExpression(string $column): string
+    {
+        return DB::getDriverName() === 'sqlite'
+            ? "strftime('%Y', {$column})"
+            : "DATE_FORMAT({$column}, '%Y')";
     }
 
     private function buildAdminPreview($user): array
@@ -536,7 +1016,10 @@ class DashboardController extends Controller
         $users = User::withTrashed()
             ->whereIn('role', ['super_admin', 'admin'])
             ->orderByRaw("case when role = 'super_admin' then 0 else 1 end")
-            ->orderBy('name')
+            ->orderBy('name');
+
+        $users = $this->demoAccounts
+            ->scopeRealUsers($users)
             ->get();
 
         return $this->userEmailDeduplication
