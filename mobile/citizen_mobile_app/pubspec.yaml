@@ -43,7 +43,6 @@ flutter:
   assets:
     - assets/images/Tacloban_City_bg.png
     - assets/images/logo.png
-    - assets/images/logo_splash.png
     - assets/images/google_logo.svg
 
   
@@ -52,17 +51,19 @@ flutter:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/images/logo_splash.png"
-  adaptive_icon_background: "#5D6673"
-  adaptive_icon_foreground: "assets/images/logo_splash.png"
+  image_path: "assets/images/logo.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/logo.png"
 
 flutter_native_splash:
-  color: "#0C1727"
+  image: "assets/images/logo.png"
+  color: "#0B1D51"
   android: true
   ios: true
   web: false
   fullscreen: true
   android_12:
-    color: "#0C1727"
+    image: "assets/images/logo.png"
+    color: "#0B1D51"
 
 

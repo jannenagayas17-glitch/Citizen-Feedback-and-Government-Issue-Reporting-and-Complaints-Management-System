@@ -79,23 +79,7 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
         elevation: 0,
       ),
       body: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: citizenIsDark(context)
-                ? const [
-                    Color(0xFF0B1322),
-                    Color(0xFF10192E),
-                    Color(0xFF0E1525),
-                  ]
-                : const [
-                    Color(0xFFF8FBFF),
-                    Color(0xFFEFF5FF),
-                    Color(0xFFF6F8FC),
-                  ],
-          ),
-        ),
+        decoration: BoxDecoration(gradient: citizenPageGradient(context)),
         child: RefreshIndicator(
           onRefresh: _refresh,
           child: FutureBuilder<Map<String, dynamic>>(
@@ -264,14 +248,14 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                           width: 46,
                           height: 46,
                           decoration: BoxDecoration(
-                            color: const Color(
-                              0xFF3B82F6,
+                            color: citizenPrimaryActionColor(
+                              context,
                             ).withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(14),
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.support_agent_rounded,
-                            color: Color(0xFF3B82F6),
+                            color: citizenPrimaryActionColor(context),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -369,7 +353,7 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                                     ? Icons.star_rounded
                                     : Icons.star_outline_rounded,
                                 color: filled
-                                    ? const Color(0xFFFBBF24)
+                                    ? citizenHighlightColor(context)
                                     : citizenMutedColor(context),
                                 size: 30,
                               ),
@@ -379,8 +363,8 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                         if (_selectedRating != null)
                           Text(
                             'Your rating: $_selectedRating/5',
-                            style: const TextStyle(
-                              color: Color(0xFFFBBF24),
+                            style: TextStyle(
+                              color: citizenHighlightColor(context),
                               fontWeight: FontWeight.w800,
                             ),
                           ),
@@ -593,13 +577,13 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
   static Color _statusColor(String status) {
     switch (status) {
       case 'Resolved':
-        return const Color(0xFF22C55E);
+        return CitizenAppPalette.navy;
       case 'In Progress':
-        return const Color(0xFF3B82F6);
+        return CitizenAppPalette.slate;
       case 'Rejected':
-        return const Color(0xFFEF4444);
+        return CitizenAppPalette.error;
       default:
-        return const Color(0xFFF59E0B);
+        return CitizenAppPalette.mauve;
     }
   }
 }
@@ -638,7 +622,7 @@ class _HeroCard extends StatelessWidget {
               _HeroPill(
                 icon: Icons.tag_rounded,
                 label: trackingId,
-                accent: const Color(0xFF3B82F6),
+                accent: citizenPrimaryActionColor(context),
               ),
               _HeroPill(
                 icon: Icons.flag_outlined,
@@ -648,7 +632,7 @@ class _HeroCard extends StatelessWidget {
               _HeroPill(
                 icon: Icons.category_outlined,
                 label: category,
-                accent: const Color(0xFF8B5CF6),
+                accent: citizenAccentColor(context),
               ),
             ],
           ),
@@ -668,10 +652,14 @@ class _HeroCard extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFF3B82F6).withValues(alpha: 0.08),
+                color: citizenPrimaryActionColor(
+                  context,
+                ).withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: const Color(0xFF3B82F6).withValues(alpha: 0.14),
+                  color: citizenPrimaryActionColor(
+                    context,
+                  ).withValues(alpha: 0.14),
                 ),
               ),
               child: Text(
@@ -904,20 +892,20 @@ class _TimelineStepCard extends StatelessWidget {
     switch (step.key) {
       case 'resolved':
         return step.completed || step.active
-            ? const Color(0xFF22C55E)
-            : const Color(0xFF64748B);
+            ? CitizenAppPalette.navy
+            : CitizenAppPalette.slate;
       case 'rejected':
         return step.completed || step.active
-            ? const Color(0xFFEF4444)
-            : const Color(0xFF64748B);
+            ? CitizenAppPalette.error
+            : CitizenAppPalette.slate;
       case 'in_progress':
         return step.completed || step.active
-            ? const Color(0xFF3B82F6)
-            : const Color(0xFF64748B);
+            ? CitizenAppPalette.slate
+            : CitizenAppPalette.slate;
       default:
         return step.completed || step.active
-            ? const Color(0xFFF59E0B)
-            : const Color(0xFF64748B);
+            ? CitizenAppPalette.mauve
+            : CitizenAppPalette.slate;
     }
   }
 }
@@ -1089,8 +1077,8 @@ class _VideoAttachmentCard extends StatelessWidget {
           FilledButton.icon(
             onPressed: onOpen,
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF3B82F6),
-              foregroundColor: Colors.white,
+              backgroundColor: citizenPrimaryActionColor(context),
+              foregroundColor: citizenOnPrimaryActionColor(context),
             ),
             icon: const Icon(Icons.open_in_new, size: 16),
             label: const Text('Open video'),
@@ -1154,9 +1142,9 @@ class _DetailErrorState extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(
+              Icon(
                 Icons.error_outline_rounded,
-                color: Color(0xFFEF4444),
+                color: CitizenAppPalette.error,
                 size: 30,
               ),
               const SizedBox(height: 12),
@@ -1181,8 +1169,8 @@ class _DetailErrorState extends StatelessWidget {
               FilledButton.icon(
                 onPressed: onRetry,
                 style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF3B82F6),
-                  foregroundColor: Colors.white,
+                  backgroundColor: citizenPrimaryActionColor(context),
+                  foregroundColor: citizenOnPrimaryActionColor(context),
                 ),
                 icon: const Icon(Icons.refresh_rounded),
                 label: const Text('Retry'),

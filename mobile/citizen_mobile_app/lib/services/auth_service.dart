@@ -17,6 +17,19 @@ class AuthSessionExpiredException implements Exception {
 }
 
 class AuthService {
+  Future<void> persistSession({
+    required String token,
+    required Map<String, dynamic> user,
+    String fallbackRole = 'citizen',
+  }) async {
+    await TokenStorage.saveToken(token);
+    await TokenStorage.saveRole(user['role']?.toString() ?? fallbackRole);
+  }
+
+  Future<void> clearLocalSession() async {
+    await TokenStorage.clearAll();
+  }
+
   String _extractErrorMessage(Map<String, dynamic> data, String fallback) {
     final errors = data['errors'];
     if (errors is Map<String, dynamic>) {
@@ -79,8 +92,7 @@ class AuthService {
           throw Exception('Invalid login response from server');
         }
 
-        await TokenStorage.saveToken(token);
-        await TokenStorage.saveRole(user['role']?.toString() ?? 'citizen');
+        await persistSession(token: token, user: user);
 
         return data;
       }
@@ -121,8 +133,7 @@ class AuthService {
           throw Exception('Invalid Google login response from server');
         }
 
-        await TokenStorage.saveToken(token);
-        await TokenStorage.saveRole(user['role']?.toString() ?? 'citizen');
+        await persistSession(token: token, user: user);
 
         return data;
       }
@@ -136,6 +147,8 @@ class AuthService {
   }
 
   Future<Map<String, dynamic>> register({
+    required String firstName,
+    required String lastName,
     required String name,
     required String email,
     String? mobileNumber,
@@ -147,6 +160,8 @@ class AuthService {
         _buildUri('/auth/register'),
         headers: await _headers(),
         body: jsonEncode({
+          'first_name': firstName,
+          'last_name': lastName,
           'name': name,
           'email': email,
           if (mobileNumber != null && mobileNumber.isNotEmpty)
@@ -159,16 +174,6 @@ class AuthService {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final token = data['token']?.toString();
-        final user = data['user'] as Map<String, dynamic>?;
-
-        if (token == null || user == null) {
-          throw Exception('Invalid register response from server');
-        }
-
-        await TokenStorage.saveToken(token);
-        await TokenStorage.saveRole(user['role']?.toString() ?? 'citizen');
-
         return data;
       }
 
@@ -211,8 +216,7 @@ class AuthService {
       final user = data['user'] as Map<String, dynamic>?;
 
       if (token != null && user != null) {
-        await TokenStorage.saveToken(token);
-        await TokenStorage.saveRole(user['role']?.toString() ?? 'admin');
+        await persistSession(token: token, user: user, fallbackRole: 'admin');
       }
 
       return data;

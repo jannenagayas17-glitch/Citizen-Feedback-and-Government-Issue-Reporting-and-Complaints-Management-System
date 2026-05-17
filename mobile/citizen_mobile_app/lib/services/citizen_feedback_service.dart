@@ -27,7 +27,7 @@ class CitizenFeedbackService {
       authRequired: true,
       body: {
         'office_id': officeId,
-        'report_id': ?reportId,
+        ...?(reportId == null ? null : {'report_id': reportId}),
         'type': type,
         'message': message,
         'rating': rating,
@@ -42,10 +42,7 @@ class CitizenFeedbackService {
 
     if (decoded is Map<String, dynamic>) {
       throw Exception(
-        decoded['message']?.toString() ??
-            (decoded['errors'] != null
-                ? decoded['errors'].toString()
-                : 'Failed to send feedback'),
+        decoded['message']?.toString() ?? _extractFirstError(decoded),
       );
     }
 
@@ -78,5 +75,23 @@ class CitizenFeedbackService {
     }
 
     throw Exception(fallbackMessage);
+  }
+
+  String _extractFirstError(Map<String, dynamic> data) {
+    final errors = data['errors'];
+    if (errors is Map<String, dynamic>) {
+      for (final value in errors.values) {
+        if (value is List && value.isNotEmpty) {
+          return value.first.toString();
+        }
+
+        final text = value?.toString().trim() ?? '';
+        if (text.isNotEmpty) {
+          return text;
+        }
+      }
+    }
+
+    return 'Failed to send feedback';
   }
 }

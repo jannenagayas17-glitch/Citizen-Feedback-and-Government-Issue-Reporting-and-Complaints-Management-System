@@ -23,8 +23,8 @@ void main() {
   ) async {
     await pumpLoginScreen(tester);
 
-    await tester.ensureVisible(find.widgetWithText(ElevatedButton, 'Login'));
-    await tester.tap(find.widgetWithText(ElevatedButton, 'Login'));
+    await tester.ensureVisible(find.widgetWithText(ElevatedButton, 'Sign In'));
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Sign In'));
     await tester.pump();
 
     expect(find.text('Email address is required.'), findsOneWidget);

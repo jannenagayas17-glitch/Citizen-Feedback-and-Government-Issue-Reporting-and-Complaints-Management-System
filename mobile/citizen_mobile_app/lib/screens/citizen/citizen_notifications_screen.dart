@@ -249,8 +249,8 @@ class _CitizenNotificationsScreenState
                                 const SizedBox(height: 6),
                                 Text(
                                   trackingId,
-                                  style: const TextStyle(
-                                    color: Color(0xFF93C5FD),
+                                  style: TextStyle(
+                                    color: citizenPrimaryActionColor(context),
                                     fontWeight: FontWeight.w700,
                                     fontSize: 12,
                                   ),
@@ -297,9 +297,13 @@ class _CitizenNotificationsScreenState
         height: 62,
         child: FloatingActionButton(
           shape: const CircleBorder(),
-          backgroundColor: const Color(0xFF3B82F6),
+          backgroundColor: citizenPrimaryActionColor(context),
           onPressed: _openSubmit,
-          child: const Icon(Icons.add, color: Colors.white, size: 28),
+          child: Icon(
+            Icons.add,
+            color: citizenOnPrimaryActionColor(context),
+            size: 28,
+          ),
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
@@ -333,15 +337,15 @@ class _CitizenNotificationsScreenState
   Color _statusColor(String status) {
     switch (status) {
       case 'Submitted':
-        return const Color(0xFFF59E0B);
+        return CitizenAppPalette.mauve;
       case 'In Progress':
-        return const Color(0xFF4B82F7);
+        return CitizenAppPalette.slate;
       case 'Resolved':
-        return const Color(0xFF22C55E);
+        return citizenPrimaryActionColor(context);
       case 'Rejected':
-        return const Color(0xFFEF4444);
+        return CitizenAppPalette.error;
       default:
-        return const Color(0xFF64748B);
+        return citizenHighlightColor(context);
     }
   }
 
@@ -390,19 +394,19 @@ class _StatusBadge extends StatelessWidget {
     Color color;
     switch (status) {
       case 'Submitted':
-        color = const Color(0xFF22C55E);
+        color = CitizenAppPalette.mauve;
         break;
       case 'Under Review':
-        color = const Color(0xFFF59E0B);
+        color = citizenHighlightColor(context);
         break;
       case 'In Progress':
-        color = const Color(0xFF4B82F7);
+        color = CitizenAppPalette.slate;
         break;
       case 'Resolved':
-        color = const Color(0xFF64748B);
+        color = citizenPrimaryActionColor(context);
         break;
       default:
-        color = const Color(0xFF64748B);
+        color = citizenMutedColor(context);
     }
 
     return Container(

@@ -501,8 +501,8 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
             const SizedBox(height: 12),
             Text(
               trackingId,
-              style: const TextStyle(
-                color: Color(0xFFBFDBFE),
+              style: TextStyle(
+                color: citizenPrimaryActionColor(context),
                 fontWeight: FontWeight.w700,
                 fontSize: 16,
               ),
@@ -535,7 +535,6 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const accent = Color(0xFF4B82F7);
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Scaffold(
@@ -644,9 +643,9 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                       decoration: _inputDecoration(
                         'Select a Tacloban City barangay',
                         errorText: _locationError,
-                        prefixIcon: const Icon(
+                        prefixIcon: Icon(
                           Icons.location_on_rounded,
-                          color: Color(0xFFFF5A7A),
+                          color: citizenAccentColor(context),
                           size: 16,
                         ),
                         suffixIcon: Icon(
@@ -698,20 +697,20 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                       child: ElevatedButton(
                         onPressed: _isSubmitting ? null : _submit,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: accent,
-                          foregroundColor: Colors.white,
+                          backgroundColor: citizenPrimaryActionColor(context),
+                          foregroundColor: citizenOnPrimaryActionColor(context),
                           elevation: 0,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
                           ),
                         ),
                         child: _isSubmitting
-                            ? const SizedBox(
+                            ? SizedBox(
                                 width: 20,
                                 height: 20,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2.2,
-                                  color: Colors.white,
+                                  color: citizenOnPrimaryActionColor(context),
                                 ),
                               )
                             : const Text(
@@ -793,7 +792,10 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: Color(0xFF4B82F7), width: 1.2),
+        borderSide: BorderSide(
+          color: citizenPrimaryActionColor(context),
+          width: 1.2,
+        ),
       ),
       hintStyle: TextStyle(color: citizenMutedColor(context)),
       errorText: errorText,
@@ -991,7 +993,6 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     return Row(
       children: _priorities.map((priority) {
         final isSelected = _selectedPriority == priority;
-        final palette = _priorityPalette(priority);
 
         return Expanded(
           child: Padding(
@@ -1005,11 +1006,13 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                 height: 40,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: isSelected ? palette.fill : citizenInputColor(context),
+                  color: isSelected
+                      ? citizenPriorityFillColor(context, priority)
+                      : citizenInputColor(context),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: isSelected
-                        ? palette.border
+                        ? citizenPriorityBorderColor(context, priority)
                         : citizenBorderColor(context),
                   ),
                 ),
@@ -1017,7 +1020,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                   priority,
                   style: TextStyle(
                     color: isSelected
-                        ? palette.text
+                        ? citizenPriorityTextColor(context, priority)
                         : citizenBodyColor(context),
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -1029,41 +1032,6 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
         );
       }).toList(),
     );
-  }
-
-  _PriorityPalette _priorityPalette(String priority) {
-    switch (priority) {
-      case 'Low':
-        return const _PriorityPalette(
-          fill: Color(0xFF243E73),
-          border: Color(0xFF4B82F7),
-          text: Colors.white,
-        );
-      case 'Normal':
-        return const _PriorityPalette(
-          fill: Color(0xFF1F4D3A),
-          border: Color(0xFF22C55E),
-          text: Colors.white,
-        );
-      case 'High':
-        return const _PriorityPalette(
-          fill: Color(0xFF6B421A),
-          border: Color(0xFFF59E0B),
-          text: Colors.white,
-        );
-      case 'Urgent':
-        return const _PriorityPalette(
-          fill: Color(0xFF6A2430),
-          border: Color(0xFFEF4444),
-          text: Color(0xFFFFD5D8),
-        );
-      default:
-        return const _PriorityPalette(
-          fill: Color(0xFF293248),
-          border: Color(0xFF4B82F7),
-          text: Colors.white,
-        );
-    }
   }
 
   Widget _buildEvidenceCard() {
@@ -1093,12 +1061,14 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
               decoration: BoxDecoration(
                 color: isDark
                     ? Colors.white.withValues(alpha: 0.06)
-                    : const Color(0xFFE0EAFF),
+                    : citizenHighlightColor(context).withValues(alpha: 0.18),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(
                 Icons.photo_camera_outlined,
-                color: isDark ? Colors.white70 : const Color(0xFF2563EB),
+                color: isDark
+                    ? citizenHighlightColor(context)
+                    : citizenPrimaryActionColor(context),
               ),
             ),
             const SizedBox(height: 12),
@@ -1149,12 +1119,14 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
               decoration: BoxDecoration(
                 color: isDark
                     ? Colors.white.withValues(alpha: 0.06)
-                    : const Color(0xFFE0EAFF),
+                    : citizenHighlightColor(context).withValues(alpha: 0.18),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
                 icon,
-                color: isDark ? Colors.white : const Color(0xFF2563EB),
+                color: isDark
+                    ? citizenHighlightColor(context)
+                    : citizenPrimaryActionColor(context),
               ),
             ),
             const SizedBox(width: 12),
@@ -1205,18 +1177,6 @@ class _SelectedMediaItem {
   bool get isVideo => mediaType == 'video';
 }
 
-class _PriorityPalette {
-  const _PriorityPalette({
-    required this.fill,
-    required this.border,
-    required this.text,
-  });
-
-  final Color fill;
-  final Color border;
-  final Color text;
-}
-
 class _SelectedMediaChip extends StatelessWidget {
   const _SelectedMediaChip({required this.item, required this.onRemove});
 
@@ -1246,7 +1206,9 @@ class _SelectedMediaChip extends StatelessWidget {
               children: [
                 Icon(
                   Icons.videocam_outlined,
-                  color: isDark ? Colors.white : const Color(0xFF2563EB),
+                  color: isDark
+                      ? citizenHighlightColor(context)
+                      : citizenPrimaryActionColor(context),
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -1278,7 +1240,7 @@ class _SelectedMediaChip extends StatelessWidget {
           height: 92,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            color: const Color(0xFFF3F4F6),
+            color: citizenInputColor(context),
             image: item.previewBytes != null
                 ? DecorationImage(
                     image: MemoryImage(item.previewBytes!),
@@ -1317,8 +1279,8 @@ class _RemoveMediaButton extends StatelessWidget {
       child: Container(
         width: 24,
         height: 24,
-        decoration: const BoxDecoration(
-          color: Color(0xFF111827),
+        decoration: BoxDecoration(
+          color: citizenTitleColor(context),
           shape: BoxShape.circle,
         ),
         child: const Icon(Icons.close, size: 14, color: Colors.white),

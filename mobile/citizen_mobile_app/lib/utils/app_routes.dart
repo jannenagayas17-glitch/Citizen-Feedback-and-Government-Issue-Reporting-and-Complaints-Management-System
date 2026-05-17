@@ -6,6 +6,13 @@ import '../screens/auth/register_screen.dart';
 import '../screens/citizen/citizen_home_screen.dart';
 import '../screens/splash/splash_screen.dart';
 
+class LoginRouteArguments {
+  const LoginRouteArguments({this.successMessage, this.prefilledEmail});
+
+  final String? successMessage;
+  final String? prefilledEmail;
+}
+
 class AppRoutes {
   static const String splash = '/';
   static const String login = '/login';

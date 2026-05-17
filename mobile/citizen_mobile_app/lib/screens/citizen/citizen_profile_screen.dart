@@ -10,6 +10,7 @@ import '../../services/citizen_data_cache.dart';
 import '../../services/citizen_avatar_service.dart';
 import '../../utils/app_routes.dart';
 import '../../utils/app_theme_controller.dart';
+import '../../utils/citizen_theme_colors.dart';
 import '../../widgets/citizen_avatar.dart';
 import '../../widgets/citizen_bottom_nav.dart';
 import '../../widgets/theme_mode_toggle.dart';
@@ -228,12 +229,9 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
       context: context,
       barrierDismissible: !saving,
       builder: (dialogContext) {
-        final isDark =
-            Theme.of(dialogContext).colorScheme.brightness == Brightness.dark;
-        final titleColor = isDark ? Colors.white : const Color(0xFF12213A);
-        final bodyColor = isDark
-            ? Colors.white.withValues(alpha: 0.70)
-            : const Color(0xFF64748B);
+        final isDark = citizenIsDark(dialogContext);
+        final titleColor = citizenTitleColor(dialogContext);
+        final bodyColor = citizenBodyColor(dialogContext);
         final screenWidth = MediaQuery.sizeOf(dialogContext).width;
         final cropSize = (screenWidth - 96).clamp(196.0, 232.0).toDouble();
 
@@ -287,12 +285,12 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
                 width: 360,
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF111C2F) : Colors.white,
+                  color: citizenCardColor(dialogContext),
                   borderRadius: BorderRadius.circular(24),
                   border: Border.all(
                     color: isDark
                         ? Colors.white.withValues(alpha: 0.12)
-                        : const Color(0xFFD8E3F7),
+                        : citizenBorderColor(dialogContext),
                   ),
                   boxShadow: [
                     BoxShadow(
@@ -339,13 +337,11 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
                       padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF60A5FA), Color(0xFF2563EB)],
-                        ),
+                        gradient: citizenHeroGradient(dialogContext),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(
-                              0xFF2563EB,
+                            color: citizenPrimaryActionColor(
+                              dialogContext,
                             ).withValues(alpha: 0.25),
                             blurRadius: 22,
                             offset: const Offset(0, 10),
@@ -356,9 +352,7 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
                         child: RepaintBoundary(
                           key: boundaryKey,
                           child: ColoredBox(
-                            color: isDark
-                                ? const Color(0xFF0C1727)
-                                : const Color(0xFFEFF5FF),
+                            color: citizenInputColor(dialogContext),
                             child: GestureDetector(
                               onDoubleTap: () {
                                 final currentScale = transformController.value
@@ -405,12 +399,14 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
                                 ? null
                                 : () => saveCrop(setDialogState),
                             icon: saving
-                                ? const SizedBox(
+                                ? SizedBox(
                                     width: 16,
                                     height: 16,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
-                                      color: Colors.white,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onPrimary,
                                     ),
                                   )
                                 : const Icon(Icons.check_rounded, size: 18),
@@ -480,18 +476,12 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
     final role = (_user['role'] ?? 'citizen').toString();
     final bottomSafeArea = MediaQuery.of(context).padding.bottom;
     final themeController = AppThemeScope.of(context);
-    final isDark = Theme.of(context).colorScheme.brightness == Brightness.dark;
-
     return Scaffold(
-      backgroundColor: isDark
-          ? const Color(0xFF0C1727)
-          : const Color(0xFFF6F8FC),
+      backgroundColor: citizenScaffoldColor(context),
       appBar: AppBar(
         title: const Text('Profile'),
-        backgroundColor: isDark
-            ? const Color(0xFF0C1727)
-            : const Color(0xFFF6F8FC),
-        foregroundColor: isDark ? Colors.white : const Color(0xFF12213A),
+        backgroundColor: citizenScaffoldColor(context),
+        foregroundColor: citizenTitleColor(context),
         actions: const [
           Padding(
             padding: EdgeInsets.only(right: 12),
@@ -500,23 +490,7 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
         ],
       ),
       body: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: isDark
-                ? const [
-                    Color(0xFF0C1727),
-                    Color(0xFF1E293B),
-                    Color(0xFF463327),
-                  ]
-                : const [
-                    Color(0xFFF8FBFF),
-                    Color(0xFFEFF5FF),
-                    Color(0xFFFFFBF5),
-                  ],
-          ),
-        ),
+        decoration: BoxDecoration(gradient: citizenPageGradient(context)),
         child: ListView(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: EdgeInsets.fromLTRB(16, 18, 16, bottomSafeArea + 28),
@@ -559,10 +533,7 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
                         : null,
                     onTap: _isSavingProfile ? null : _openEditProfile,
                   ),
-                  Divider(
-                    height: 1,
-                    color: Colors.white.withValues(alpha: 0.10),
-                  ),
+                  Divider(height: 1, color: citizenBorderColor(context)),
                   AnimatedBuilder(
                     animation: themeController,
                     builder: (context, _) {
@@ -577,24 +548,21 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
                             : 'Light mode is active',
                         trailing: Switch.adaptive(
                           value: isDarkMode,
-                          activeThumbColor: const Color(0xFF93C5FD),
-                          activeTrackColor: const Color(
-                            0xFF2563EB,
-                          ).withValues(alpha: 0.50),
-                          inactiveThumbColor: const Color(0xFFFBBF24),
-                          inactiveTrackColor: const Color(
-                            0xFFFFF7ED,
-                          ).withValues(alpha: 0.42),
+                          activeThumbColor: citizenHighlightColor(context),
+                          activeTrackColor: citizenPrimaryActionColor(
+                            context,
+                          ).withValues(alpha: 0.45),
+                          inactiveThumbColor: citizenAccentColor(context),
+                          inactiveTrackColor: citizenInputColor(
+                            context,
+                          ).withValues(alpha: 0.72),
                           onChanged: themeController.setDarkMode,
                         ),
                         onTap: () => themeController.setDarkMode(!isDarkMode),
                       );
                     },
                   ),
-                  Divider(
-                    height: 1,
-                    color: Colors.white.withValues(alpha: 0.10),
-                  ),
+                  Divider(height: 1, color: citizenBorderColor(context)),
                   _ActionTile(
                     icon: Icons.description_outlined,
                     title: 'My reports',
@@ -608,10 +576,7 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
                       );
                     },
                   ),
-                  Divider(
-                    height: 1,
-                    color: Colors.white.withValues(alpha: 0.10),
-                  ),
+                  Divider(height: 1, color: citizenBorderColor(context)),
                   _ActionTile(
                     icon: Icons.rate_review_outlined,
                     title: 'Send feedback',
@@ -625,16 +590,13 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
                       );
                     },
                   ),
-                  Divider(
-                    height: 1,
-                    color: Colors.white.withValues(alpha: 0.10),
-                  ),
+                  Divider(height: 1, color: citizenBorderColor(context)),
                   _ActionTile(
                     icon: Icons.logout,
                     title: 'Logout',
                     subtitle: 'Sign out of this citizen account',
-                    iconColor: const Color(0xFFFF7B7B),
-                    titleColor: const Color(0xFFFF7B7B),
+                    iconColor: CitizenAppPalette.error,
+                    titleColor: CitizenAppPalette.error,
                     trailing: _isLoggingOut
                         ? const SizedBox(
                             width: 18,
@@ -662,9 +624,13 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
         height: 62,
         child: FloatingActionButton(
           shape: const CircleBorder(),
-          backgroundColor: const Color(0xFF3B82F6),
+          backgroundColor: citizenPrimaryActionColor(context),
           onPressed: _openSubmit,
-          child: const Icon(Icons.add, color: Colors.white, size: 28),
+          child: Icon(
+            Icons.add,
+            color: citizenOnPrimaryActionColor(context),
+            size: 28,
+          ),
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
@@ -685,22 +651,16 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
   }
 
   Widget _buildHeroCard(String name, String email, String role) {
-    final isDark = Theme.of(context).colorScheme.brightness == Brightness.dark;
-    final titleColor = isDark ? Colors.white : const Color(0xFF12213A);
-    final bodyColor = isDark
-        ? Colors.white.withValues(alpha: 0.72)
-        : const Color(0xFF64748B);
+    final titleColor = citizenTitleColor(context);
+    final bodyColor = citizenBodyColor(context);
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withValues(alpha: 0.10) : Colors.white,
+        color: citizenCardColor(context),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.14)
-              : const Color(0xFFD8E3F7),
-        ),
+        border: Border.all(color: citizenBorderColor(context)),
+        boxShadow: citizenCardShadow(context),
       ),
       child: Column(
         children: [
@@ -710,10 +670,10 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
               CitizenAvatar(
                 name: name,
                 size: 76,
-                backgroundColor: const Color(
-                  0xFF2563EB,
-                ).withValues(alpha: 0.16),
-                textColor: const Color(0xFF9DBEFF),
+                backgroundColor: citizenHighlightColor(
+                  context,
+                ).withValues(alpha: citizenIsDark(context) ? 0.18 : 0.14),
+                textColor: citizenTitleColor(context),
                 fontSize: 26,
               ),
               Positioned(
@@ -726,24 +686,24 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
                     width: 32,
                     height: 32,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF2563EB),
+                      color: citizenPrimaryActionColor(context),
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: const Color(0xFF0C1727),
+                        color: citizenScaffoldColor(context),
                         width: 2,
                       ),
                     ),
                     child: _isSavingAvatar
-                        ? const Padding(
-                            padding: EdgeInsets.all(7),
+                        ? Padding(
+                            padding: const EdgeInsets.all(7),
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: Colors.white,
+                              color: citizenOnPrimaryActionColor(context),
                             ),
                           )
-                        : const Icon(
+                        : Icon(
                             Icons.camera_alt_rounded,
-                            color: Colors.white,
+                            color: citizenOnPrimaryActionColor(context),
                             size: 16,
                           ),
                   ),
@@ -771,16 +731,18 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
             decoration: BoxDecoration(
-              color: const Color(0xFF2563EB).withValues(alpha: 0.18),
+              color: citizenPrimaryActionColor(context).withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
-                color: const Color(0xFF2563EB).withValues(alpha: 0.30),
+                color: citizenPrimaryActionColor(
+                  context,
+                ).withValues(alpha: 0.30),
               ),
             ),
             child: Text(
               _prettyRole(role),
-              style: const TextStyle(
-                color: Color(0xFFB8D3FF),
+              style: TextStyle(
+                color: citizenPrimaryActionColor(context),
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -791,17 +753,11 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
   }
 
   Widget _buildActionCard({required Widget child}) {
-    final isDark = Theme.of(context).colorScheme.brightness == Brightness.dark;
-
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withValues(alpha: 0.10) : Colors.white,
+        color: citizenCardColor(context),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.14)
-              : const Color(0xFFD8E3F7),
-        ),
+        border: Border.all(color: citizenBorderColor(context)),
       ),
       child: child,
     );
@@ -886,18 +842,18 @@ class _EditCitizenProfileSheetState extends State<_EditCitizenProfileSheet> {
       child: Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: const Color(0xFF121B31),
+          color: citizenCardColor(context),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+          border: Border.all(color: citizenBorderColor(context)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Edit Profile',
               style: TextStyle(
-                color: Colors.white,
+                color: citizenTitleColor(context),
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
               ),
@@ -907,8 +863,8 @@ class _EditCitizenProfileSheetState extends State<_EditCitizenProfileSheet> {
             const SizedBox(height: 8),
             TextField(
               controller: _nameController,
-              style: const TextStyle(color: Colors.white),
-              cursorColor: Colors.white,
+              style: TextStyle(color: citizenTitleColor(context)),
+              cursorColor: citizenPrimaryActionColor(context),
               inputFormatters: [
                 FilteringTextInputFormatter.deny(
                   _CitizenProfileValidators.emojiRegex,
@@ -930,8 +886,8 @@ class _EditCitizenProfileSheetState extends State<_EditCitizenProfileSheet> {
             TextField(
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
-              style: const TextStyle(color: Colors.white),
-              cursorColor: Colors.white,
+              style: TextStyle(color: citizenTitleColor(context)),
+              cursorColor: citizenPrimaryActionColor(context),
               inputFormatters: [
                 FilteringTextInputFormatter.deny(
                   _CitizenProfileValidators.emojiRegex,
@@ -953,8 +909,8 @@ class _EditCitizenProfileSheetState extends State<_EditCitizenProfileSheet> {
             TextField(
               controller: _mobileController,
               keyboardType: TextInputType.phone,
-              style: const TextStyle(color: Colors.white),
-              cursorColor: Colors.white,
+              style: TextStyle(color: citizenTitleColor(context)),
+              cursorColor: citizenPrimaryActionColor(context),
               inputFormatters: [
                 FilteringTextInputFormatter.digitsOnly,
                 LengthLimitingTextInputFormatter(11),
@@ -976,8 +932,8 @@ class _EditCitizenProfileSheetState extends State<_EditCitizenProfileSheet> {
               child: ElevatedButton(
                 onPressed: _submit,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2563EB),
-                  foregroundColor: Colors.white,
+                  backgroundColor: citizenPrimaryActionColor(context),
+                  foregroundColor: citizenOnPrimaryActionColor(context),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
@@ -998,7 +954,7 @@ class _EditCitizenProfileSheetState extends State<_EditCitizenProfileSheet> {
     return Text(
       text,
       style: TextStyle(
-        color: Colors.white.withValues(alpha: 0.92),
+        color: citizenBodyColor(context),
         fontSize: 14,
         fontWeight: FontWeight.w600,
       ),
@@ -1011,31 +967,43 @@ class _EditCitizenProfileSheetState extends State<_EditCitizenProfileSheet> {
   }) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.45)),
+      hintStyle: TextStyle(color: citizenMutedColor(context)),
       filled: true,
-      fillColor: Colors.white.withValues(alpha: 0.10),
+      fillColor: citizenInputColor(context),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.16)),
+        borderSide: BorderSide(color: citizenBorderColor(context)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.16)),
+        borderSide: BorderSide(color: citizenBorderColor(context)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.4),
+        borderSide: BorderSide(
+          color: citizenPrimaryActionColor(context),
+          width: 1.4,
+        ),
       ),
       errorText: errorText,
       errorMaxLines: 2,
-      errorStyle: const TextStyle(color: Color(0xFFFFB4B4), fontSize: 12),
+      errorStyle: TextStyle(
+        color: CitizenAppPalette.error.withValues(alpha: 0.92),
+        fontSize: 12,
+      ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.2),
+        borderSide: const BorderSide(
+          color: CitizenAppPalette.error,
+          width: 1.2,
+        ),
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.3),
+        borderSide: const BorderSide(
+          color: CitizenAppPalette.error,
+          width: 1.3,
+        ),
       ),
     );
   }
@@ -1054,32 +1022,21 @@ class _ProfileStatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).colorScheme.brightness == Brightness.dark;
-
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withValues(alpha: 0.10) : Colors.white,
+        color: citizenCardColor(context),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.14)
-              : const Color(0xFFD8E3F7),
-        ),
+        border: Border.all(color: citizenBorderColor(context)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: const Color(0xFF9DBEFF)),
+          Icon(icon, color: citizenPrimaryActionColor(context)),
           const SizedBox(height: 10),
           Text(
             label,
-            style: TextStyle(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.62)
-                  : const Color(0xFF64748B),
-              fontSize: 12,
-            ),
+            style: TextStyle(color: citizenBodyColor(context), fontSize: 12),
           ),
           const SizedBox(height: 4),
           Text(
@@ -1087,7 +1044,7 @@ class _ProfileStatCard extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: isDark ? Colors.white : const Color(0xFF12213A),
+              color: citizenTitleColor(context),
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -1118,12 +1075,9 @@ class _ActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).colorScheme.brightness == Brightness.dark;
-    final defaultTitleColor = isDark ? Colors.white : const Color(0xFF12213A);
-    final mutedColor = isDark
-        ? Colors.white.withValues(alpha: 0.72)
-        : const Color(0xFF64748B);
-    final chevronColor = isDark ? Colors.white : const Color(0xFF64748B);
+    final defaultTitleColor = citizenTitleColor(context);
+    final mutedColor = citizenBodyColor(context);
+    final chevronColor = citizenMutedColor(context);
 
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
