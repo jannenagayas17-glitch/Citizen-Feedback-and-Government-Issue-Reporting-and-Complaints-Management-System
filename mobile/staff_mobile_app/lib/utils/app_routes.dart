@@ -4,6 +4,7 @@ import '../screens/admin/admin_home_screen.dart';
 import '../screens/auth/forgot_password_screen.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
+import '../screens/front_desk/front_desk_home_screen.dart';
 import '../screens/super_admin/super_admin_dashboard.dart';
 import 'protected_portal_route.dart';
 import 'session_gate.dart';
@@ -15,6 +16,7 @@ class AppRoutes {
   static const String forgotPassword = '/forgot-password';
   static const String adminHome = '/admin-home';
   static const String superAdminHome = '/super-admin-home';
+  static const String frontDeskHome = '/front-desk-home';
 
   static Map<String, WidgetBuilder> get routes {
     return {
@@ -25,6 +27,10 @@ class AppRoutes {
       adminHome: (context) => const ProtectedPortalRoute(
         allowedRoles: {'admin'},
         childBuilder: _buildAdminHome,
+      ),
+      frontDeskHome: (context) => const ProtectedPortalRoute(
+        allowedRoles: {'administrative_staff'},
+        childBuilder: _buildFrontDeskHome,
       ),
       superAdminHome: (context) => const ProtectedPortalRoute(
         allowedRoles: {'super_admin'},
@@ -45,5 +51,12 @@ class AppRoutes {
     Map<String, dynamic> user,
   ) {
     return const SuperAdminDashboard();
+  }
+
+  static Widget _buildFrontDeskHome(
+    BuildContext context,
+    Map<String, dynamic> user,
+  ) {
+    return const FrontDeskHomeScreen();
   }
 }

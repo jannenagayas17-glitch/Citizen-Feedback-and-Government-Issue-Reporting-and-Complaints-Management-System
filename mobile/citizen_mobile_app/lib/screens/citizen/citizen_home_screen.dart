@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../models/report_model.dart';
 import '../../services/auth_service.dart';
+import '../../services/citizen_avatar_service.dart';
 import '../../services/citizen_data_cache.dart';
 import '../../utils/app_routes.dart';
+import '../../utils/citizen_theme_colors.dart';
 import '../../widgets/citizen_avatar.dart';
 import '../../widgets/citizen_bottom_nav.dart';
 import '../../widgets/theme_mode_toggle.dart';
@@ -122,30 +124,10 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).colorScheme.brightness == Brightness.dark;
-
     return Scaffold(
-      backgroundColor: isDark
-          ? const Color(0xFF0B1322)
-          : const Color(0xFFF6F8FC),
+      backgroundColor: citizenScaffoldColor(context),
       body: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: isDark
-                ? const [
-                    Color(0xFF0B1322),
-                    Color(0xFF10192E),
-                    Color(0xFF0E1525),
-                  ]
-                : const [
-                    Color(0xFFF8FBFF),
-                    Color(0xFFEFF5FF),
-                    Color(0xFFF6F8FC),
-                  ],
-          ),
-        ),
+        decoration: BoxDecoration(gradient: citizenPageGradient(context)),
         child: SafeArea(
           child: RefreshIndicator(
             onRefresh: _refresh,
@@ -176,6 +158,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
                 final user =
                     payload['user'] as Map<String, dynamic>? ?? const {};
                 _cachedUser = user;
+                CitizenAvatarService.syncFromUser(user);
                 final visibleReports = _applyCategoryFilter(reports);
                 final notificationCount = reports
                     .where(
@@ -242,9 +225,13 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
         height: 62,
         child: FloatingActionButton(
           shape: const CircleBorder(),
-          backgroundColor: const Color(0xFF3B82F6),
+          backgroundColor: citizenPrimaryActionColor(context),
           onPressed: _openSubmitReport,
-          child: const Icon(Icons.add, color: Colors.white, size: 28),
+          child: Icon(
+            Icons.add,
+            color: citizenOnPrimaryActionColor(context),
+            size: 28,
+          ),
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
@@ -267,7 +254,6 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
         .toString()
         .replaceFirst('Exception: ', '')
         .replaceFirst('AuthSessionExpiredException: ', '');
-    final isDark = Theme.of(context).colorScheme.brightness == Brightness.dark;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(14, 20, 14, 104),
@@ -275,27 +261,23 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
         Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF171F32) : Colors.white,
+            color: citizenCardColor(context),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : const Color(0xFFD8E3F7),
-            ),
+            border: Border.all(color: citizenBorderColor(context)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(
+              Icon(
                 Icons.cloud_off_rounded,
-                color: Color(0xFFFBBF24),
+                color: citizenHighlightColor(context),
                 size: 30,
               ),
               const SizedBox(height: 12),
               Text(
                 'Unable to load your account',
                 style: TextStyle(
-                  color: isDark ? Colors.white : const Color(0xFF12213A),
+                  color: citizenTitleColor(context),
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
                 ),
@@ -304,9 +286,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
               Text(
                 message,
                 style: TextStyle(
-                  color: isDark
-                      ? const Color(0xFFB7C0D5)
-                      : const Color(0xFF64748B),
+                  color: citizenBodyColor(context),
                   fontSize: 13,
                   height: 1.45,
                 ),
@@ -319,8 +299,8 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
                   icon: const Icon(Icons.refresh_rounded),
                   label: const Text('Try again'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF3B82F6),
-                    foregroundColor: Colors.white,
+                    backgroundColor: citizenPrimaryActionColor(context),
+                    foregroundColor: citizenOnPrimaryActionColor(context),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
@@ -337,7 +317,6 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
 
   Widget _buildHeader(Map<String, dynamic> user, int notificationCount) {
     final profileName = (user['name'] ?? 'Citizen').toString().trim();
-    final isDark = Theme.of(context).colorScheme.brightness == Brightness.dark;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -349,15 +328,11 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
             CitizenAvatar(
               name: profileName,
               size: compactHeader ? 38 : 40,
-              backgroundColor: isDark
-                  ? const Color(0xFF2D447B)
-                  : const Color(0xFFE0EAFF),
-              textColor: isDark
-                  ? const Color(0xFFC6D6FF)
-                  : const Color(0xFF1D4ED8),
-              borderColor: isDark
-                  ? Colors.white.withValues(alpha: 0.22)
-                  : const Color(0xFFBFDBFE),
+              backgroundColor: citizenHighlightColor(
+                context,
+              ).withValues(alpha: citizenIsDark(context) ? 0.20 : 0.16),
+              textColor: citizenTitleColor(context),
+              borderColor: citizenBorderColor(context),
               borderWidth: 1.5,
               fontSize: compactHeader ? 17 : 18,
             ),
@@ -368,7 +343,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: isDark ? Colors.white : const Color(0xFF12213A),
+                  color: citizenTitleColor(context),
                   fontSize: compactHeader ? 14.5 : 15.5,
                   fontWeight: FontWeight.w800,
                   height: 1.18,
@@ -396,7 +371,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
         Expanded(
           child: _StatTile(
             icon: Icons.bar_chart_rounded,
-            iconColor: const Color(0xFF6EE7B7),
+            iconColor: citizenPrimaryActionColor(context),
             value: '${dashboard['total_reports'] ?? 0}',
             label: 'Total',
           ),
@@ -405,7 +380,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
         Expanded(
           child: _StatTile(
             icon: Icons.fiber_new_rounded,
-            iconColor: const Color(0xFFFBBF24),
+            iconColor: citizenHighlightColor(context),
             value: '${dashboard['new'] ?? 0}',
             label: 'New',
           ),
@@ -414,7 +389,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
         Expanded(
           child: _StatTile(
             icon: Icons.access_time_filled_rounded,
-            iconColor: const Color(0xFFE5E7EB),
+            iconColor: citizenAccentColor(context),
             value: '${dashboard['in_progress'] ?? 0}',
             label: 'Active',
           ),
@@ -423,7 +398,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
         Expanded(
           child: _StatTile(
             icon: Icons.check_box_rounded,
-            iconColor: const Color(0xFF4ADE80),
+            iconColor: citizenReportStatusColor(context, 'Resolved'),
             value: '${dashboard['resolved'] ?? 0}',
             label: 'Done',
           ),
@@ -477,9 +452,9 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
+        color: citizenInputColor(context),
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        border: Border.all(color: citizenBorderColor(context)),
       ),
     );
   }
@@ -491,17 +466,9 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF4F83FF), Color(0xFF3B82F6)],
-          ),
+          gradient: citizenHeroGradient(context),
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF3B82F6).withValues(alpha: 0.32),
-              blurRadius: 18,
-              offset: const Offset(0, 10),
-            ),
-          ],
+          boxShadow: citizenCardShadow(context),
         ),
         child: const Row(
           children: [
@@ -539,28 +506,28 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
   }
 
   Widget _buildNoticeCard() {
-    final isDark = Theme.of(context).colorScheme.brightness == Brightness.dark;
-
     return Container(
       padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF2A2112) : const Color(0xFFFFF8E7),
+        color: citizenInfoSurfaceColor(context),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? const Color(0xFF8F6A1F) : const Color(0xFFFACC15),
-        ),
+        border: Border.all(color: citizenInfoBorderColor(context)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.circle, color: Color(0xFFFBBF24), size: 10),
-              SizedBox(width: 8),
+              Icon(
+                Icons.circle,
+                color: citizenHighlightColor(context),
+                size: 10,
+              ),
+              const SizedBox(width: 8),
               Text(
                 'Live reporting is enabled',
                 style: TextStyle(
-                  color: Color(0xFFFBBF24),
+                  color: citizenInfoTextColor(context),
                   fontWeight: FontWeight.w700,
                   fontSize: 15,
                 ),
@@ -571,7 +538,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
           Text(
             'New reports submitted are stored in the backend database immediately.',
             style: TextStyle(
-              color: isDark ? const Color(0xFFD7C7A5) : const Color(0xFF6B4E16),
+              color: citizenBodyColor(context),
               fontSize: 12.5,
               height: 1.4,
             ),
@@ -583,7 +550,6 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
 
   Widget _buildFilterChips(List<dynamic> reports) {
     final filters = _buildFilters(reports);
-    final isDark = Theme.of(context).colorScheme.brightness == Brightness.dark;
 
     return SizedBox(
       height: 36,
@@ -603,17 +569,13 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
                 color: selected
-                    ? const Color(0xFF3B82F6)
-                    : isDark
-                    ? const Color(0xFF121B2F)
-                    : Colors.white,
+                    ? citizenPrimaryActionColor(context)
+                    : citizenCardColor(context),
                 borderRadius: BorderRadius.circular(22),
                 border: Border.all(
                   color: selected
-                      ? const Color(0xFF3B82F6)
-                      : isDark
-                      ? Colors.white.withValues(alpha: 0.08)
-                      : const Color(0xFFD8E3F7),
+                      ? citizenPrimaryActionColor(context)
+                      : citizenBorderColor(context),
                 ),
               ),
               child: Text(
@@ -622,10 +584,8 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
                     : '$filter (${_filterCountFor(reports, filter)})',
                 style: TextStyle(
                   color: selected
-                      ? Colors.white
-                      : isDark
-                      ? const Color(0xFFB7C0D5)
-                      : const Color(0xFF334155),
+                      ? citizenOnPrimaryActionColor(context)
+                      : citizenBodyColor(context),
                   fontWeight: FontWeight.w600,
                   fontSize: 12,
                 ),
@@ -638,14 +598,12 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
   }
 
   Widget _buildRecentHeader(int count) {
-    final isDark = Theme.of(context).colorScheme.brightness == Brightness.dark;
-
     return Row(
       children: [
         Text(
           'Recent Issues',
           style: TextStyle(
-            color: isDark ? Colors.white : const Color(0xFF12213A),
+            color: citizenTitleColor(context),
             fontSize: 20,
             fontWeight: FontWeight.w700,
           ),
@@ -653,41 +611,32 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
         const Spacer(),
         Text(
           '$count reports',
-          style: TextStyle(
-            color: isDark ? const Color(0xFF77839D) : const Color(0xFF64748B),
-            fontSize: 12,
-          ),
+          style: TextStyle(color: citizenBodyColor(context), fontSize: 12),
         ),
       ],
     );
   }
 
   Widget _buildEmptyState() {
-    final isDark = Theme.of(context).colorScheme.brightness == Brightness.dark;
-
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF151E31) : Colors.white,
+        color: citizenCardColor(context),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : const Color(0xFFD8E3F7),
-        ),
+        border: Border.all(color: citizenBorderColor(context)),
       ),
       child: Column(
         children: [
           Icon(
             Icons.inbox_outlined,
-            color: isDark ? Colors.white70 : const Color(0xFF64748B),
+            color: citizenMutedColor(context),
             size: 30,
           ),
           const SizedBox(height: 10),
           Text(
             'No reports found',
             style: TextStyle(
-              color: isDark ? Colors.white : const Color(0xFF12213A),
+              color: citizenTitleColor(context),
               fontWeight: FontWeight.w700,
               fontSize: 16,
             ),
@@ -695,11 +644,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
           const SizedBox(height: 6),
           Text(
             'Submit your first complaint to start tracking updates here.',
-            style: TextStyle(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.62)
-                  : const Color(0xFF64748B),
-            ),
+            style: TextStyle(color: citizenBodyColor(context)),
           ),
         ],
       ),
@@ -780,8 +725,6 @@ class _HeaderPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).colorScheme.brightness == Brightness.dark;
-
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(18),
@@ -791,19 +734,11 @@ class _HeaderPill extends StatelessWidget {
           width: 34,
           height: 34,
           decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF182238) : Colors.white,
+            color: citizenCardColor(context),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : const Color(0xFFD8E3F7),
-            ),
+            border: Border.all(color: citizenBorderColor(context)),
           ),
-          child: Icon(
-            icon,
-            color: isDark ? const Color(0xFFF472B6) : const Color(0xFFDB2777),
-            size: 16,
-          ),
+          child: Icon(icon, color: citizenAccentColor(context), size: 16),
         ),
       ),
     );
@@ -818,8 +753,6 @@ class _BellButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).colorScheme.brightness == Brightness.dark;
-
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(18),
@@ -830,17 +763,13 @@ class _BellButton extends StatelessWidget {
             width: 34,
             height: 34,
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF182238) : Colors.white,
+              color: citizenCardColor(context),
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : const Color(0xFFD8E3F7),
-              ),
+              border: Border.all(color: citizenBorderColor(context)),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.notifications_active,
-              color: Color(0xFFFBBF24),
+              color: citizenHighlightColor(context),
               size: 17,
             ),
           ),
@@ -852,10 +781,10 @@ class _BellButton extends StatelessWidget {
                 width: 18,
                 height: 18,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEF4444),
+                  color: CitizenAppPalette.error,
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color: isDark ? const Color(0xFF0B1322) : Colors.white,
+                    color: citizenScaffoldColor(context),
                     width: 2,
                   ),
                 ),
@@ -891,30 +820,21 @@ class _StatTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).colorScheme.brightness == Brightness.dark;
-    final resolvedIconColor = !isDark && iconColor == const Color(0xFFE5E7EB)
-        ? const Color(0xFF64748B)
-        : iconColor;
-
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 5),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF171F32) : Colors.white,
+        color: citizenCardColor(context),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : const Color(0xFFD8E3F7),
-        ),
+        border: Border.all(color: citizenBorderColor(context)),
       ),
       child: Column(
         children: [
-          Icon(icon, color: resolvedIconColor, size: 15),
+          Icon(icon, color: iconColor, size: 15),
           const SizedBox(height: 6),
           Text(
             value,
             style: TextStyle(
-              color: isDark ? Colors.white : const Color(0xFF12213A),
+              color: citizenTitleColor(context),
               fontSize: 16,
               fontWeight: FontWeight.w700,
               height: 1,
@@ -924,10 +844,7 @@ class _StatTile extends StatelessWidget {
           Text(
             label,
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: isDark ? const Color(0xFF9EA9C2) : const Color(0xFF64748B),
-              fontSize: 10.5,
-            ),
+            style: TextStyle(color: citizenBodyColor(context), fontSize: 10.5),
           ),
         ],
       ),
@@ -953,9 +870,8 @@ class _IssueCard extends StatelessWidget {
                 'Assigned office')
             .toString();
     final status = _displayStatus((report['status'] ?? 'Pending').toString());
-    final statusColor = _statusColor(status);
-    final iconColor = _iconColor(categoryName);
-    final isDark = Theme.of(context).colorScheme.brightness == Brightness.dark;
+    final statusColor = citizenReportStatusColor(context, status);
+    final iconColor = citizenCategoryAccent(categoryName);
 
     return InkWell(
       onTap: onTap,
@@ -963,13 +879,9 @@ class _IssueCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(13),
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF171F32) : Colors.white,
+          color: citizenCardColor(context),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.08)
-                : const Color(0xFFD8E3F7),
-          ),
+          border: Border.all(color: citizenBorderColor(context)),
         ),
         child: Row(
           children: [
@@ -992,7 +904,7 @@ class _IssueCard extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: isDark ? Colors.white : const Color(0xFF12213A),
+                      color: citizenTitleColor(context),
                       fontWeight: FontWeight.w700,
                       fontSize: 16,
                       height: 1.15,
@@ -1004,7 +916,7 @@ class _IssueCard extends StatelessWidget {
                       const Text(
                         '-',
                         style: TextStyle(
-                          color: Color(0xFFFB7185),
+                          color: CitizenAppPalette.mauve,
                           fontSize: 12,
                         ),
                       ),
@@ -1015,9 +927,7 @@ class _IssueCard extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: isDark
-                                ? const Color(0xFFA2AEC7)
-                                : const Color(0xFF64748B),
+                            color: citizenBodyColor(context),
                             fontSize: 12.5,
                           ),
                         ),
@@ -1059,34 +969,11 @@ class _IssueCard extends StatelessWidget {
     }
   }
 
-  Color _statusColor(String status) {
-    switch (status) {
-      case 'Resolved':
-        return const Color(0xFF4ADE80);
-      case 'In Progress':
-        return const Color(0xFF60A5FA);
-      case 'Submitted':
-        return const Color(0xFFFB7185);
-      case 'Rejected':
-        return const Color(0xFFF87171);
-      default:
-        return Colors.white70;
-    }
-  }
-
   IconData _issueIcon(String category) {
     final normalized = category.toLowerCase();
     if (normalized.contains('road')) return Icons.handyman_outlined;
     if (normalized.contains('water')) return Icons.water_drop_outlined;
     if (normalized.contains('electric')) return Icons.bolt_outlined;
     return Icons.report_outlined;
-  }
-
-  Color _iconColor(String category) {
-    final normalized = category.toLowerCase();
-    if (normalized.contains('road')) return const Color(0xFFF472B6);
-    if (normalized.contains('water')) return const Color(0xFF60A5FA);
-    if (normalized.contains('electric')) return const Color(0xFFFBBF24);
-    return const Color(0xFFA78BFA);
   }
 }

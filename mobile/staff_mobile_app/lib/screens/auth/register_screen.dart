@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../services/auth_service.dart';
 import '../../utils/app_routes.dart';
+import '../../utils/validators.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key, this.authService});
@@ -16,11 +17,6 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  static final RegExp _emojiRegex = RegExp(
-    r'[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]',
-    unicode: true,
-  );
-
   static const List<String> _adminTypes = [
     'Office Head',
     'Office Supervisor',
@@ -42,6 +38,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _obscureConfirmPassword = true;
   bool _isLoading = false;
   bool _isLoadingOffices = true;
+  bool _isNormalizingPhone = false;
   String? _firstNameError;
   String? _lastNameError;
   String? _emailError;
@@ -78,30 +75,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
-  bool _isValidEmail(String email) {
-    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-    return emailRegex.hasMatch(email);
-  }
-
-  bool _isValidPhone(String phone) {
-    return RegExp(r'^\d{11}$').hasMatch(phone);
-  }
-
-  bool _containsEmoji(String value) {
-    return _emojiRegex.hasMatch(value);
-  }
-
-  bool _isValidNamePart(String name) {
-    final trimmed = name.trim();
-    if (trimmed.isEmpty) {
-      return false;
-    }
-    final partRegex = RegExp(
-      r"^[A-Za-z]+(?:[.'-][A-Za-z]+)*\.?(?:\s+[A-Za-z]+(?:[.'-][A-Za-z]+)*\.?)*$",
-    );
-    return partRegex.hasMatch(trimmed);
-  }
-
   List<dynamic> _orderedCitizenOfficeOptions(List<dynamic> offices) {
     final filtered = offices
         .whereType<Map<String, dynamic>>()
@@ -117,6 +90,36 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return filtered;
   }
 
+  String _normalizeNameController(TextEditingController controller) {
+    final formatted = PortalValidators.titleCaseName(controller.text);
+    if (formatted != controller.text) {
+      controller.value = TextEditingValue(
+        text: formatted,
+        selection: TextSelection.collapsed(offset: formatted.length),
+      );
+    }
+
+    return formatted;
+  }
+
+  bool _isSelectedOfficeValid(String? officeName) {
+    if (officeName == null || officeName.trim().isEmpty) {
+      return false;
+    }
+
+    return _offices.whereType<Map<String, dynamic>>().any(
+      (office) => (office['name'] ?? '').toString().trim() == officeName.trim(),
+    );
+  }
+
+  bool _isSelectedAdminTypeValid(String? adminType) {
+    if (adminType == null || adminType.trim().isEmpty) {
+      return false;
+    }
+
+    return _adminTypes.contains(adminType.trim());
+  }
+
   void _clearErrors() {
     _firstNameError = null;
     _lastNameError = null;
@@ -128,51 +131,53 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _officeError = null;
   }
 
+  void _handlePhoneChanged(String value) {
+    final sanitized = PortalValidators.sanitizeMobileInput(value);
+
+    if (!_isNormalizingPhone && sanitized != value) {
+      _isNormalizingPhone = true;
+      _phoneController.value = TextEditingValue(
+        text: sanitized,
+        selection: TextSelection.collapsed(offset: sanitized.length),
+      );
+      _isNormalizingPhone = false;
+    }
+
+    if (_phoneError != null) {
+      setState(() => _phoneError = null);
+    }
+  }
+
   Future<void> _submit() async {
-    final firstName = _firstNameController.text.trim();
-    final lastName = _lastNameController.text.trim();
+    if (_isLoading) {
+      return;
+    }
+
+    final firstName = _normalizeNameController(_firstNameController);
+    final lastName = _normalizeNameController(_lastNameController);
     final name = '$firstName $lastName'.trim();
     final email = _emailController.text.trim();
-    final phone = _phoneController.text.trim();
+    final phone = PortalValidators.buildSubmissionMobile(_phoneController.text);
     final password = _passwordController.text.trim();
     final confirmPassword = _confirmPasswordController.text.trim();
 
     setState(() {
       _clearErrors();
 
-      if (firstName.isEmpty) {
-        _firstNameError = 'First name is required.';
-      } else if (_containsEmoji(firstName)) {
-        _firstNameError = 'Emoji characters are not allowed.';
-      } else if (!_isValidNamePart(firstName)) {
-        _firstNameError = 'Enter a valid first name.';
-      }
-
-      if (lastName.isEmpty) {
-        _lastNameError = 'Last name is required.';
-      } else if (_containsEmoji(lastName)) {
-        _lastNameError = 'Emoji characters are not allowed.';
-      } else if (!_isValidNamePart(lastName)) {
-        _lastNameError = 'Enter a valid last name.';
-      }
-
-      if (email.isEmpty) {
-        _emailError = 'Email address is required.';
-      } else if (_containsEmoji(email)) {
-        _emailError = 'Emoji characters are not allowed.';
-      } else if (!_isValidEmail(email)) {
-        _emailError = 'Enter a valid email address.';
-      }
-
-      if (phone.isEmpty) {
-        _phoneError = 'Mobile number is required.';
-      } else if (!_isValidPhone(phone)) {
-        _phoneError = 'Mobile number must be exactly 11 digits.';
-      }
+      _firstNameError = PortalValidators.validateNamePart(
+        'First name',
+        firstName,
+      );
+      _lastNameError = PortalValidators.validateNamePart('Last name', lastName);
+      _emailError = PortalValidators.validateEmail(email);
+      _phoneError = PortalValidators.validatePhilippineMobile(
+        _phoneController.text,
+        required: true,
+      );
 
       if (password.isEmpty) {
         _passwordError = 'Password is required.';
-      } else if (_containsEmoji(password)) {
+      } else if (PortalValidators.containsEmoji(password)) {
         _passwordError = 'Emoji characters are not allowed.';
       } else if (password.length < 8) {
         _passwordError = 'Password must be at least 8 characters.';
@@ -180,18 +185,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       if (confirmPassword.isEmpty) {
         _confirmPasswordError = 'Please confirm your password.';
-      } else if (_containsEmoji(confirmPassword)) {
+      } else if (PortalValidators.containsEmoji(confirmPassword)) {
         _confirmPasswordError = 'Emoji characters are not allowed.';
       } else if (password != confirmPassword) {
         _confirmPasswordError = 'Passwords do not match.';
       }
 
-      if (_selectedAdminType == null) {
+      if (_selectedAdminType == null || _selectedAdminType!.trim().isEmpty) {
         _adminTypeError = 'Please select an admin type.';
+      } else if (!_isSelectedAdminTypeValid(_selectedAdminType)) {
+        _adminTypeError = 'Please select a valid admin type.';
       }
 
-      if (_selectedOffice == null || _selectedOffice!.isEmpty) {
+      if (_selectedOffice == null || _selectedOffice!.trim().isEmpty) {
         _officeError = 'Please select an office.';
+      } else if (!_isSelectedOfficeValid(_selectedOffice)) {
+        _officeError = 'Please select a valid office.';
       }
     });
 
@@ -211,6 +220,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     try {
       final response = await _authService.requestGovernmentAccount(
         name: name,
+        firstName: firstName,
+        lastName: lastName,
         email: email,
         mobileNumber: phone,
         password: password,
@@ -463,8 +474,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             controller: _firstNameController,
                             hintText: 'your first name',
                             prefixIcon: Icons.person_outline,
+                            textCapitalization: TextCapitalization.words,
                             inputFormatters: [
-                              FilteringTextInputFormatter.deny(_emojiRegex),
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r"[A-Za-z '\-]"),
+                              ),
+                              LengthLimitingTextInputFormatter(
+                                PortalValidators.maxNameLength,
+                              ),
                             ],
                             errorText: _firstNameError,
                             onChanged: (_) {
@@ -480,8 +497,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             controller: _lastNameController,
                             hintText: 'your last name',
                             prefixIcon: Icons.badge_outlined,
+                            textCapitalization: TextCapitalization.words,
                             inputFormatters: [
-                              FilteringTextInputFormatter.deny(_emojiRegex),
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r"[A-Za-z '\-]"),
+                              ),
+                              LengthLimitingTextInputFormatter(
+                                PortalValidators.maxNameLength,
+                              ),
                             ],
                             errorText: _lastNameError,
                             onChanged: (_) {
@@ -499,7 +522,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             keyboardType: TextInputType.emailAddress,
                             prefixIcon: Icons.email_outlined,
                             inputFormatters: [
-                              FilteringTextInputFormatter.deny(_emojiRegex),
+                              FilteringTextInputFormatter.deny(
+                                PortalValidators.emojiRegex,
+                              ),
                             ],
                             errorText: _emailError,
                             onChanged: (_) {
@@ -513,19 +538,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           const SizedBox(height: 8),
                           _buildTextField(
                             controller: _phoneController,
-                            hintText: '09XX XXX XXXX',
+                            hintText: '09123456789 or +639123456789',
                             keyboardType: TextInputType.phone,
                             prefixIcon: Icons.call_outlined,
                             inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                              LengthLimitingTextInputFormatter(11),
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'[0-9+]'),
+                              ),
+                              LengthLimitingTextInputFormatter(13),
                             ],
                             errorText: _phoneError,
-                            onChanged: (_) {
-                              if (_phoneError != null) {
-                                setState(() => _phoneError = null);
-                              }
-                            },
+                            onChanged: _handlePhoneChanged,
                           ),
                           const SizedBox(height: 14),
                           _buildLabel('Password'),
@@ -536,7 +559,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             obscureText: _obscurePassword,
                             prefixIcon: Icons.lock_outline,
                             inputFormatters: [
-                              FilteringTextInputFormatter.deny(_emojiRegex),
+                              FilteringTextInputFormatter.deny(
+                                PortalValidators.emojiRegex,
+                              ),
                             ],
                             errorText: _passwordError,
                             onChanged: (_) {
@@ -568,7 +593,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             obscureText: _obscureConfirmPassword,
                             prefixIcon: Icons.lock_outline,
                             inputFormatters: [
-                              FilteringTextInputFormatter.deny(_emojiRegex),
+                              FilteringTextInputFormatter.deny(
+                                PortalValidators.emojiRegex,
+                              ),
                             ],
                             errorText: _confirmPasswordError,
                             onChanged: (_) {
@@ -695,6 +722,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     required String hintText,
     required IconData prefixIcon,
     TextInputType? keyboardType,
+    TextCapitalization textCapitalization = TextCapitalization.none,
     bool obscureText = false,
     Widget? suffixIcon,
     List<TextInputFormatter>? inputFormatters,
@@ -704,6 +732,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
+      textCapitalization: textCapitalization,
       obscureText: obscureText,
       inputFormatters: inputFormatters,
       onChanged: onChanged,

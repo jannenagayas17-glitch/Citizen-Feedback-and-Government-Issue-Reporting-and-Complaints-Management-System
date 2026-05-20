@@ -8,6 +8,9 @@ class AuthRedirect {
     if (normalized == 'staff') {
       return 'admin';
     }
+    if (normalized == 'front_desk') {
+      return 'administrative_staff';
+    }
     return normalized;
   }
 
@@ -15,6 +18,8 @@ class AuthRedirect {
     switch (normalizeRole(role)) {
       case 'super_admin':
         return AppRoutes.superAdminHome;
+      case 'administrative_staff':
+        return AppRoutes.frontDeskHome;
       case 'admin':
         return AppRoutes.adminHome;
       default:

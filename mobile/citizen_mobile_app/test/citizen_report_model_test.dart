@@ -80,4 +80,28 @@ void main() {
       'No admin remarks yet.',
     );
   });
+
+  test('privacy helpers reflect anonymous report state', () {
+    expect(
+      CitizenReportModel.isAnonymousOf({
+        'id': 18,
+        'is_anonymous': true,
+      }),
+      isTrue,
+    );
+    expect(
+      CitizenReportModel.privacyLabelOf({
+        'id': 18,
+        'is_anonymous': true,
+      }),
+      'Anonymous to admins',
+    );
+    expect(
+      CitizenReportModel.privacyLabelOf({
+        'id': 19,
+        'is_anonymous': false,
+      }),
+      'Identity visible to admins',
+    );
+  });
 }

@@ -26,7 +26,12 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   final FeedbackService _feedbackService = FeedbackService();
 
   late Future<_AdminHomeData> _homeFuture;
+  _AdminHomeData? _resolvedHomeData;
+  int _homeRequestVersion = 0;
   _AdminDesktopSection _desktopSection = _AdminDesktopSection.dashboard;
+  final Set<_AdminDesktopSection> _loadedDesktopSections = {
+    _AdminDesktopSection.dashboard,
+  };
   String _searchQuery = '';
   String _statusFilter = 'All Status';
   String _priorityFilter = 'All Priority';
@@ -34,10 +39,15 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   @override
   void initState() {
     super.initState();
-    _homeFuture = _loadHome();
+    _homeFuture = _queueHomeLoad();
   }
 
-  Future<_AdminHomeData> _loadHome() async {
+  Future<_AdminHomeData> _queueHomeLoad() {
+    final requestId = ++_homeRequestVersion;
+    return _loadHome(requestId);
+  }
+
+  Future<_AdminHomeData> _loadHome(int requestId) async {
     final results = await Future.wait<dynamic>([
       _dashboardService.getDashboardStats(),
       _dashboardService.getAnalytics(),
@@ -50,7 +60,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     final user = Map<String, dynamic>.from(results[2] as Map);
     final feedbackSummary = results[3] as FeedbackSummaryData;
 
-    return _AdminHomeData(
+    final data = _AdminHomeData(
       stats: stats,
       analytics: analytics,
       reports: List<dynamic>.from(
@@ -59,21 +69,34 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       user: user,
       feedbackSummary: feedbackSummary,
     );
+
+    if (requestId == _homeRequestVersion) {
+      _resolvedHomeData = data;
+    }
+
+    return data;
   }
 
   Future<void> _refresh() async {
-    final future = _loadHome();
+    final future = _queueHomeLoad();
     setState(() {
       _homeFuture = future;
     });
     await future;
   }
 
+  void _selectDesktopSection(_AdminDesktopSection section) {
+    if (_desktopSection == section) {
+      return;
+    }
+
+    _loadedDesktopSections.add(section);
+    setState(() => _desktopSection = section);
+  }
+
   void _showDashboard() {
     if (_isDesktopLayout(context)) {
-      setState(() {
-        _desktopSection = _AdminDesktopSection.dashboard;
-      });
+      _selectDesktopSection(_AdminDesktopSection.dashboard);
       return;
     }
     _refresh();
@@ -81,9 +104,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
 
   Future<void> _openReports() async {
     if (_isDesktopLayout(context)) {
-      setState(() {
-        _desktopSection = _AdminDesktopSection.reports;
-      });
+      _selectDesktopSection(_AdminDesktopSection.reports);
       return;
     }
     await Navigator.push(
@@ -100,9 +121,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
 
   Future<void> _openAnalytics() async {
     if (_isDesktopLayout(context)) {
-      setState(() {
-        _desktopSection = _AdminDesktopSection.analytics;
-      });
+      _selectDesktopSection(_AdminDesktopSection.analytics);
       return;
     }
     await Navigator.push(
@@ -114,9 +133,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
 
   Future<void> _openFeedback() async {
     if (_isDesktopLayout(context)) {
-      setState(() {
-        _desktopSection = _AdminDesktopSection.feedback;
-      });
+      _selectDesktopSection(_AdminDesktopSection.feedback);
       return;
     }
     await Navigator.push(
@@ -128,14 +145,12 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
 
   Future<void> _openProfile() async {
     try {
-      final user = await _authService.getCurrentUser();
-      if (!mounted) return;
       if (_isDesktopLayout(context)) {
-        setState(() {
-          _desktopSection = _AdminDesktopSection.profile;
-        });
+        _selectDesktopSection(_AdminDesktopSection.profile);
         return;
       }
+      final user = _resolvedHomeData?.user ?? await _authService.getCurrentUser();
+      if (!mounted) return;
       await Navigator.push(
         context,
         MaterialPageRoute(
@@ -323,13 +338,18 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           onRefresh: _refresh,
           color: const Color(0xFF2563EB),
           child: FutureBuilder<_AdminHomeData>(
+            initialData: _resolvedHomeData,
             future: _homeFuture,
             builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
+              final data = snapshot.data ?? _resolvedHomeData;
+              final isLoading =
+                  snapshot.connectionState != ConnectionState.done;
+
+              if (isLoading && data == null) {
                 return const Center(child: CircularProgressIndicator());
               }
 
-              if (snapshot.hasError) {
+              if (snapshot.hasError && data == null) {
                 return ListView(
                   padding: const EdgeInsets.all(20),
                   children: [
@@ -344,7 +364,9 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                 );
               }
 
-              final data = snapshot.data!;
+              if (data == null) {
+                return const Center(child: CircularProgressIndicator());
+              }
               final reports = data.reports.cast<dynamic>();
               final analytics = data.analytics;
               final currentUser = data.user;
@@ -380,6 +402,21 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                 builder: (context, constraints) {
                   final isWide = constraints.maxWidth >= 1100;
                   final content = [
+                    if (isLoading) ...[
+                      const LinearProgressIndicator(
+                        minHeight: 3,
+                        color: Color(0xFF2563EB),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+                    if (snapshot.hasError) ...[
+                      const _GlassMessageCard(
+                        title: 'Using last dashboard snapshot',
+                        message:
+                            'A refresh failed, so the most recent loaded data is still on screen.',
+                      ),
+                      const SizedBox(height: 18),
+                    ],
                     _AdminHeroCard(
                       totalReports: '${data.stats['total_reports'] ?? 0}',
                       pending: '${data.stats['pending'] ?? 0}',
@@ -433,7 +470,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                           child: _SectionTitle(
                             title: 'Recent Reports',
                             subtitle:
-                                'Latest citizen concerns needing engineering review.',
+                                'Latest scoped citizen concerns ready for review.',
                           ),
                         ),
                         TextButton(
@@ -518,10 +555,10 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                       icon: Icons.person_outline,
                       iconColor: const Color(0xFFFFD8B8),
                       iconBackground: const Color(0xFFF97316),
-                      title: 'Profile',
+                      title: 'Settings',
                       subtitle:
-                          'View your admin account details and sign out from a single place.',
-                      ctaLabel: 'Open Profile',
+                          'Manage account details, appearance, and sign out from one place.',
+                      ctaLabel: 'Open Settings',
                       onTap: _openProfile,
                     ),
                   ];
@@ -616,7 +653,58 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     required List<dynamic> categoryBreakdown,
     required Map<String, dynamic> currentUser,
   }) {
-    switch (_desktopSection) {
+    final sections = _AdminDesktopSection.values
+        .where(
+          (section) =>
+              section == _AdminDesktopSection.dashboard ||
+              _loadedDesktopSections.contains(section),
+        )
+        .toList();
+
+    return Stack(
+      children: sections.map((section) {
+        final visible = section == _desktopSection;
+        return Positioned.fill(
+          child: IgnorePointer(
+            ignoring: !visible,
+            child: TickerMode(
+              enabled: visible,
+              child: AnimatedOpacity(
+                opacity: visible ? 1 : 0,
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                child: KeyedSubtree(
+                  key: ValueKey('desktop-${section.name}'),
+                  child: _buildDesktopSectionContent(
+                    section: section,
+                    bottomSafeArea: bottomSafeArea,
+                    data: data,
+                    reports: reports,
+                    statusBreakdown: statusBreakdown,
+                    priorityBreakdown: priorityBreakdown,
+                    categoryBreakdown: categoryBreakdown,
+                    currentUser: currentUser,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildDesktopSectionContent({
+    required _AdminDesktopSection section,
+    required double bottomSafeArea,
+    required _AdminHomeData data,
+    required List<dynamic> reports,
+    required List<dynamic> statusBreakdown,
+    required List<dynamic> priorityBreakdown,
+    required List<dynamic> categoryBreakdown,
+    required Map<String, dynamic> currentUser,
+  }) {
+    switch (section) {
       case _AdminDesktopSection.dashboard:
         return _buildDesktopDashboard(
           bottomSafeArea: bottomSafeArea,
@@ -628,7 +716,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           currentUser: currentUser,
         );
       case _AdminDesktopSection.reports:
-        return const ComplaintManagementScreen();
+        return const ComplaintManagementScreen(embedded: true);
       case _AdminDesktopSection.analytics:
         return const AnalyticsReportsScreen(embedded: true);
       case _AdminDesktopSection.feedback:
@@ -735,7 +823,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               child: _WideMetricCard(
                 title: 'Resolved',
                 value: '${data.stats['resolved'] ?? 0}',
-                subtitle: 'Updated today',
+                subtitle: 'Closed reports in current scope',
                 icon: Icons.check_circle_outline_rounded,
                 gradient: panelGradient,
                 valueColor: const Color(0xFF22C55E),
@@ -763,9 +851,9 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
             decoration: BoxDecoration(
-              color: const Color(0xFF2C171B),
+              color: colors.warningSurface,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFF7F1D1D)),
+              border: Border.all(color: colors.warningBorder),
             ),
             child: Row(
               children: [
@@ -777,9 +865,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                 Expanded(
                   child: Text(
                     '$staleReports reports have exceeded 72 hours without update. Action required immediately.',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.78),
-                    ),
+                    style: TextStyle(color: colors.text),
                   ),
                 ),
                 TextButton(
@@ -875,11 +961,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                         (report) => Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: ListTile(
-                            tileColor: const Color(0xFF141C2B),
+                            tileColor: colors.panelAlt,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                               side: BorderSide(
-                                color: Colors.white.withValues(alpha: 0.07),
+                                color: colors.border,
                               ),
                             ),
                             contentPadding: const EdgeInsets.symmetric(
@@ -904,8 +990,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                             ),
                             title: Text(
                               _reportCitizen(report),
-                              style: const TextStyle(
-                                color: Colors.white,
+                              style: TextStyle(
+                                color: colors.text,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
@@ -913,9 +999,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                               _reportTitle(report),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.56),
-                              ),
+                              style: TextStyle(color: colors.mutedText),
                             ),
                             trailing: FilledButton(
                               onPressed: _openReports,
@@ -950,31 +1034,28 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                 ],
               ),
               const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      initialValue: _searchQuery,
-                      onChanged: (value) =>
-                          setState(() => _searchQuery = value),
-                      style: const TextStyle(color: Colors.white),
-                      decoration: _compactFilterDecoration().copyWith(
-                        hintText: 'Search reports...',
-                        prefixIcon: const Icon(
-                          Icons.search,
-                          color: Color(0xFF71809C),
-                          size: 18,
-                        ),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final useInlineFilters = constraints.maxWidth >= 960;
+                  final searchField = TextFormField(
+                    initialValue: _searchQuery,
+                    onChanged: (value) => setState(() => _searchQuery = value),
+                    style: TextStyle(color: colors.text),
+                    decoration: _compactFilterDecoration().copyWith(
+                      hintText: 'Search reports...',
+                      prefixIcon: const Icon(
+                        Icons.search,
+                        color: Color(0xFF71809C),
+                        size: 18,
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  SizedBox(
+                  );
+                  final statusFilter = SizedBox(
                     width: 150,
                     child: DropdownButtonFormField<String>(
                       initialValue: _statusFilter,
-                      dropdownColor: const Color(0xFF141C2B),
-                      style: const TextStyle(color: Colors.white),
+                      dropdownColor: colors.panel,
+                      style: TextStyle(color: colors.text),
                       decoration: _compactFilterDecoration(),
                       items:
                           const [
@@ -995,14 +1076,13 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                       onChanged: (value) =>
                           setState(() => _statusFilter = value ?? 'All Status'),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  SizedBox(
+                  );
+                  final priorityFilter = SizedBox(
                     width: 150,
                     child: DropdownButtonFormField<String>(
                       initialValue: _priorityFilter,
-                      dropdownColor: const Color(0xFF141C2B),
-                      style: const TextStyle(color: Colors.white),
+                      dropdownColor: colors.panel,
+                      style: TextStyle(color: colors.text),
                       decoration: _compactFilterDecoration(),
                       items:
                           const [
@@ -1023,8 +1103,32 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                         () => _priorityFilter = value ?? 'All Priority',
                       ),
                     ),
-                  ),
-                ],
+                  );
+
+                  if (useInlineFilters) {
+                    return Row(
+                      children: [
+                        Expanded(child: searchField),
+                        const SizedBox(width: 12),
+                        statusFilter,
+                        const SizedBox(width: 12),
+                        priorityFilter,
+                      ],
+                    );
+                  }
+
+                  return Column(
+                    children: [
+                      searchField,
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [statusFilter, priorityFilter],
+                      ),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 14),
               if (tableReports.isEmpty)
@@ -1103,25 +1207,23 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 10),
                           child: ListTile(
-                            tileColor: const Color(0xFF141C2B),
+                            tileColor: colors.panelAlt,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                               side: BorderSide(
-                                color: Colors.white.withValues(alpha: 0.07),
+                                color: colors.border,
                               ),
                             ),
                             title: Text(
                               record.label,
-                              style: const TextStyle(
-                                color: Colors.white,
+                              style: TextStyle(
+                                color: colors.text,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
                             subtitle: Text(
                               '${record.count} entries in scoped feedback',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.56),
-                              ),
+                              style: TextStyle(color: colors.mutedText),
                             ),
                             trailing: TextButton(
                               onPressed: _openFeedback,
@@ -1134,10 +1236,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                       const SizedBox(height: 8),
                       Text(
                         'Average rating ${data.feedbackSummary.averageRating.toStringAsFixed(1)} • Last 7 days ${data.feedbackSummary.recentFeedbackCount}',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.60),
-                          fontSize: 12,
-                        ),
+                        style: TextStyle(color: colors.mutedText, fontSize: 12),
                       ),
                     ],
                   ],
@@ -1728,7 +1827,7 @@ class _DashboardSidebar extends StatelessWidget {
             ),
             _SidebarNavItem(
               icon: Icons.person_outline,
-              label: 'Profile',
+              label: 'Settings',
               isActive: selectedSection == _AdminDesktopSection.profile,
               onTap: onProfile,
             ),

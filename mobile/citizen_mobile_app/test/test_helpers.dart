@@ -84,8 +84,9 @@ ByteData _jsonByteData(String value) {
   return _byteDataFromBytes(utf8.encode(value));
 }
 
-final ByteData _emptyAssetManifest = const StandardMessageCodec()
-    .encodeMessage(<String, Object?>{})!;
+final ByteData _emptyAssetManifest = const StandardMessageCodec().encodeMessage(
+  <String, Object?>{},
+)!;
 
 void setupWidgetTestEnvironment() {
   TestWidgetsFlutterBinding.ensureInitialized();

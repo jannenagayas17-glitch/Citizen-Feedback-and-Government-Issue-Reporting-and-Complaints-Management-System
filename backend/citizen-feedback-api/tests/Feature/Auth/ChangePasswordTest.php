@@ -88,4 +88,37 @@ class ChangePasswordTest extends TestCase
         $this->assertTrue(Hash::check('newpassword123', $superAdmin->password));
         $this->assertFalse(Hash::check('password123', $superAdmin->password));
     }
+
+    public function test_super_admin_can_log_in_with_the_new_password_after_logging_out(): void
+    {
+        $superAdmin = User::create([
+            'name' => 'Super Admin',
+            'email' => 'superadmin-password-login@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'super_admin',
+            'is_active' => true,
+        ]);
+
+        Sanctum::actingAs($superAdmin);
+
+        $this->putJson('/api/user/password', [
+            'current_password' => 'password123',
+            'new_password' => 'newpassword123',
+            'new_password_confirmation' => 'newpassword123',
+        ])->assertOk();
+
+        $this->postJson('/api/logout')->assertOk();
+
+        $this->postJson('/api/auth/login', [
+            'email' => 'superadmin-password-login@example.com',
+            'password' => 'password123',
+        ])->assertUnprocessable();
+
+        $this->postJson('/api/auth/login', [
+            'email' => 'superadmin-password-login@example.com',
+            'password' => 'newpassword123',
+        ])
+            ->assertOk()
+            ->assertJsonPath('user.role', 'super_admin');
+    }
 }

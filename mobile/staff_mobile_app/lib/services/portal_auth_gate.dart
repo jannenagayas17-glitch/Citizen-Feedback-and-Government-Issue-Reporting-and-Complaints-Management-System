@@ -56,10 +56,12 @@ class PortalAuthGate {
       final user = await _authService.getCurrentUser();
       final normalizedRole = AuthRedirect.normalizeRole(user['role']);
 
-      if (normalizedRole != 'admin' && normalizedRole != 'super_admin') {
+      if (normalizedRole != 'admin' &&
+          normalizedRole != 'super_admin' &&
+          normalizedRole != 'administrative_staff') {
         return const PortalAuthGateResult.login(
           shouldClearStoredSession: true,
-          message: 'Please log in with an admin account.',
+          message: 'Please log in with an authorized staff account.',
         );
       }
 

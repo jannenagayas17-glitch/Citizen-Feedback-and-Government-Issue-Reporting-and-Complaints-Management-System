@@ -92,6 +92,155 @@ class FeedbackAnalyticsTest extends TestCase
         $this->assertSame($officeA->name, $officeRows->first()['label']);
     }
 
+    public function test_feedback_summary_excludes_seeded_demo_feedback_records_from_portal_analytics(): void
+    {
+        [$superAdmin, $officeA] = $this->seedFeedbackScenario();
+
+        $demoCitizen = User::create([
+            'name' => 'Demo Citizen',
+            'email' => 'demo.citizen.999@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'citizen',
+            'is_active' => true,
+        ]);
+
+        $category = Category::firstOrCreate(['name' => 'Demo Feedback Category']);
+        $report = $this->makeReport(
+            $demoCitizen,
+            $officeA,
+            $category,
+            'Demo report should be hidden',
+            'Barangay 9',
+            Carbon::create(2026, 5, 11, 10, 0, 0, 'Asia/Manila'),
+        );
+
+        $demoMessage = 'Demo feedback should not appear in portal totals';
+        $this->makeFeedback(
+            $demoCitizen,
+            $officeA,
+            $report,
+            'Praise',
+            $demoMessage,
+            5,
+            Carbon::create(2026, 5, 11, 11, 0, 0, 'Asia/Manila'),
+        );
+
+        Sanctum::actingAs($superAdmin);
+
+        $summary = $this->getJson('/api/feedback/summary');
+        $charts = $this->getJson('/api/feedback/charts');
+        $listing = $this->getJson('/api/feedback?paginate=true&per_page=10&page=1');
+
+        $summary->assertOk()
+            ->assertJsonPath('total_feedback', 4)
+            ->assertJsonPath('types.Praise', 1);
+
+        $charts->assertOk()
+            ->assertJsonPath('rating_breakdown.4.count', 1);
+
+        $officeRows = collect($charts->json('office_breakdown'));
+        $this->assertTrue(
+            $officeRows->contains(
+                fn (array $row) => $row['label'] === $officeA->name && $row['count'] === 3
+            ),
+            'Portal feedback totals should continue to reflect only real office feedback rows.'
+        );
+
+        $barangays = collect($charts->json('barangay_breakdown'));
+        $this->assertFalse(
+            $barangays->contains(fn (array $row) => $row['label'] === 'Barangay 9'),
+            'Demo-seeded feedback locations must be excluded from portal charts.'
+        );
+
+        $listing->assertOk()
+            ->assertJsonPath('total', 4)
+            ->assertJsonMissing(['message' => $demoMessage]);
+    }
+
+    public function test_feedback_summary_keeps_excluding_demo_feedback_after_demo_accounts_are_archived(): void
+    {
+        [$superAdmin, $officeA] = $this->seedFeedbackScenario();
+
+        $demoCitizen = User::create([
+            'name' => 'Demo Citizen',
+            'email' => 'demo.citizen.998@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'citizen',
+            'is_active' => false,
+        ]);
+
+        $category = Category::firstOrCreate(['name' => 'Archived Demo Feedback Category']);
+        $report = $this->makeReport(
+            $demoCitizen,
+            $officeA,
+            $category,
+            'Archived demo report should be hidden',
+            'Barangay 10',
+            Carbon::create(2026, 5, 11, 10, 0, 0, 'Asia/Manila'),
+        );
+
+        $demoMessage = 'Archived demo feedback should not appear in portal totals';
+        $this->makeFeedback(
+            $demoCitizen,
+            $officeA,
+            $report,
+            'Suggestion',
+            $demoMessage,
+            4,
+            Carbon::create(2026, 5, 11, 11, 0, 0, 'Asia/Manila'),
+        );
+        $demoCitizen->delete();
+
+        Sanctum::actingAs($superAdmin);
+
+        $summary = $this->getJson('/api/feedback/summary');
+        $charts = $this->getJson('/api/feedback/charts');
+        $listing = $this->getJson('/api/feedback?paginate=true&per_page=10&page=1');
+
+        $summary->assertOk()
+            ->assertJsonPath('total_feedback', 4)
+            ->assertJsonPath('types.Suggestion', 2);
+
+        $charts->assertOk();
+
+        $officeRows = collect($charts->json('office_breakdown'));
+        $this->assertTrue(
+            $officeRows->contains(
+                fn (array $row) => $row['label'] === $officeA->name && $row['count'] === 3
+            ),
+            'Archived demo-seeded feedback must stay excluded from office totals.'
+        );
+
+        $listing->assertOk()
+            ->assertJsonPath('total', 4)
+            ->assertJsonMissing(['message' => $demoMessage]);
+    }
+
+    public function test_feedback_export_respects_active_filters(): void
+    {
+        [$superAdmin, $officeA, , $feedbackA, $feedbackB] = $this->seedFeedbackScenario();
+
+        Sanctum::actingAs($superAdmin);
+
+        $export = $this->get(
+            '/api/feedback/export?office='.urlencode($officeA->name)
+            .'&type=Praise'
+            .'&barangay='.urlencode('Barangay 1')
+            .'&rating=5'
+            .'&date_preset=custom'
+            .'&start_date=2026-05-10'
+            .'&end_date=2026-05-10'
+        );
+        $content = $export->streamedContent();
+
+        $export->assertOk();
+        $this->assertStringContainsString('Feedback ID', $content);
+        $this->assertStringContainsString($feedbackA[2]->message, $content);
+        $this->assertStringNotContainsString($feedbackA[0]->message, $content);
+        $this->assertStringNotContainsString($feedbackA[1]->message, $content);
+        $this->assertStringNotContainsString($feedbackB[0]->message, $content);
+    }
+
     private function seedFeedbackScenario(): array
     {
         $citizen = User::create([

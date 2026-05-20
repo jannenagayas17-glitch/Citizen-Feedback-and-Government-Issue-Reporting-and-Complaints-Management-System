@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../utils/citizen_theme_colors.dart';
+
 class CitizenBottomNav extends StatelessWidget {
   const CitizenBottomNav({
     super.key,
@@ -18,15 +20,17 @@ class CitizenBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final isDark = colorScheme.brightness == Brightness.dark;
+    final isDark = citizenIsDark(context);
+    final activeColor = citizenPrimaryActionColor(context);
+    final inactiveColor = citizenMutedColor(context);
 
     return BottomAppBar(
-      color: isDark ? const Color(0xFF101827) : Colors.white,
+      color: citizenCardColor(context),
       surfaceTintColor: Colors.transparent,
       shape: const CircularNotchedRectangle(),
       notchMargin: 10,
       elevation: isDark ? 0 : 12,
+      shadowColor: CitizenAppPalette.navy.withValues(alpha: 0.14),
       child: SizedBox(
         height: 72,
         child: Row(
@@ -36,41 +40,33 @@ class CitizenBottomNav extends StatelessWidget {
               icon: Icons.home_filled,
               label: 'Home',
               selected: currentIndex == 0,
-              color: const Color(0xFF3B82F6),
-              inactiveColor: isDark
-                  ? const Color(0xFF7B86A1)
-                  : const Color(0xFF64748B),
+              color: activeColor,
+              inactiveColor: inactiveColor,
               onTap: onHomeTap,
             ),
             _CitizenNavItem(
               icon: Icons.description_outlined,
               label: 'Reports',
               selected: currentIndex == 1,
-              color: const Color(0xFF3B82F6),
-              inactiveColor: isDark
-                  ? const Color(0xFF7B86A1)
-                  : const Color(0xFF64748B),
+              color: activeColor,
+              inactiveColor: inactiveColor,
               onTap: onReportsTap,
             ),
             const SizedBox(width: 56),
             _CitizenNavItem(
               icon: Icons.notifications_active_outlined,
-              label: 'Alerts',
+              label: 'Updates',
               selected: currentIndex == 3,
-              color: const Color(0xFF3B82F6),
-              inactiveColor: isDark
-                  ? const Color(0xFF7B86A1)
-                  : const Color(0xFF64748B),
+              color: activeColor,
+              inactiveColor: inactiveColor,
               onTap: onAlertsTap,
             ),
             _CitizenNavItem(
               icon: Icons.person_outline,
               label: 'Profile',
               selected: currentIndex == 4,
-              color: const Color(0xFF3B82F6),
-              inactiveColor: isDark
-                  ? const Color(0xFF7B86A1)
-                  : const Color(0xFF64748B),
+              color: activeColor,
+              inactiveColor: inactiveColor,
               onTap: onProfileTap,
             ),
           ],
@@ -107,11 +103,7 @@ class _CitizenNavItem extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              icon,
-              size: 22,
-              color: selected ? color : inactiveColor,
-            ),
+            Icon(icon, size: 22, color: selected ? color : inactiveColor),
             const SizedBox(height: 2),
             Text(
               label,

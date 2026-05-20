@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -7,9 +5,15 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../services/auth_service.dart';
 import '../../services/citizen_data_cache.dart';
 import '../../services/google_auth_service.dart';
+import '../../utils/auth_redirect.dart';
 import '../../utils/app_routes.dart';
 import '../../utils/app_theme_controller.dart';
+import '../../utils/citizen_theme_colors.dart';
 import '../../utils/token_storage.dart';
+import '../../widgets/citizen_auth_scaffold.dart';
+import '../../widgets/citizen_branding.dart';
+import '../../widgets/custom_button.dart';
+import '../../widgets/custom_text_field.dart';
 import 'forgot_password_screen.dart';
 import 'register_screen.dart';
 
@@ -38,6 +42,8 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
   bool _isLoading = false;
   bool _isGoogleLoading = false;
+  bool _handledRouteArguments = false;
+  bool _shouldKeepRoutePrefilledEmail = false;
   String? _emailError;
   String? _passwordError;
 
@@ -45,7 +51,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _authService = widget.authService ?? AuthService();
-    _loadSavedCitizenEmail();
+    _loadSavedEmail();
   }
 
   GoogleAuthService get _resolvedGoogleAuthService =>
@@ -60,6 +66,35 @@ class _LoginScreenState extends State<LoginScreen> {
     _passwordError = null;
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    if (_handledRouteArguments) {
+      return;
+    }
+
+    _handledRouteArguments = true;
+    final arguments = ModalRoute.of(context)?.settings.arguments;
+    if (arguments is! LoginRouteArguments) {
+      return;
+    }
+
+    final prefilledEmail = arguments.prefilledEmail?.trim() ?? '';
+    if (prefilledEmail.isNotEmpty) {
+      _shouldKeepRoutePrefilledEmail = true;
+      _emailController.text = prefilledEmail;
+    }
+
+    final successMessage = arguments.successMessage?.trim() ?? '';
+    if (successMessage.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _showSnackBar(successMessage);
+      });
+    }
+  }
+
   Future<void> _resetGoogleSession() async {
     try {
       await _resolvedGoogleAuthService.signOut();
@@ -68,10 +103,12 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> _loadSavedCitizenEmail() async {
-    final rememberedEmail = await TokenStorage.getLastEmailForRole('citizen');
+  Future<void> _loadSavedEmail() async {
+    final rememberedEmail =
+        await TokenStorage.getLastEmailForRole('citizen') ??
+        await TokenStorage.getLastEmailForRole('administrative_staff');
 
-    if (!mounted) return;
+    if (!mounted || _shouldKeepRoutePrefilledEmail) return;
 
     setState(() {
       _emailController.text = rememberedEmail?.trim() ?? '';
@@ -113,29 +150,29 @@ class _LoginScreenState extends State<LoginScreen> {
       final data = await _authService.login(email: email, password: password);
 
       final user = data['user'] as Map<String, dynamic>? ?? {};
-      final role = (user['role']?.toString() ?? '').trim().toLowerCase();
+      final role = AuthRedirect.normalizeRole(user['role']);
 
       if (!mounted) return;
 
-      if (role != 'citizen') {
+      if (role != 'citizen' && role != 'administrative_staff') {
         CitizenDataCache.clear();
         await TokenStorage.clearAll();
         _showSnackBar(
-          'This mobile app is for citizen accounts only. Please use the web admin portal for staff access.',
+          'This mobile app is for citizen and administrative staff accounts only. Please use the web admin portal for admin access.',
         );
         return;
       }
 
       final themeController = AppThemeScope.of(context);
       CitizenDataCache.clear();
-      await TokenStorage.saveLastEmailForRole(role: 'citizen', email: email);
+      await TokenStorage.saveLastEmailForRole(role: role, email: email);
       await themeController.loadForUser(user);
 
       if (!mounted) return;
 
       Navigator.pushNamedAndRemoveUntil(
         context,
-        AppRoutes.citizenHome,
+        AuthRedirect.routeForRole(role),
         (route) => false,
       );
     } catch (e) {
@@ -177,7 +214,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       final backendUser = data['user'] as Map<String, dynamic>? ?? {};
-      final role = (backendUser['role']?.toString() ?? '').trim().toLowerCase();
+      final role = AuthRedirect.normalizeRole(backendUser['role']);
 
       if (!mounted) return;
 
@@ -186,7 +223,9 @@ class _LoginScreenState extends State<LoginScreen> {
         CitizenDataCache.clear();
         await TokenStorage.clearAll();
         _showSnackBar(
-          'This mobile app is for citizen accounts only. Please use the web admin portal for staff access.',
+          role == 'administrative_staff'
+              ? 'Administrative staff accounts should sign in with their assigned email and password.'
+              : 'This mobile app is for citizen accounts only when using Google sign-in. Please use the web admin portal for admin access.',
         );
         return;
       }
@@ -246,271 +285,99 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-
-    return Scaffold(
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          DecoratedBox(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFF0C1727),
-                  Color(0xFF1E293B),
-                  Color(0xFF463327),
-                ],
+    return CitizenAuthScaffold(
+      child: CitizenAuthCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Center(
+              child: CitizenBrandHeader(
+                caption: 'Citizen Sign In',
+                logoSize: 112,
               ),
             ),
-          ),
-          Positioned.fill(
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Image.asset(
-                  'assets/images/Tacloban_City_bg.png',
-                  fit: BoxFit.cover,
-                ),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0C1727).withValues(alpha: 0.62),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: EdgeInsets.fromLTRB(20, 16, 20, bottomInset + 16),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                    child: Container(
-                      constraints: const BoxConstraints(maxWidth: 360),
-                      padding: const EdgeInsets.fromLTRB(22, 26, 22, 24),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.22),
-                        ),
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.white.withValues(alpha: 0.22),
-                            Colors.white.withValues(alpha: 0.10),
-                          ],
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.25),
-                            blurRadius: 24,
-                            offset: const Offset(0, 12),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Center(
-                            child: Container(
-                              width: 88,
-                              height: 88,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white.withValues(alpha: 0.16),
-                                border: Border.all(
-                                  color: const Color(0xFFD8B15A),
-                                  width: 2,
-                                ),
-                              ),
-                              child: ClipOval(
-                                child: SizedBox.expand(
-                                  child: Image.asset(
-                                    'assets/images/logo_splash.png',
-                                    fit: BoxFit.cover,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-                          const Text(
-                            'CityTrack',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 23,
-                              fontWeight: FontWeight.w700,
-                              height: 1.25,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Tacloban City Citizen Feedback',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.82),
-                              fontSize: 13,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            'Registered citizen accounts only',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.70),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          _SectionDivider(
-                            label: 'SIGN IN',
-                            color: Colors.white.withValues(alpha: 0.75),
-                          ),
-                          const SizedBox(height: 18),
-                          _fieldLabel('Email Address'),
-                          const SizedBox(height: 8),
-                          _buildTextField(
-                            controller: _emailController,
-                            hintText: 'your.email@example.com',
-                            icon: Icons.email_outlined,
-                            keyboardType: TextInputType.emailAddress,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.deny(_emojiRegex),
-                            ],
-                            errorText: _emailError,
-                            onChanged: (_) {
-                              if (_emailError != null) {
-                                setState(() => _emailError = null);
-                              }
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                          _fieldLabel('Password'),
-                          const SizedBox(height: 8),
-                          _buildPasswordField(),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton(
-                              onPressed: _openForgotPasswordScreen,
-                              child: RichText(
-                                text: TextSpan(
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.68),
-                                    fontSize: 13,
-                                  ),
-                                  children: const [
-                                    TextSpan(
-                                      text: ' Forgot password?',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          _SectionDivider(
-                            label: 'Or continue with',
-                            color: Colors.white.withValues(alpha: 0.62),
-                          ),
-                          const SizedBox(height: 18),
-                          _buildGoogleButton(),
-                          const SizedBox(height: 16),
-                          _buildLoginButton(),
-                          const SizedBox(height: 16),
-                          TextButton(
-                            onPressed: _openRegisterScreen,
-                            style: TextButton.styleFrom(
-                              foregroundColor: Colors.white.withValues(
-                                alpha: 0.84,
-                              ),
-                            ),
-                            child: RichText(
-                              textAlign: TextAlign.center,
-                              text: TextSpan(
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.72),
-                                  fontSize: 14,
-                                ),
-                                children: const [
-                                  TextSpan(text: "Don't have an account? "),
-                                  TextSpan(
-                                    text: 'Register here',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+            const SizedBox(height: 18),
+            Text(
+              'Welcome back',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.98),
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.3,
               ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _fieldLabel(String text) {
-    return Text(
-      text,
-      style: TextStyle(
-        color: Colors.white.withValues(alpha: 0.92),
-        fontSize: 14,
-        fontWeight: FontWeight.w500,
-      ),
-    );
-  }
-
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String hintText,
-    required IconData icon,
-    TextInputType keyboardType = TextInputType.text,
-    List<TextInputFormatter>? inputFormatters,
-    String? errorText,
-    ValueChanged<String>? onChanged,
-  }) {
-    return TextField(
-      controller: controller,
-      keyboardType: keyboardType,
-      inputFormatters: inputFormatters,
-      onChanged: onChanged,
-      autofillHints: keyboardType == TextInputType.emailAddress
-          ? const [AutofillHints.username, AutofillHints.email]
-          : null,
-      textInputAction: TextInputAction.next,
-      style: const TextStyle(color: Colors.white),
-      decoration: _inputDecoration(hintText: hintText, icon: icon).copyWith(
-        errorText: errorText,
-        errorMaxLines: 2,
-        errorStyle: const TextStyle(color: Color(0xFFFFB4B4), fontSize: 12),
+            const SizedBox(height: 8),
+            Text(
+              'Citizens can sign in to submit reports and track updates. Administrative staff can also use their assigned account to assist walk-in complainants.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: CitizenAppPalette.sand.withValues(alpha: 0.86),
+                fontSize: 13.5,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 22),
+            const CitizenSectionDivider(label: 'Use your email account'),
+            const SizedBox(height: 18),
+            CitizenTextField(
+              controller: _emailController,
+              label: 'Email Address',
+              hintText: 'your.email@example.com',
+              keyboardType: TextInputType.emailAddress,
+              prefixIcon: Icon(
+                Icons.email_outlined,
+                color: CitizenAppPalette.sand.withValues(alpha: 0.82),
+              ),
+              inputFormatters: [FilteringTextInputFormatter.deny(_emojiRegex)],
+              errorText: _emailError,
+              onChanged: (_) {
+                if (_emailError != null) {
+                  setState(() => _emailError = null);
+                }
+              },
+            ),
+            const SizedBox(height: 16),
+            _buildPasswordField(),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: _openForgotPasswordScreen,
+                child: const Text('Forgot password?'),
+              ),
+            ),
+            const SizedBox(height: 16),
+            _buildLoginButton(),
+            const SizedBox(height: 18),
+            const CitizenSectionDivider(label: 'Or continue with Google'),
+            const SizedBox(height: 16),
+            _buildGoogleButton(),
+            const SizedBox(height: 14),
+            TextButton(
+              onPressed: _openRegisterScreen,
+              child: const Text("Don't have an account? Register here"),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Front desk accounts are created by the super admin and must use email and password sign-in.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: CitizenAppPalette.sand.withValues(alpha: 0.78),
+                fontSize: 11.5,
+                height: 1.45,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildPasswordField() {
-    return TextField(
+    return CitizenTextField(
       controller: _passwordController,
+      label: 'Password',
+      hintText: 'Enter your password',
       inputFormatters: [FilteringTextInputFormatter.deny(_emojiRegex)],
       onChanged: (_) {
         if (_passwordError != null) {
@@ -518,59 +385,23 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       },
       obscureText: _obscurePassword,
-      autofillHints: const [AutofillHints.password],
+      errorText: _passwordError,
       textInputAction: TextInputAction.done,
       onSubmitted: (_) => _isLoading ? null : _login(),
-      style: const TextStyle(color: Colors.white),
-      decoration:
-          _inputDecoration(
-            hintText: '........',
-            icon: Icons.lock_outline,
-          ).copyWith(
-            errorText: _passwordError,
-            errorMaxLines: 2,
-            errorStyle: const TextStyle(color: Color(0xFFFFB4B4), fontSize: 12),
-            suffixIcon: IconButton(
-              onPressed: () {
-                setState(() => _obscurePassword = !_obscurePassword);
-              },
-              icon: Icon(
-                _obscurePassword
-                    ? Icons.visibility_off_outlined
-                    : Icons.visibility_outlined,
-                color: Colors.white.withValues(alpha: 0.72),
-              ),
-            ),
-          ),
-    );
-  }
-
-  InputDecoration _inputDecoration({
-    required String hintText,
-    required IconData icon,
-  }) {
-    return InputDecoration(
-      hintText: hintText,
-      hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
       prefixIcon: Icon(
-        icon,
-        color: Colors.white.withValues(alpha: 0.72),
-        size: 20,
+        Icons.lock_outline,
+        color: CitizenAppPalette.sand.withValues(alpha: 0.82),
       ),
-      filled: true,
-      fillColor: Colors.white.withValues(alpha: 0.14),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 1.4),
+      suffixIcon: IconButton(
+        onPressed: () {
+          setState(() => _obscurePassword = !_obscurePassword);
+        },
+        icon: Icon(
+          _obscurePassword
+              ? Icons.visibility_off_outlined
+              : Icons.visibility_outlined,
+          color: CitizenAppPalette.sand.withValues(alpha: 0.82),
+        ),
       ),
     );
   }
@@ -581,17 +412,22 @@ class _LoginScreenState extends State<LoginScreen> {
       child: OutlinedButton(
         onPressed: _isGoogleLoading ? null : _loginWithGoogle,
         style: OutlinedButton.styleFrom(
-          backgroundColor: Colors.white.withValues(alpha: 0.14),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
+          backgroundColor: citizenIsDark(context)
+              ? Colors.white.withValues(alpha: 0.10)
+              : Colors.white.withValues(alpha: 0.96),
+          side: BorderSide(color: citizenGlassBorderColor(context)),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
           ),
         ),
         child: _isGoogleLoading
-            ? const SizedBox(
+            ? SizedBox(
                 width: 20,
                 height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2.4),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.4,
+                  color: citizenHighlightColor(context),
+                ),
               )
             : FittedBox(
                 fit: BoxFit.scaleDown,
@@ -604,11 +440,15 @@ class _LoginScreenState extends State<LoginScreen> {
                       height: 20,
                     ),
                     const SizedBox(width: 10),
-                    const Text(
-                      'Sign in with Google',
+                    Text(
+                      'Continue with Google',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: Colors.white, fontSize: 16),
+                      style: TextStyle(
+                        color: citizenTitleColor(context),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ],
                 ),
@@ -618,55 +458,11 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _buildLoginButton() {
-    return SizedBox(
+    return CitizenPrimaryButton(
+      label: 'Sign In',
+      onPressed: _login,
+      loading: _isLoading,
       height: 54,
-      child: ElevatedButton(
-        onPressed: _isLoading ? null : _login,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF2563EB),
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-        child: _isLoading
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 2.4,
-                ),
-              )
-            : const Text(
-                'Login',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-      ),
-    );
-  }
-}
-
-class _SectionDivider extends StatelessWidget {
-  const _SectionDivider({required this.label, required this.color});
-
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(child: Divider(color: color.withValues(alpha: 0.35))),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Text(
-            label,
-            style: TextStyle(color: color, fontSize: 13, letterSpacing: 0.6),
-          ),
-        ),
-        Expanded(child: Divider(color: color.withValues(alpha: 0.35))),
-      ],
     );
   }
 }

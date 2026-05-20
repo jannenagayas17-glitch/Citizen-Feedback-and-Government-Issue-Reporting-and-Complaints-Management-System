@@ -545,6 +545,13 @@ class DemoVolumeSeeder extends Seeder
 
     public function run(): void
     {
+        if (! app()->environment('testing')
+            && ! filter_var((string) env('ALLOW_DEMO_DATA_SEEDING', false), FILTER_VALIDATE_BOOLEAN)) {
+            $this->command?->warn('Skipped demo volume seeding. Set ALLOW_DEMO_DATA_SEEDING=true to enable it intentionally.');
+
+            return;
+        }
+
         fake()->seed(20240509);
         mt_srand(20240509);
 

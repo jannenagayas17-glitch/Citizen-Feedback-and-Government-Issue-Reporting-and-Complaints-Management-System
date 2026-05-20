@@ -1,7 +1,8 @@
 import '../utils/token_storage.dart';
+import '../utils/auth_redirect.dart';
 import 'auth_service.dart';
 
-enum CitizenAuthDestination { login, citizenHome }
+enum CitizenAuthDestination { login, citizenHome, frontDeskHome }
 
 class CitizenAuthGateResult {
   const CitizenAuthGateResult._({
@@ -19,12 +20,18 @@ class CitizenAuthGateResult {
   const CitizenAuthGateResult.citizenHome(Map<String, dynamic> user)
     : this._(destination: CitizenAuthDestination.citizenHome, user: user);
 
+  const CitizenAuthGateResult.frontDeskHome(Map<String, dynamic> user)
+    : this._(destination: CitizenAuthDestination.frontDeskHome, user: user);
+
   final CitizenAuthDestination destination;
   final Map<String, dynamic>? user;
   final bool shouldClearStoredSession;
 
   bool get shouldOpenCitizenHome =>
       destination == CitizenAuthDestination.citizenHome && user != null;
+
+  bool get shouldOpenFrontDeskHome =>
+      destination == CitizenAuthDestination.frontDeskHome && user != null;
 }
 
 class CitizenAuthGate {
@@ -41,7 +48,15 @@ class CitizenAuthGate {
 
     try {
       final user = await _authService.getCurrentUser();
-      final role = (user['role'] ?? '').toString().trim().toLowerCase();
+      final role = AuthRedirect.normalizeRole(user['role']);
+
+      if (role == 'citizen') {
+        return CitizenAuthGateResult.citizenHome(user);
+      }
+
+      if (role == 'administrative_staff') {
+        return CitizenAuthGateResult.frontDeskHome(user);
+      }
 
       if (role != 'citizen') {
         return const CitizenAuthGateResult.login(
@@ -49,7 +64,7 @@ class CitizenAuthGate {
         );
       }
 
-      return CitizenAuthGateResult.citizenHome(user);
+      return const CitizenAuthGateResult.login(shouldClearStoredSession: true);
     } catch (_) {
       return const CitizenAuthGateResult.login(shouldClearStoredSession: true);
     }

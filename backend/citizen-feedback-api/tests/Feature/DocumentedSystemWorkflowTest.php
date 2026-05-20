@@ -1146,6 +1146,33 @@ class DocumentedSystemWorkflowTest extends TestCase
             ->assertJsonFragment(['report_id' => $report->id]);
     }
 
+    public function test_tc_esc_demo_seed_reports_are_hidden_from_escalations(): void
+    {
+        [$realReport, $superAdmin] = $this->seedEscalatedReport();
+        $demoCitizen = $this->makeUser('Demo Citizen', 'demo.citizen.0042@example.com', 'citizen');
+        $demoReport = Report::create(array_merge(
+            $this->validReportPayload($realReport->office, $realReport->category),
+            [
+                'user_id' => $demoCitizen->id,
+                'title' => 'Demo escalation report',
+                'status' => 'Pending',
+                'priority' => 'High',
+            ]
+        ));
+        $demoReport->forceFill([
+            'created_at' => now()->subHours(80),
+            'updated_at' => now()->subHours(80),
+        ])->saveQuietly();
+
+        Sanctum::actingAs($superAdmin);
+
+        $this->getJson('/api/admin/escalations')
+            ->assertOk()
+            ->assertJsonPath('summary.total', 1)
+            ->assertJsonFragment(['report_id' => $realReport->id])
+            ->assertJsonMissing(['report_id' => $demoReport->id]);
+    }
+
     public function test_tc_esc_invalid_status_update_fails_validation(): void
     {
         [$report, $superAdmin] = $this->seedEscalatedReport();

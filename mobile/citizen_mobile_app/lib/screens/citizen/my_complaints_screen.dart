@@ -142,23 +142,7 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
         elevation: 0,
       ),
       body: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: citizenIsDark(context)
-                ? const [
-                    Color(0xFF0B1322),
-                    Color(0xFF10192E),
-                    Color(0xFF0E1525),
-                  ]
-                : const [
-                    Color(0xFFF8FBFF),
-                    Color(0xFFEFF5FF),
-                    Color(0xFFF6F8FC),
-                  ],
-          ),
-        ),
+        decoration: BoxDecoration(gradient: citizenPageGradient(context)),
         child: RefreshIndicator(
           onRefresh: _refresh,
           child: FutureBuilder<List<dynamic>>(
@@ -264,9 +248,13 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
         height: 62,
         child: FloatingActionButton(
           shape: const CircleBorder(),
-          backgroundColor: const Color(0xFF3B82F6),
+          backgroundColor: citizenPrimaryActionColor(context),
           onPressed: _openSubmit,
-          child: const Icon(Icons.add, color: Colors.white, size: 28),
+          child: Icon(
+            Icons.add,
+            color: citizenOnPrimaryActionColor(context),
+            size: 28,
+          ),
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
@@ -293,6 +281,7 @@ class _CitizenReportCard extends StatelessWidget {
         : ReportFeedbackService.buildTrackingId(reportId);
     final status = CitizenReportModel.displayStatusOf(report);
     final latestUpdate = CitizenReportModel.latestAdminRemarkOrNull(report);
+    final isAnonymous = CitizenReportModel.isAnonymousOf(report);
     final statusColor = _statusColor(status);
 
     return InkWell(
@@ -328,13 +317,19 @@ class _CitizenReportCard extends StatelessWidget {
                       _MetaPill(
                         icon: Icons.tag_rounded,
                         label: trackingId,
-                        accent: const Color(0xFF3B82F6),
+                        accent: citizenPrimaryActionColor(context),
                       ),
                       _MetaPill(
                         icon: Icons.business_outlined,
                         label: CitizenReportModel.officeNameOf(report),
-                        accent: const Color(0xFF8B5CF6),
+                        accent: citizenAccentColor(context),
                       ),
+                      if (isAnonymous)
+                        _MetaPill(
+                          icon: Icons.shield_outlined,
+                          label: 'Anonymous',
+                          accent: citizenHighlightColor(context),
+                        ),
                     ],
                   ),
                 ),
@@ -403,7 +398,7 @@ class _CitizenReportCard extends StatelessWidget {
                 Text(
                   'Open full complaint details',
                   style: TextStyle(
-                    color: const Color(0xFF3B82F6),
+                    color: citizenPrimaryActionColor(context),
                     fontWeight: FontWeight.w700,
                     fontSize: 12.5,
                   ),
@@ -435,13 +430,13 @@ class _CitizenReportCard extends StatelessWidget {
   static Color _statusColor(String status) {
     switch (status) {
       case 'Resolved':
-        return const Color(0xFF22C55E);
+        return CitizenAppPalette.navy;
       case 'In Progress':
-        return const Color(0xFF3B82F6);
+        return CitizenAppPalette.slate;
       case 'Rejected':
-        return const Color(0xFFEF4444);
+        return CitizenAppPalette.error;
       default:
-        return const Color(0xFFF59E0B);
+        return CitizenAppPalette.mauve;
     }
   }
 
@@ -523,9 +518,9 @@ class _ReportsErrorState extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(
+              Icon(
                 Icons.cloud_off_rounded,
-                color: Color(0xFFF59E0B),
+                color: citizenHighlightColor(context),
                 size: 30,
               ),
               const SizedBox(height: 12),
@@ -550,8 +545,8 @@ class _ReportsErrorState extends StatelessWidget {
               FilledButton.icon(
                 onPressed: onRetry,
                 style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF3B82F6),
-                  foregroundColor: Colors.white,
+                  backgroundColor: citizenPrimaryActionColor(context),
+                  foregroundColor: citizenOnPrimaryActionColor(context),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 18,
                     vertical: 14,
@@ -592,12 +587,14 @@ class _ReportsEmptyState extends StatelessWidget {
                 width: 64,
                 height: 64,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF3B82F6).withValues(alpha: 0.10),
+                  color: citizenPrimaryActionColor(
+                    context,
+                  ).withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(18),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.inbox_outlined,
-                  color: Color(0xFF3B82F6),
+                  color: citizenPrimaryActionColor(context),
                   size: 30,
                 ),
               ),
@@ -624,8 +621,8 @@ class _ReportsEmptyState extends StatelessWidget {
               FilledButton.icon(
                 onPressed: onSubmit,
                 style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF3B82F6),
-                  foregroundColor: Colors.white,
+                  backgroundColor: citizenPrimaryActionColor(context),
+                  foregroundColor: citizenOnPrimaryActionColor(context),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 18,
                     vertical: 14,
@@ -718,26 +715,14 @@ class _StatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color accent;
-    switch (status) {
-      case 'Resolved':
-        accent = const Color(0xFF22C55E);
-        break;
-      case 'In Progress':
-        accent = const Color(0xFF3B82F6);
-        break;
-      case 'Rejected':
-        accent = const Color(0xFFEF4444);
-        break;
-      default:
-        accent = const Color(0xFFF59E0B);
-    }
+    final accent = citizenReportStatusColor(context, status);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: accent.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: accent.withValues(alpha: 0.18)),
       ),
       child: Text(
         status,

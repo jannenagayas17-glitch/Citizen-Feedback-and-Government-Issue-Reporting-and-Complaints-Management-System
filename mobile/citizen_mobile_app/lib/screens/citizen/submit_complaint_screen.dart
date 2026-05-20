@@ -38,6 +38,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   String? _selectedOfficeNameValue;
   String? _selectedCustomIssueType;
   String _selectedPriority = 'Normal';
+  bool _submitAnonymously = false;
   bool _isSubmitting = false;
   final List<_SelectedMediaItem> _selectedMedia = [];
 
@@ -459,6 +460,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
         location: location,
         barangay: barangay,
         priority: _selectedPriority,
+        isAnonymous: _submitAnonymously,
         mediaFiles: _selectedMedia.map((media) => media.file).toList(),
       );
 
@@ -495,14 +497,16 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Your complaint has been sent successfully.',
+              _submitAnonymously
+                  ? 'Your complaint has been sent successfully. Admins will see it as an anonymous report.'
+                  : 'Your complaint has been sent successfully.',
               style: TextStyle(color: citizenBodyColor(context)),
             ),
             const SizedBox(height: 12),
             Text(
               trackingId,
-              style: const TextStyle(
-                color: Color(0xFFBFDBFE),
+              style: TextStyle(
+                color: citizenPrimaryActionColor(context),
                 fontWeight: FontWeight.w700,
                 fontSize: 16,
               ),
@@ -535,7 +539,6 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const accent = Color(0xFF4B82F7);
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Scaffold(
@@ -644,9 +647,9 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                       decoration: _inputDecoration(
                         'Select a Tacloban City barangay',
                         errorText: _locationError,
-                        prefixIcon: const Icon(
+                        prefixIcon: Icon(
                           Icons.location_on_rounded,
-                          color: Color(0xFFFF5A7A),
+                          color: citizenAccentColor(context),
                           size: 16,
                         ),
                         suffixIcon: Icon(
@@ -673,6 +676,10 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                     const SizedBox(height: 8),
                     _buildPrioritySelector(),
                     const SizedBox(height: 14),
+                    _buildLabel('Privacy'),
+                    const SizedBox(height: 8),
+                    _buildPrivacySelector(),
+                    const SizedBox(height: 14),
                     _buildLabel('Upload Evidence'),
                     const SizedBox(height: 8),
                     _buildEvidenceCard(),
@@ -698,20 +705,20 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                       child: ElevatedButton(
                         onPressed: _isSubmitting ? null : _submit,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: accent,
-                          foregroundColor: Colors.white,
+                          backgroundColor: citizenPrimaryActionColor(context),
+                          foregroundColor: citizenOnPrimaryActionColor(context),
                           elevation: 0,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
                           ),
                         ),
                         child: _isSubmitting
-                            ? const SizedBox(
+                            ? SizedBox(
                                 width: 20,
                                 height: 20,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2.2,
-                                  color: Colors.white,
+                                  color: citizenOnPrimaryActionColor(context),
                                 ),
                               )
                             : const Text(
@@ -793,7 +800,10 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: Color(0xFF4B82F7), width: 1.2),
+        borderSide: BorderSide(
+          color: citizenPrimaryActionColor(context),
+          width: 1.2,
+        ),
       ),
       hintStyle: TextStyle(color: citizenMutedColor(context)),
       errorText: errorText,
@@ -991,7 +1001,6 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     return Row(
       children: _priorities.map((priority) {
         final isSelected = _selectedPriority == priority;
-        final palette = _priorityPalette(priority);
 
         return Expanded(
           child: Padding(
@@ -1005,11 +1014,13 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                 height: 40,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: isSelected ? palette.fill : citizenInputColor(context),
+                  color: isSelected
+                      ? citizenPriorityFillColor(context, priority)
+                      : citizenInputColor(context),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: isSelected
-                        ? palette.border
+                        ? citizenPriorityBorderColor(context, priority)
                         : citizenBorderColor(context),
                   ),
                 ),
@@ -1017,7 +1028,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                   priority,
                   style: TextStyle(
                     color: isSelected
-                        ? palette.text
+                        ? citizenPriorityTextColor(context, priority)
                         : citizenBodyColor(context),
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -1031,39 +1042,60 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     );
   }
 
-  _PriorityPalette _priorityPalette(String priority) {
-    switch (priority) {
-      case 'Low':
-        return const _PriorityPalette(
-          fill: Color(0xFF243E73),
-          border: Color(0xFF4B82F7),
-          text: Colors.white,
-        );
-      case 'Normal':
-        return const _PriorityPalette(
-          fill: Color(0xFF1F4D3A),
-          border: Color(0xFF22C55E),
-          text: Colors.white,
-        );
-      case 'High':
-        return const _PriorityPalette(
-          fill: Color(0xFF6B421A),
-          border: Color(0xFFF59E0B),
-          text: Colors.white,
-        );
-      case 'Urgent':
-        return const _PriorityPalette(
-          fill: Color(0xFF6A2430),
-          border: Color(0xFFEF4444),
-          text: Color(0xFFFFD5D8),
-        );
-      default:
-        return const _PriorityPalette(
-          fill: Color(0xFF293248),
-          border: Color(0xFF4B82F7),
-          text: Colors.white,
-        );
-    }
+  Widget _buildPrivacySelector() {
+    final infoColor = citizenPrimaryActionColor(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _PrivacyOptionCard(
+          title: 'Submit with my identity',
+          subtitle:
+              'Admins can see your name and contact details while handling this complaint.',
+          selected: !_submitAnonymously,
+          onTap: () => setState(() => _submitAnonymously = false),
+        ),
+        const SizedBox(height: 10),
+        _PrivacyOptionCard(
+          title: 'Submit anonymously',
+          subtitle:
+              'Admins will only see "Anonymous Citizen" while the system keeps secure internal records if needed.',
+          selected: _submitAnonymously,
+          onTap: () => setState(() => _submitAnonymously = true),
+        ),
+        const SizedBox(height: 10),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: infoColor.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: infoColor.withValues(alpha: 0.14)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.shield_outlined,
+                size: 18,
+                color: infoColor,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Anonymous reports hide your name, email, and phone from admin and super admin report views. Internal records may still be kept securely for account protection, misuse prevention, and legal compliance.',
+                  style: TextStyle(
+                    color: citizenBodyColor(context),
+                    fontSize: 12.5,
+                    height: 1.45,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildEvidenceCard() {
@@ -1093,12 +1125,14 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
               decoration: BoxDecoration(
                 color: isDark
                     ? Colors.white.withValues(alpha: 0.06)
-                    : const Color(0xFFE0EAFF),
+                    : citizenHighlightColor(context).withValues(alpha: 0.18),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(
                 Icons.photo_camera_outlined,
-                color: isDark ? Colors.white70 : const Color(0xFF2563EB),
+                color: isDark
+                    ? citizenHighlightColor(context)
+                    : citizenPrimaryActionColor(context),
               ),
             ),
             const SizedBox(height: 12),
@@ -1149,12 +1183,14 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
               decoration: BoxDecoration(
                 color: isDark
                     ? Colors.white.withValues(alpha: 0.06)
-                    : const Color(0xFFE0EAFF),
+                    : citizenHighlightColor(context).withValues(alpha: 0.18),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
                 icon,
-                color: isDark ? Colors.white : const Color(0xFF2563EB),
+                color: isDark
+                    ? citizenHighlightColor(context)
+                    : citizenPrimaryActionColor(context),
               ),
             ),
             const SizedBox(width: 12),
@@ -1191,6 +1227,83 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   }
 }
 
+class _PrivacyOptionCard extends StatelessWidget {
+  const _PrivacyOptionCard({
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = citizenPrimaryActionColor(context);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: selected
+              ? accent.withValues(alpha: 0.08)
+              : citizenInputColor(context),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected
+                ? accent.withValues(alpha: 0.22)
+                : citizenBorderColor(context),
+            width: selected ? 1.2 : 1,
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              selected
+                  ? Icons.radio_button_checked_rounded
+                  : Icons.radio_button_off_rounded,
+              color: selected ? accent : citizenMutedColor(context),
+              size: 20,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: citizenTitleColor(context),
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: citizenBodyColor(context),
+                      fontSize: 12.5,
+                      height: 1.45,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _SelectedMediaItem {
   const _SelectedMediaItem({
     required this.file,
@@ -1203,18 +1316,6 @@ class _SelectedMediaItem {
   final Uint8List? previewBytes;
 
   bool get isVideo => mediaType == 'video';
-}
-
-class _PriorityPalette {
-  const _PriorityPalette({
-    required this.fill,
-    required this.border,
-    required this.text,
-  });
-
-  final Color fill;
-  final Color border;
-  final Color text;
 }
 
 class _SelectedMediaChip extends StatelessWidget {
@@ -1246,7 +1347,9 @@ class _SelectedMediaChip extends StatelessWidget {
               children: [
                 Icon(
                   Icons.videocam_outlined,
-                  color: isDark ? Colors.white : const Color(0xFF2563EB),
+                  color: isDark
+                      ? citizenHighlightColor(context)
+                      : citizenPrimaryActionColor(context),
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -1278,7 +1381,7 @@ class _SelectedMediaChip extends StatelessWidget {
           height: 92,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            color: const Color(0xFFF3F4F6),
+            color: citizenInputColor(context),
             image: item.previewBytes != null
                 ? DecorationImage(
                     image: MemoryImage(item.previewBytes!),
@@ -1317,8 +1420,8 @@ class _RemoveMediaButton extends StatelessWidget {
       child: Container(
         width: 24,
         height: 24,
-        decoration: const BoxDecoration(
-          color: Color(0xFF111827),
+        decoration: BoxDecoration(
+          color: citizenTitleColor(context),
           shape: BoxShape.circle,
         ),
         child: const Icon(Icons.close, size: 14, color: Colors.white),

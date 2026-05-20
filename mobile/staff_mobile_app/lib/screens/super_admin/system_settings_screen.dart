@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
@@ -41,30 +43,39 @@ class _SystemSettingsScreenState extends State<SystemSettingsScreen> {
     };
   }
 
-  Future<void> _save(Map<String, dynamic> settings) async {
+  Future<Map<String, dynamic>> _save(Map<String, dynamic> settings) async {
     setState(() => _isSaving = true);
     try {
       final updated = await _settingsService.updateSettings(settings);
-      if (!mounted) return;
-      setState(() {
-        _payloadFuture = Future.value(<String, dynamic>{
-          'user': _currentUser,
-          'settings': updated,
+      if (mounted) {
+        setState(() {
+          _payloadFuture = Future.value(<String, dynamic>{
+            'user': _currentUser,
+            'settings': updated,
+          });
         });
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Settings updated successfully.')),
-      );
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Settings updated successfully.')),
+        );
+      }
+
+      return updated;
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
+      rethrow;
     } finally {
       if (mounted) {
         setState(() => _isSaving = false);
       }
     }
+  }
+
+  Future<Map<String, dynamic>> _autoSave(Map<String, dynamic> settings) async {
+    return _settingsService.updateSettings(settings);
   }
 
   Future<void> _reload() async {
@@ -121,6 +132,7 @@ class _SystemSettingsScreenState extends State<SystemSettingsScreen> {
           initialSettings: settings,
           isSaving: _isSaving,
           onSave: _save,
+          onAutoSave: _autoSave,
           onChangePassword: _changePassword,
         );
       },
@@ -150,6 +162,7 @@ class _SettingsContent extends StatefulWidget {
     required this.initialSettings,
     required this.isSaving,
     required this.onSave,
+    required this.onAutoSave,
     required this.onChangePassword,
   });
 
@@ -157,7 +170,10 @@ class _SettingsContent extends StatefulWidget {
   final Map<String, dynamic> user;
   final Map<String, dynamic> initialSettings;
   final bool isSaving;
-  final Future<void> Function(Map<String, dynamic> settings) onSave;
+  final Future<Map<String, dynamic>> Function(Map<String, dynamic> settings)
+  onSave;
+  final Future<Map<String, dynamic>> Function(Map<String, dynamic> settings)
+  onAutoSave;
   final Future<void> Function({
     required String currentPassword,
     required String newPassword,
@@ -195,6 +211,7 @@ class _SettingsContentState extends State<_SettingsContent> {
   late int _triggerTimeHours;
   late String _notificationChannel;
   late String _priority;
+  Map<String, dynamic> _lastSyncedSettings = const <String, dynamic>{};
   final TextEditingController _currentPasswordController =
       TextEditingController();
   final TextEditingController _newPasswordController = TextEditingController();
@@ -204,6 +221,8 @@ class _SettingsContentState extends State<_SettingsContent> {
   bool _obscureCurrentPassword = true;
   bool _obscureNewPassword = true;
   bool _obscureConfirmPassword = true;
+  bool _isPersistingAlertPreferences = false;
+  String? _alertPreferenceError;
   String? _currentPasswordError;
   String? _newPasswordError;
   String? _confirmPasswordError;
@@ -244,11 +263,20 @@ class _SettingsContentState extends State<_SettingsContent> {
           const <String, dynamic>{},
     );
 
-    final savedEnableAlerts = notifications['enable_alerts'] != false;
-    final savedEscalationNotifications =
-        notifications['escalation_notifications'] != false;
-    final savedFeedbackNotifications =
-        notifications['feedback_notifications'] != false;
+    _lastSyncedSettings = _cloneSettings(widget.initialSettings);
+
+    final savedEnableAlerts = _readBool(
+      notifications['enable_alerts'],
+      fallback: true,
+    );
+    final savedEscalationNotifications = _readBool(
+      notifications['escalation_notifications'],
+      fallback: true,
+    );
+    final savedFeedbackNotifications = _readBool(
+      notifications['feedback_notifications'],
+      fallback: true,
+    );
 
     _enableAlerts = savedEnableAlerts;
     _cachedEscalationNotifications = savedEscalationNotifications;
@@ -285,6 +313,8 @@ class _SettingsContentState extends State<_SettingsContent> {
       _priorityOptions,
       'High Priority',
     );
+    _alertPreferenceError = null;
+    _isPersistingAlertPreferences = false;
   }
 
   int _sanitizeIntOption(int value, List<int> options, int fallback) {
@@ -297,6 +327,41 @@ class _SettingsContentState extends State<_SettingsContent> {
     String fallback,
   ) {
     return options.contains(value) ? value : fallback;
+  }
+
+  bool _readBool(dynamic value, {required bool fallback}) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+
+    final normalized = value?.toString().trim().toLowerCase();
+    switch (normalized) {
+      case '1':
+      case 'true':
+      case 'yes':
+      case 'on':
+        return true;
+      case '0':
+      case 'false':
+      case 'no':
+      case 'off':
+        return false;
+      default:
+        return fallback;
+    }
+  }
+
+  Map<String, dynamic> _cloneSettings(Map<String, dynamic> source) {
+    return <String, dynamic>{
+      'notifications': Map<String, dynamic>.from(
+        source['notifications'] as Map? ?? const <String, dynamic>{},
+      ),
+      'report_settings': Map<String, dynamic>.from(
+        source['report_settings'] as Map? ?? const <String, dynamic>{},
+      ),
+      'escalation_settings': Map<String, dynamic>.from(
+        source['escalation_settings'] as Map? ?? const <String, dynamic>{},
+      ),
+    };
   }
 
   void _clearPasswordErrors() {
@@ -328,12 +393,106 @@ class _SettingsContentState extends State<_SettingsContent> {
     };
   }
 
+  Map<String, dynamic> _buildAlertSettingsPayload() {
+    final payload = _cloneSettings(_lastSyncedSettings);
+    payload['notifications'] = <String, dynamic>{
+      'enable_alerts': _enableAlerts,
+      'escalation_notifications': _enableAlerts
+          ? _escalationNotifications
+          : false,
+      'feedback_notifications': _enableAlerts ? _feedbackNotifications : false,
+    };
+
+    final reportSettings = Map<String, dynamic>.from(
+      payload['report_settings'] as Map? ?? const <String, dynamic>{},
+    );
+    reportSettings['default_due_hours'] = int.tryParse(
+      '${reportSettings['default_due_hours'] ?? 48}',
+    ) ?? 48;
+    reportSettings['default_due_unit'] =
+        (reportSettings['default_due_unit'] ?? 'Hours').toString();
+    payload['report_settings'] = reportSettings;
+
+    final escalationSettings = Map<String, dynamic>.from(
+      payload['escalation_settings'] as Map? ?? const <String, dynamic>{},
+    );
+    escalationSettings['trigger_time_hours'] = int.tryParse(
+      '${escalationSettings['trigger_time_hours'] ?? 72}',
+    ) ?? 72;
+    escalationSettings['notification_channel'] =
+        (escalationSettings['notification_channel'] ?? 'Email & In-App')
+            .toString();
+    escalationSettings['priority'] =
+        (escalationSettings['priority'] ?? 'High Priority').toString();
+    payload['escalation_settings'] = escalationSettings;
+
+    return payload;
+  }
+
+  Map<String, bool> _notificationSnapshot() {
+    return <String, bool>{
+      'enable_alerts': _enableAlerts,
+      'escalation_notifications': _escalationNotifications,
+      'feedback_notifications': _feedbackNotifications,
+      'cached_escalation_notifications': _cachedEscalationNotifications,
+      'cached_feedback_notifications': _cachedFeedbackNotifications,
+    };
+  }
+
+  void _restoreNotificationSnapshot(Map<String, bool> snapshot) {
+    setState(() {
+      _enableAlerts = snapshot['enable_alerts'] ?? true;
+      _escalationNotifications =
+          snapshot['escalation_notifications'] ?? _enableAlerts;
+      _feedbackNotifications =
+          snapshot['feedback_notifications'] ?? _enableAlerts;
+      _cachedEscalationNotifications =
+          snapshot['cached_escalation_notifications'] ?? _escalationNotifications;
+      _cachedFeedbackNotifications =
+          snapshot['cached_feedback_notifications'] ?? _feedbackNotifications;
+    });
+  }
+
+  Future<void> _saveAlertPreferences(
+    Map<String, bool> previousSnapshot,
+  ) async {
+    setState(() {
+      _isPersistingAlertPreferences = true;
+      _alertPreferenceError = null;
+    });
+
+    try {
+      final updated = await widget.onAutoSave(_buildAlertSettingsPayload());
+      if (!mounted) return;
+      setState(() {
+        _lastSyncedSettings = _cloneSettings(updated);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      _restoreNotificationSnapshot(previousSnapshot);
+      setState(() {
+        _alertPreferenceError = e.toString().replaceFirst('Exception: ', '');
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isPersistingAlertPreferences = false);
+      }
+    }
+  }
+
   Future<void> _submit() async {
-    await widget.onSave(_buildSettingsPayload());
+    final updated = await widget.onSave(_buildSettingsPayload());
+    if (!mounted) return;
+    setState(() {
+      _lastSyncedSettings = _cloneSettings(updated);
+      _alertPreferenceError = null;
+    });
   }
 
   void _setEnableAlerts(bool value) {
+    final previousSnapshot = _notificationSnapshot();
     setState(() {
+      _alertPreferenceError = null;
       if (!value) {
         _cachedEscalationNotifications = _escalationNotifications;
         _cachedFeedbackNotifications = _feedbackNotifications;
@@ -354,28 +513,38 @@ class _SettingsContentState extends State<_SettingsContent> {
         _cachedFeedbackNotifications = true;
       }
     });
+
+    unawaited(_saveAlertPreferences(previousSnapshot));
   }
 
   void _setEscalationNotifications(bool value) {
+    final previousSnapshot = _notificationSnapshot();
     setState(() {
+      _alertPreferenceError = null;
       _cachedEscalationNotifications = value;
       _escalationNotifications = value;
       _enableAlerts = _escalationNotifications || _feedbackNotifications;
     });
+
+    unawaited(_saveAlertPreferences(previousSnapshot));
   }
 
   void _setFeedbackNotifications(bool value) {
+    final previousSnapshot = _notificationSnapshot();
     setState(() {
+      _alertPreferenceError = null;
       _cachedFeedbackNotifications = value;
       _feedbackNotifications = value;
       _enableAlerts = _escalationNotifications || _feedbackNotifications;
     });
+
+    unawaited(_saveAlertPreferences(previousSnapshot));
   }
 
   Future<void> _submitPasswordChange() async {
-    final currentPassword = _currentPasswordController.text.trim();
-    final newPassword = _newPasswordController.text.trim();
-    final confirmPassword = _confirmPasswordController.text.trim();
+    final currentPassword = _currentPasswordController.text;
+    final newPassword = _newPasswordController.text;
+    final confirmPassword = _confirmPasswordController.text;
 
     setState(() {
       _clearPasswordErrors();
@@ -542,10 +711,12 @@ class _SettingsContentState extends State<_SettingsContent> {
                   SizedBox(
                     width: panelWidth,
                     child: _ToggleSettingsCard(
-                      isSaving: widget.isSaving,
+                      isSaving: widget.isSaving || _isPersistingAlertPreferences,
+                      isAutoSaving: _isPersistingAlertPreferences,
                       enableAlerts: _enableAlerts,
                       escalationNotifications: _escalationNotifications,
                       feedbackNotifications: _feedbackNotifications,
+                      errorText: _alertPreferenceError,
                       onEnableAlertsChanged: _setEnableAlerts,
                       onEscalationNotificationsChanged:
                           _setEscalationNotifications,
@@ -1058,18 +1229,22 @@ class _PasswordSettingsCard extends StatelessWidget {
 class _ToggleSettingsCard extends StatelessWidget {
   const _ToggleSettingsCard({
     required this.isSaving,
+    required this.isAutoSaving,
     required this.enableAlerts,
     required this.escalationNotifications,
     required this.feedbackNotifications,
+    required this.errorText,
     required this.onEnableAlertsChanged,
     required this.onEscalationNotificationsChanged,
     required this.onFeedbackNotificationsChanged,
   });
 
   final bool isSaving;
+  final bool isAutoSaving;
   final bool enableAlerts;
   final bool escalationNotifications;
   final bool feedbackNotifications;
+  final String? errorText;
   final ValueChanged<bool> onEnableAlertsChanged;
   final ValueChanged<bool> onEscalationNotificationsChanged;
   final ValueChanged<bool> onFeedbackNotificationsChanged;
@@ -1096,7 +1271,7 @@ class _ToggleSettingsCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Control which dashboard alerts stay active and keep the saved state consistent after refresh or relogin.',
+            'Changes save automatically to the backend and reload from the latest saved state.',
             style: TextStyle(color: colors.mutedText, fontSize: 13),
           ),
           const SizedBox(height: 16),
@@ -1125,6 +1300,39 @@ class _ToggleSettingsCard extends StatelessWidget {
             enabled: enableAlerts && !isSaving,
             onChanged: onFeedbackNotificationsChanged,
           ),
+          if (isAutoSaving || (errorText?.isNotEmpty ?? false)) ...[
+            Divider(color: colors.border, height: 22),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (isAutoSaving) ...[
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF2E62FF),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                ],
+                Expanded(
+                  child: Text(
+                    isAutoSaving
+                        ? 'Saving alert preferences...'
+                        : errorText!,
+                    style: TextStyle(
+                      color: isAutoSaving
+                          ? colors.mutedText
+                          : const Color(0xFFD14343),
+                      fontSize: 12,
+                      fontWeight: isAutoSaving ? FontWeight.w500 : FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

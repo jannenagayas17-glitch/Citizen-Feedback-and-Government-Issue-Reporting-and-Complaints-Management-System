@@ -166,6 +166,49 @@ class ReportImageUploadTest extends TestCase
         $this->assertDatabaseCount('report_images', 2);
     }
 
+    public function test_citizen_can_create_an_anonymous_report_with_media_in_a_single_request(): void
+    {
+        Storage::fake('public');
+
+        $citizen = $this->makeUser('Anonymous Upload Citizen', 'anonymous-upload@example.com', 'citizen');
+        $office = Office::create(['name' => "City Engineer's Office", 'is_active' => true]);
+        $category = Category::create(['name' => 'Streetlights']);
+
+        Sanctum::actingAs($citizen);
+
+        $response = $this->post('/api/reports', array_merge(
+            $this->validReportPayload($office, $category),
+            [
+                'is_anonymous' => true,
+                'media' => [
+                    $this->fakePngUpload('anonymous-inline-evidence-1.png'),
+                    UploadedFile::fake()->create('anonymous-inline-evidence-2.mp4', 256, 'video/mp4'),
+                ],
+            ]
+        ));
+
+        $response
+            ->assertCreated()
+            ->assertJsonPath('report.is_anonymous', true)
+            ->assertJsonPath('report.user.name', $citizen->name)
+            ->assertJsonCount(2, 'report.images')
+            ->assertJsonPath('report.images.0.media_type', 'image')
+            ->assertJsonPath('report.images.1.media_type', 'video');
+
+        $reportId = $response->json('report.id');
+        $imagePaths = $response->json('report.images.*.image_path');
+
+        foreach ($imagePaths as $imagePath) {
+            Storage::disk('public')->assertExists($imagePath);
+        }
+
+        $this->assertDatabaseHas('reports', [
+            'id' => $reportId,
+            'is_anonymous' => true,
+        ]);
+        $this->assertDatabaseCount('report_images', 2);
+    }
+
     private function seedCitizenReport(): array
     {
         $citizen = $this->makeUser('Report Owner', 'report-owner@example.com', 'citizen');

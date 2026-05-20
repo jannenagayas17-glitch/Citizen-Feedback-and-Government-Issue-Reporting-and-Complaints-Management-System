@@ -12,6 +12,9 @@ class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable, SoftDeletes;
 
+    public const ROLE_ADMINISTRATIVE_STAFF = 'administrative_staff';
+    public const ROLE_FRONT_DESK = 'front_desk';
+
     protected $fillable = [
         'name',
         'email',
@@ -22,6 +25,11 @@ class User extends Authenticatable
         'department',
         'job_title',
         'firebase_uid',
+        'profile_image_path',
+    ];
+
+    protected $appends = [
+        'profile_image_url',
     ];
 
     protected $hidden = [
@@ -75,5 +83,54 @@ class User extends Authenticatable
         return str_contains($title, 'head')
             || str_contains($title, 'chief')
             || str_contains($title, 'director');
+    }
+
+    public static function normalizeRole(?string $role): string
+    {
+        $normalized = strtolower(trim((string) $role));
+
+        return match ($normalized) {
+            self::ROLE_FRONT_DESK => self::ROLE_ADMINISTRATIVE_STAFF,
+            'staff' => 'admin',
+            default => $normalized === '' ? 'citizen' : $normalized,
+        };
+    }
+
+    public function normalizedRole(): string
+    {
+        return self::normalizeRole($this->role);
+    }
+
+    public function hasAdministrativeStaffRole(): bool
+    {
+        return $this->normalizedRole() === self::ROLE_ADMINISTRATIVE_STAFF;
+    }
+
+    public function getProfileImageUrlAttribute(): ?string
+    {
+        $path = trim((string) ($this->profile_image_path ?? ''));
+
+        if ($path === '') {
+            return null;
+        }
+
+        if (filter_var($path, FILTER_VALIDATE_URL)) {
+            return $path;
+        }
+
+        $normalizedPath = ltrim($path, '/');
+        if (str_starts_with($normalizedPath, 'public/')) {
+            $normalizedPath = substr($normalizedPath, strlen('public/'));
+        }
+
+        if (str_starts_with($normalizedPath, 'storage/')) {
+            $normalizedPath = substr($normalizedPath, strlen('storage/'));
+        }
+
+        if ($normalizedPath === '') {
+            return null;
+        }
+
+        return url('/api/profile-images/'.$normalizedPath);
     }
 }

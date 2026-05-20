@@ -46,6 +46,10 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
   }
 
   Future<void> _submit() async {
+    if (_isSubmitting) {
+      return;
+    }
+
     final message = _messageController.text.trim();
 
     setState(() {
@@ -68,12 +72,16 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
     setState(() => _isSubmitting = true);
 
     try {
-      await _feedbackService.saveFeedbackEntry(
+      final response = await _feedbackService.saveFeedbackEntry(
         officeId: _selectedOfficeId!,
         type: _feedbackType,
         message: message,
         rating: _rating,
       );
+      final feedbackMessage =
+          (response['message'] ?? 'Feedback sent successfully.')
+              .toString()
+              .trim();
 
       if (!mounted) return;
 
@@ -84,13 +92,15 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
         _historyFuture = _feedbackService.getFeedbackEntries();
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Feedback sent successfully.')),
-      );
-    } catch (_) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(feedbackMessage)));
+    } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to send feedback right now.')),
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+        ),
       );
     } finally {
       if (mounted) {
@@ -156,20 +166,20 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
                 child: ElevatedButton(
                   onPressed: _isSubmitting ? null : _submit,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF4B82F7),
-                    foregroundColor: Colors.white,
+                    backgroundColor: citizenPrimaryActionColor(context),
+                    foregroundColor: citizenOnPrimaryActionColor(context),
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
                   ),
                   child: _isSubmitting
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2.2,
-                            color: Colors.white,
+                            color: citizenOnPrimaryActionColor(context),
                           ),
                         )
                       : const Text(
@@ -213,16 +223,12 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
   }
 
   Widget _buildInfoBanner() {
-    final isDark = citizenIsDark(context);
-
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF13284E) : const Color(0xFFEFF6FF),
+        color: citizenInfoSurfaceColor(context),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? const Color(0xFF285BB4) : const Color(0xFFBFDBFE),
-        ),
+        border: Border.all(color: citizenInfoBorderColor(context)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -230,7 +236,7 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
           Text(
             'Your voice matters!',
             style: TextStyle(
-              color: citizenTitleColor(context),
+              color: citizenInfoTextColor(context),
               fontSize: 18,
               fontWeight: FontWeight.w700,
             ),
@@ -268,7 +274,7 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
                 child: _buildTypeChip(
                   label: 'Suggestion',
                   icon: Icons.lightbulb_rounded,
-                  accent: const Color(0xFF4B82F7),
+                  accent: citizenPrimaryActionColor(context),
                 ),
               ),
               const SizedBox(width: 8),
@@ -276,7 +282,7 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
                 child: _buildTypeChip(
                   label: 'Complaint',
                   icon: Icons.warning_amber_rounded,
-                  accent: const Color(0xFFF4B13D),
+                  accent: citizenHighlightColor(context),
                 ),
               ),
               const SizedBox(width: 8),
@@ -284,7 +290,7 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
                 child: _buildTypeChip(
                   label: 'Praise',
                   icon: Icons.celebration_rounded,
-                  accent: const Color(0xFFFF9E66),
+                  accent: citizenAccentColor(context),
                 ),
               ),
             ],
@@ -346,7 +352,6 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
     required Color accent,
   }) {
     final isSelected = _feedbackType == label;
-    final isDark = citizenIsDark(context);
 
     return InkWell(
       onTap: () => setState(() => _feedbackType = label),
@@ -368,11 +373,7 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
             Icon(
               icon,
               size: 14,
-              color: isSelected
-                  ? accent
-                  : isDark
-                  ? Colors.white70
-                  : const Color(0xFF64748B),
+              color: isSelected ? accent : citizenMutedColor(context),
             ),
             const SizedBox(width: 5),
             Flexible(
@@ -381,7 +382,7 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: isSelected
-                      ? (isDark ? Colors.white : const Color(0xFF12213A))
+                      ? citizenTitleColor(context)
                       : citizenBodyColor(context),
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -395,8 +396,6 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
   }
 
   Widget _buildRatingRow() {
-    final isDark = citizenIsDark(context);
-
     return Row(
       children: List.generate(5, (index) {
         final star = index + 1;
@@ -410,10 +409,8 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
               Icons.star_rounded,
               size: 40,
               color: isSelected
-                  ? const Color(0xFFF7C948)
-                  : isDark
-                  ? const Color(0xFF5A4F22)
-                  : const Color(0xFFE2E8F0),
+                  ? citizenHighlightColor(context)
+                  : citizenBorderColor(context),
             ),
           ),
         );
@@ -447,15 +444,17 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
       child: Row(
         children: [
           Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF20314D) : const Color(0xFFFFF7ED),
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: citizenInputColor(context),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
               _feedbackIcon(type),
-              color: const Color(0xFFFFC857),
+              color: isDark
+                  ? citizenHighlightColor(context)
+                  : citizenPrimaryActionColor(context),
               size: 18,
             ),
           ),
@@ -534,7 +533,10 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: Color(0xFF4B82F7), width: 1.2),
+        borderSide: BorderSide(
+          color: citizenPrimaryActionColor(context),
+          width: 1.2,
+        ),
       ),
       hintStyle: TextStyle(color: citizenMutedColor(context)),
       errorText: errorText,

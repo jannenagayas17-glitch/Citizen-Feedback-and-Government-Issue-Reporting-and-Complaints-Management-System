@@ -37,6 +37,27 @@ void main() {
     expect(result.user?['email'], 'super@test.com');
   });
 
+  test('returns administrative staff home when token is valid', () async {
+    await TokenStorage.saveToken('front-desk-token');
+
+    final gate = PortalAuthGate(
+      authService: _FakeAuthService(
+        user: {
+          'id': 8,
+          'role': 'administrative_staff',
+          'email': 'desk@test.com',
+        },
+      ),
+    );
+
+    final result = await gate.resolve();
+
+    expect(result.shouldOpenLogin, isFalse);
+    expect(result.shouldClearStoredSession, isFalse);
+    expect(result.normalizedRole, 'administrative_staff');
+    expect(result.user?['email'], 'desk@test.com');
+  });
+
   test('clears non-admin sessions back to login', () async {
     await TokenStorage.saveToken('citizen-token');
 

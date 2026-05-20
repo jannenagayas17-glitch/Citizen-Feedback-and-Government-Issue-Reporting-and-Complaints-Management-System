@@ -8,6 +8,7 @@ import '../../services/auth_service.dart';
 import '../../services/report_service.dart';
 import '../../utils/admin_theme.dart';
 import '../../utils/user_account_deduplicator.dart';
+import '../../utils/validators.dart';
 
 class ManageAdminsScreen extends StatefulWidget {
   const ManageAdminsScreen({super.key, this.embedded = false});
@@ -24,7 +25,7 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
 
   late Future<_StaffPayload> _payloadFuture;
   String _searchQuery = '';
-  String _selectedAccountGroup = 'Admin Accounts';
+  String _selectedAccountGroup = 'Staff Accounts';
   String _selectedRoleFilter = 'All Role';
   String _selectedDepartmentFilter = 'All Department';
   String _selectedAvailabilityFilter = 'Account Status';
@@ -150,26 +151,21 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
     return showDialog<bool>(
       context: context,
       builder: (dialogContext) {
+        final colors = AdminThemeColors.of(dialogContext);
         return AlertDialog(
-          backgroundColor: const Color(0xFF1A2234),
+          backgroundColor: colors.panel,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(22),
           ),
-          title: Text(title, style: const TextStyle(color: Colors.white)),
+          title: Text(title, style: TextStyle(color: colors.text)),
           content: Text(
             message,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.78),
-              height: 1.4,
-            ),
+            style: TextStyle(color: colors.mutedText, height: 1.4),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
-              child: Text(
-                'Cancel',
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.72)),
-              ),
+              child: Text('Cancel', style: TextStyle(color: colors.mutedText)),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(dialogContext, true),
@@ -264,6 +260,8 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
     final users = payload.users.whereType<Map<String, dynamic>>().where((user) {
       final role = (user['role'] ?? '').toString().trim();
       if (role != 'admin' &&
+          role != 'administrative_staff' &&
+          role != 'front_desk' &&
           role != 'pending_admin' &&
           role != 'super_admin' &&
           role != 'citizen') {
@@ -420,6 +418,7 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
       if (_selectedRoleFilter != 'All Role') {
         final target = switch (_selectedRoleFilter) {
           'Administrator' => 'admin',
+          'Administrative Staff' => 'administrative_staff',
           'Pending Account' => 'pending_admin',
           'System Administrator' => 'super_admin',
           'Citizen' => 'citizen',
@@ -472,6 +471,7 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
     }
     return currentRole == 'super_admin' &&
         (targetRole == 'admin' ||
+            targetRole == 'administrative_staff' ||
             targetRole == 'pending_admin' ||
             targetRole == 'citizen');
   }
@@ -507,7 +507,7 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
   ) async {
     final user = row.user;
     final currentRole = (currentUser['role'] ?? '').toString().trim();
-    final targetRole = (user['role'] ?? '').toString().trim();
+    final targetRole = row.role;
     final isActive = user['is_active'] != false;
     final isArchived = row.isArchived;
     final userId = _userId(user);
@@ -544,17 +544,15 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
+        final colors = AdminThemeColors.of(dialogContext);
         return AlertDialog(
-          backgroundColor: const Color(0xFF171E2F),
+          backgroundColor: colors.panel,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
           ),
           title: Text(
             (user['name'] ?? 'Staff Member').toString(),
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-            ),
+            style: TextStyle(color: colors.text, fontWeight: FontWeight.w800),
           ),
           content: SizedBox(
             width: 420,
@@ -595,10 +593,7 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: Text(
-                'Close',
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.72)),
-              ),
+              child: Text('Close', style: TextStyle(color: colors.mutedText)),
             ),
             if (canEdit)
               OutlinedButton(
@@ -607,8 +602,8 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
                   await _openEditAccount(row);
                 },
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  side: BorderSide(color: Colors.white.withValues(alpha: 0.22)),
+                  foregroundColor: colors.text,
+                  side: BorderSide(color: colors.border),
                 ),
                 child: const Text('Edit'),
               ),
@@ -667,6 +662,7 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
   }
 
   Widget _detailLine(String label, String value) {
+    final colors = AdminThemeColors.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Column(
@@ -675,7 +671,7 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
           Text(
             label,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.48),
+              color: colors.mutedText,
               fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
@@ -683,8 +679,8 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
           const SizedBox(height: 4),
           Text(
             value,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: colors.text,
               fontSize: 14,
               fontWeight: FontWeight.w600,
             ),
@@ -700,6 +696,9 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
         return 'System Administrator';
       case 'admin':
         return 'Administrator';
+      case 'administrative_staff':
+      case 'front_desk':
+        return 'Administrative Staff';
       case 'citizen':
         return 'Citizen';
       case 'pending_admin':
@@ -794,7 +793,7 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
                 Expanded(
                   child: Text(
                     isSuperAdmin
-                        ? 'Manage protected administrator, department admin, and citizen accounts'
+                        ? 'Manage protected administrator, administrative staff, department admin, and citizen accounts'
                         : '$departmentName - Tacloban City Government',
                     style: TextStyle(color: colors.mutedText, fontSize: 13),
                   ),
@@ -1088,6 +1087,7 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
               'All Role',
               'System Administrator',
               'Administrator',
+              'Administrative Staff',
               'Pending Account',
             ],
       onChanged: (value) =>
@@ -1149,7 +1149,7 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
             170.0 +
             (showDepartmentFilter ? 220.0 : 0.0) +
             180.0 +
-            (canAddAccount ? 300.0 : 0.0);
+            (canAddAccount ? 288.0 : 0.0);
         final gapsWidth =
             12.0 * ((showDepartmentFilter ? 3 : 2) + (canAddAccount ? 2 : 0));
         final minToolbarWidth = minSearchWidth + fixedControlsWidth + gapsWidth;
@@ -1198,7 +1198,7 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
     final colors = AdminThemeColors.of(context);
     final tabs = <({String label, int count, IconData icon})>[
       (
-        label: 'Admin Accounts',
+        label: 'Staff Accounts',
         count: adminCount,
         icon: Icons.admin_panel_settings_outlined,
       ),
@@ -1677,7 +1677,7 @@ class _StaffPayload {
   final List<dynamic> offices;
 }
 
-enum _ManagedAccountKind { admin, citizen }
+enum _ManagedAccountKind { admin, frontDesk, citizen }
 
 class _AddMemberDialog extends StatefulWidget {
   const _AddMemberDialog({
@@ -1697,13 +1697,13 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
     'Office Head',
     'Office Supervisor',
     'Office Coordinator',
-    'Administrative Staff',
   ];
 
-  static final RegExp _emojiRegex = RegExp(
-    r'[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]',
-    unicode: true,
-  );
+  static const _frontDeskTypes = [
+    'Administrative Staff',
+    'Public Assistance Officer',
+    'Senior Support Officer',
+  ];
 
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
@@ -1716,6 +1716,7 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
   bool _saving = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  bool _isNormalizingPhone = false;
   String? _selectedOffice;
   String? _selectedAdminType;
   String? _formError;
@@ -1761,54 +1762,91 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
     }
   }
 
-  bool _containsEmoji(String value) => _emojiRegex.hasMatch(value);
-
-  bool _validName(String value) {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) return false;
-    return RegExp(
-      r"^[A-Za-z]+(?:[.'-][A-Za-z]+)*\.?(?:\s+[A-Za-z]+(?:[.'-][A-Za-z]+)*\.?)*$",
-    ).hasMatch(trimmed);
-  }
-
-  bool _validEmail(String value) {
-    return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value.trim());
-  }
-
   bool get _isCitizenAccount =>
       widget.accountKind == _ManagedAccountKind.citizen;
 
-  String get _selectedRole => _isCitizenAccount ? 'citizen' : 'pending_admin';
+  bool get _isFrontDeskAccount =>
+      widget.accountKind == _ManagedAccountKind.frontDesk;
+
+  String get _selectedRole => switch (widget.accountKind) {
+    _ManagedAccountKind.citizen => 'citizen',
+    _ManagedAccountKind.frontDesk => 'administrative_staff',
+    _ManagedAccountKind.admin => 'pending_admin',
+  };
+
+  void _handlePhoneChanged(String value) {
+    final sanitized = PortalValidators.sanitizeMobileInput(value);
+
+    if (!_isNormalizingPhone && sanitized != value) {
+      _isNormalizingPhone = true;
+      _phoneController.value = TextEditingValue(
+        text: sanitized,
+        selection: TextSelection.collapsed(offset: sanitized.length),
+      );
+      _isNormalizingPhone = false;
+    }
+
+    if (_formError != null) {
+      setState(() => _formError = null);
+    }
+  }
 
   String? _validate() {
-    final firstName = _firstNameController.text.trim();
-    final lastName = _lastNameController.text.trim();
+    final firstName = PortalValidators.normalizeWhitespace(
+      _firstNameController.text,
+    );
+    final lastName = PortalValidators.normalizeWhitespace(
+      _lastNameController.text,
+    );
     final email = _emailController.text.trim();
-    final phone = _phoneController.text.trim();
     final password = _passwordController.text.trim();
     final confirmPassword = _confirmPasswordController.text.trim();
 
-    if (!_validName(firstName)) return 'Enter a valid first name.';
-    if (!_validName(lastName)) return 'Enter a valid last name.';
-    if (_containsEmoji('$firstName $lastName')) {
-      return 'Emoji characters are not allowed in names.';
-    }
-    if (!_validEmail(email) || _containsEmoji(email)) {
-      return 'Enter a valid email address.';
-    }
-    if (!RegExp(r'^\d{11}$').hasMatch(phone)) {
-      return 'Mobile number must be exactly 11 digits.';
-    }
+    final firstNameError = PortalValidators.validateNamePart(
+      'First name',
+      firstName,
+    );
+    if (firstNameError != null) return firstNameError;
+
+    final lastNameError = PortalValidators.validateNamePart(
+      'Last name',
+      lastName,
+    );
+    if (lastNameError != null) return lastNameError;
+
+    final emailError = PortalValidators.validateEmail(email);
+    if (emailError != null) return emailError;
+
+    final phoneError = PortalValidators.validatePhilippineMobile(
+      _phoneController.text,
+      required: true,
+    );
+    if (phoneError != null) return phoneError;
+
     if (!_isCitizenAccount) {
       if (_selectedOffice == null || _selectedOffice!.trim().isEmpty) {
         return 'Please select an office or department.';
       }
       if (_selectedAdminType == null || _selectedAdminType!.trim().isEmpty) {
-        return 'Please select an admin type.';
+        return _isFrontDeskAccount
+            ? 'Please select an administrative staff assignment.'
+            : 'Please select an admin type.';
       }
     }
-    if (password.length < 8 || _containsEmoji(password)) {
-      return 'Password must be at least 8 characters and contain no emoji.';
+    if (password.isEmpty) {
+      return 'Password is required.';
+    }
+    if (PortalValidators.containsEmoji(password)) {
+      return 'Emoji characters are not allowed.';
+    }
+    if (password.length < 8) {
+      return 'Password must be at least 8 characters.';
+    }
+    if (confirmPassword.isEmpty) {
+      return 'Please confirm your password.';
+    }
+    if (PortalValidators.containsEmoji(confirmPassword)) {
+      return 'Emoji characters are not allowed.';
     }
     if (password != confirmPassword) {
       return 'Passwords do not match.';
@@ -1817,6 +1855,10 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
   }
 
   Future<void> _submit() async {
+    if (_saving) {
+      return;
+    }
+
     final validationError = _validate();
     if (validationError != null) {
       setState(() => _formError = validationError);
@@ -1829,12 +1871,19 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
     });
 
     try {
-      final name =
-          '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}';
+      final firstName = PortalValidators.normalizeWhitespace(
+        _firstNameController.text,
+      );
+      final lastName = PortalValidators.normalizeWhitespace(
+        _lastNameController.text,
+      );
+      final name = '$firstName $lastName';
       final response = await widget.authService.createManagedAccount(
         name: name,
         email: _emailController.text.trim(),
-        mobileNumber: _phoneController.text.trim(),
+        mobileNumber: PortalValidators.buildSubmissionMobile(
+          _phoneController.text,
+        ),
         password: _passwordController.text.trim(),
         passwordConfirmation: _confirmPasswordController.text.trim(),
         role: _selectedRole,
@@ -1849,6 +1898,8 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
             response['message']?.toString() ??
                 (_isCitizenAccount
                     ? 'Citizen account created successfully.'
+                    : _isFrontDeskAccount
+                    ? 'Administrative staff account created successfully.'
                     : 'Pending admin account created successfully.'),
           ),
         ),
@@ -1925,6 +1976,8 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
                               Text(
                                 _isCitizenAccount
                                     ? 'Add Citizen Account'
+                                    : _isFrontDeskAccount
+                                    ? 'Add Administrative Staff Account'
                                     : 'Add Admin Account',
                                 style: TextStyle(
                                   color: Colors.white,
@@ -1936,6 +1989,8 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
                               Text(
                                 _isCitizenAccount
                                     ? 'Create a citizen-only account for the mobile app.'
+                                    : _isFrontDeskAccount
+                                    ? 'Create an active administrative staff account for walk-in complaint assistance.'
                                     : 'Create a pending administrator account for Super Admin verification.',
                                 style: TextStyle(
                                   color: Color(0xDDEAF4FF),
@@ -1993,17 +2048,40 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
                               controller: _firstNameController,
                               label: 'First Name',
                               icon: Icons.person_outline_rounded,
+                              textCapitalization: TextCapitalization.words,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.deny(
+                                  PortalValidators.emojiRegex,
+                                ),
+                                LengthLimitingTextInputFormatter(
+                                  PortalValidators.maxNameLength,
+                                ),
+                              ],
                             ),
                             _textField(
                               controller: _lastNameController,
                               label: 'Last Name',
                               icon: Icons.badge_outlined,
+                              textCapitalization: TextCapitalization.words,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.deny(
+                                  PortalValidators.emojiRegex,
+                                ),
+                                LengthLimitingTextInputFormatter(
+                                  PortalValidators.maxNameLength,
+                                ),
+                              ],
                             ),
                             _textField(
                               controller: _emailController,
                               label: 'Email Address',
                               icon: Icons.mail_outline_rounded,
                               keyboardType: TextInputType.emailAddress,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.deny(
+                                  PortalValidators.emojiRegex,
+                                ),
+                              ],
                             ),
                             _textField(
                               controller: _phoneController,
@@ -2011,9 +2089,12 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
                               icon: Icons.phone_outlined,
                               keyboardType: TextInputType.phone,
                               inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                                LengthLimitingTextInputFormatter(11),
+                                FilteringTextInputFormatter.allow(
+                                  RegExp(r'[0-9+]'),
+                                ),
+                                LengthLimitingTextInputFormatter(13),
                               ],
+                              onChanged: _handlePhoneChanged,
                             ),
                             if (!_isCitizenAccount) _officeDropdown(),
                             if (!_isCitizenAccount) _adminTypeDropdown(),
@@ -2022,6 +2103,11 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
                               label: 'Password',
                               icon: Icons.lock_outline_rounded,
                               obscureText: _obscurePassword,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.deny(
+                                  PortalValidators.emojiRegex,
+                                ),
+                              ],
                               suffixIcon: IconButton(
                                 onPressed: () => setState(
                                   () => _obscurePassword = !_obscurePassword,
@@ -2038,6 +2124,11 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
                               label: 'Confirm Password',
                               icon: Icons.lock_reset_rounded,
                               obscureText: _obscureConfirmPassword,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.deny(
+                                  PortalValidators.emojiRegex,
+                                ),
+                              ],
                               suffixIcon: IconButton(
                                 onPressed: () => setState(
                                   () => _obscureConfirmPassword =
@@ -2073,6 +2164,8 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
                                 child: Text(
                                   _isCitizenAccount
                                       ? 'Citizen accounts are active immediately and can submit or track reports from the citizen app.'
+                                      : _isFrontDeskAccount
+                                      ? 'Administrative staff accounts are active immediately and can assist walk-in complainants without receiving admin analytics privileges.'
                                       : 'Pending admin accounts appear in the table for Super Admin verification before they can sign in.',
                                   style: TextStyle(
                                     color: colors.mutedText,
@@ -2215,16 +2308,20 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
     required String label,
     required IconData icon,
     TextInputType? keyboardType,
+    TextCapitalization textCapitalization = TextCapitalization.none,
     bool obscureText = false,
     Widget? suffixIcon,
     List<TextInputFormatter>? inputFormatters,
+    ValueChanged<String>? onChanged,
   }) {
     final colors = AdminThemeColors.of(context);
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
+      textCapitalization: textCapitalization,
       obscureText: obscureText,
       inputFormatters: inputFormatters,
+      onChanged: onChanged,
       style: TextStyle(color: colors.text),
       decoration: _fieldDecoration(
         label: label,
@@ -2253,11 +2350,17 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
 
   Widget _adminTypeDropdown() {
     return _selectionField(
-      label: 'Admin Type',
-      icon: Icons.admin_panel_settings_outlined,
+      label: _isFrontDeskAccount
+          ? 'Administrative Staff Assignment'
+          : 'Admin Type',
+      icon: _isFrontDeskAccount
+          ? Icons.support_agent_rounded
+          : Icons.admin_panel_settings_outlined,
       value: _selectedAdminType,
-      placeholder: 'Select admin type',
-      options: _adminTypes,
+      placeholder: _isFrontDeskAccount
+          ? 'Select administrative staff assignment'
+          : 'Select admin type',
+      options: _isFrontDeskAccount ? _frontDeskTypes : _adminTypes,
       onSelected: (value) => setState(() => _selectedAdminType = value),
     );
   }
@@ -2447,6 +2550,7 @@ class _EditAccountDialogState extends State<_EditAccountDialog> {
   static const _roleOptions = [
     ('pending_admin', 'Pending Admin'),
     ('admin', 'Administrator'),
+    ('administrative_staff', 'Administrative Staff'),
     ('citizen', 'Citizen'),
   ];
 
@@ -2455,6 +2559,8 @@ class _EditAccountDialogState extends State<_EditAccountDialog> {
     'Office Supervisor',
     'Office Coordinator',
     'Administrative Staff',
+    'Public Assistance Officer',
+    'Senior Support Officer',
   ];
 
   final _nameController = TextEditingController();
@@ -2468,12 +2574,30 @@ class _EditAccountDialogState extends State<_EditAccountDialog> {
   bool _saving = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  bool _isNormalizingPhone = false;
   String _role = 'pending_admin';
   String? _department;
   String? _formError;
   List<Map<String, dynamic>> _offices = const [];
 
   bool get _isCitizen => _role == 'citizen';
+
+  void _handlePhoneChanged(String value) {
+    final sanitized = PortalValidators.sanitizeMobileInput(value);
+
+    if (!_isNormalizingPhone && sanitized != value) {
+      _isNormalizingPhone = true;
+      _phoneController.value = TextEditingValue(
+        text: sanitized,
+        selection: TextSelection.collapsed(offset: sanitized.length),
+      );
+      _isNormalizingPhone = false;
+    }
+
+    if (_formError != null) {
+      setState(() => _formError = null);
+    }
+  }
 
   @override
   void initState() {
@@ -2482,12 +2606,19 @@ class _EditAccountDialogState extends State<_EditAccountDialog> {
     _emailController.text = (widget.user['email'] ?? '').toString();
     _phoneController.text = (widget.user['mobile_number'] ?? '').toString();
     _role = (widget.user['role'] ?? 'pending_admin').toString().trim();
+    if (_role == 'front_desk') {
+      _role = 'administrative_staff';
+    }
     if (!_roleOptions.any((option) => option.$1 == _role)) {
       _role = 'pending_admin';
     }
     _department = (widget.user['department'] ?? '').toString().trim();
     final jobTitle = (widget.user['job_title'] ?? '').toString().trim();
-    _jobTitleController.text = jobTitle.isEmpty ? _jobRoles.first : jobTitle;
+    _jobTitleController.text = jobTitle.isEmpty
+        ? (_role == 'administrative_staff'
+              ? 'Administrative Staff'
+              : _jobRoles.first)
+        : jobTitle;
     _loadOffices();
   }
 
@@ -2530,23 +2661,22 @@ class _EditAccountDialogState extends State<_EditAccountDialog> {
   }
 
   String? _validate() {
-    final name = _nameController.text.trim();
+    final name = PortalValidators.normalizeWhitespace(_nameController.text);
     final email = _emailController.text.trim();
-    final phone = _phoneController.text.trim();
     final password = _passwordController.text.trim();
     final confirmPassword = _confirmPasswordController.text.trim();
 
-    if (!RegExp(
-      r"^(?=.{3,255}$)(?=.*\s)[A-Za-z][A-Za-z'.-]*(?:\s+[A-Za-z][A-Za-z'.-]*)+$",
-    ).hasMatch(name)) {
-      return 'Enter a valid full name with first and last name.';
-    }
-    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
-      return 'Enter a valid email address.';
-    }
-    if (phone.isNotEmpty && !RegExp(r'^\d{11}$').hasMatch(phone)) {
-      return 'Mobile number must be exactly 11 digits.';
-    }
+    final nameError = PortalValidators.validateFullName(name);
+    if (nameError != null) return nameError;
+
+    final emailError = PortalValidators.validateEmail(email);
+    if (emailError != null) return emailError;
+
+    final phoneError = PortalValidators.validatePhilippineMobile(
+      _phoneController.text,
+    );
+    if (phoneError != null) return phoneError;
+
     if (!_isCitizen) {
       if (_department == null || _department!.trim().isEmpty) {
         return 'Please select a department.';
@@ -2558,6 +2688,10 @@ class _EditAccountDialogState extends State<_EditAccountDialog> {
     if (password.isNotEmpty && password.length < 8) {
       return 'New password must be at least 8 characters.';
     }
+    if (PortalValidators.containsEmoji(password) ||
+        PortalValidators.containsEmoji(confirmPassword)) {
+      return 'Emoji characters are not allowed.';
+    }
     if (password.isNotEmpty && password != confirmPassword) {
       return 'New password confirmation does not match.';
     }
@@ -2565,6 +2699,10 @@ class _EditAccountDialogState extends State<_EditAccountDialog> {
   }
 
   Future<void> _submit() async {
+    if (_saving) {
+      return;
+    }
+
     final validationError = _validate();
     if (validationError != null) {
       setState(() => _formError = validationError);
@@ -2579,9 +2717,11 @@ class _EditAccountDialogState extends State<_EditAccountDialog> {
     try {
       final response = await widget.authService.updateManagedAccount(
         id: (widget.user['id'] as num).toInt(),
-        name: _nameController.text.trim(),
+        name: PortalValidators.normalizeWhitespace(_nameController.text),
         email: _emailController.text.trim(),
-        mobileNumber: _phoneController.text.trim(),
+        mobileNumber: PortalValidators.buildSubmissionMobile(
+          _phoneController.text,
+        ),
         role: _role,
         department: _isCitizen ? null : _department,
         jobTitle: _isCitizen ? null : _jobTitleController.text.trim(),
@@ -2692,12 +2832,23 @@ class _EditAccountDialogState extends State<_EditAccountDialog> {
                     _nameController,
                     'Full Name',
                     Icons.person_outline,
+                    textCapitalization: TextCapitalization.words,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.deny(
+                        PortalValidators.emojiRegex,
+                      ),
+                    ],
                   ),
                   _textField(
                     _emailController,
                     'Email Address',
                     Icons.mail_outline,
                     keyboardType: TextInputType.emailAddress,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.deny(
+                        PortalValidators.emojiRegex,
+                      ),
+                    ],
                   ),
                   _textField(
                     _phoneController,
@@ -2705,9 +2856,10 @@ class _EditAccountDialogState extends State<_EditAccountDialog> {
                     Icons.phone_outlined,
                     keyboardType: TextInputType.phone,
                     inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(11),
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
+                      LengthLimitingTextInputFormatter(13),
                     ],
+                    onChanged: _handlePhoneChanged,
                   ),
                   _dropdown(
                     label: 'Account Role',
@@ -2727,6 +2879,9 @@ class _EditAccountDialogState extends State<_EditAccountDialog> {
                         _role = value;
                         if (_isCitizen) {
                           _department = null;
+                        } else if (_role == 'administrative_staff' &&
+                            _jobTitleController.text.trim().isEmpty) {
+                          _jobTitleController.text = 'Administrative Staff';
                         }
                       });
                     },
@@ -2777,6 +2932,11 @@ class _EditAccountDialogState extends State<_EditAccountDialog> {
                     'New Password (optional)',
                     Icons.lock_outline,
                     obscureText: _obscurePassword,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.deny(
+                        PortalValidators.emojiRegex,
+                      ),
+                    ],
                     suffixIcon: IconButton(
                       onPressed: () =>
                           setState(() => _obscurePassword = !_obscurePassword),
@@ -2792,6 +2952,11 @@ class _EditAccountDialogState extends State<_EditAccountDialog> {
                     'Confirm New Password',
                     Icons.lock_reset_rounded,
                     obscureText: _obscureConfirmPassword,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.deny(
+                        PortalValidators.emojiRegex,
+                      ),
+                    ],
                     suffixIcon: IconButton(
                       onPressed: () => setState(
                         () =>
@@ -2861,17 +3026,21 @@ class _EditAccountDialogState extends State<_EditAccountDialog> {
     String label,
     IconData icon, {
     TextInputType? keyboardType,
+    TextCapitalization textCapitalization = TextCapitalization.none,
     bool obscureText = false,
     Widget? suffixIcon,
     List<TextInputFormatter>? inputFormatters,
+    ValueChanged<String>? onChanged,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
+        textCapitalization: textCapitalization,
         obscureText: obscureText,
         inputFormatters: inputFormatters,
+        onChanged: onChanged,
         style: TextStyle(color: AdminThemeColors.of(context).text),
         decoration: _decoration(label, icon, suffixIcon),
       ),
@@ -2932,7 +3101,13 @@ class _StaffRow {
   final List<Map<String, dynamic>> activeAssignments;
   final Map<String, dynamic>? latestAssignment;
 
-  String get role => (user['role'] ?? '').toString().trim();
+  String get role {
+    final rawRole = (user['role'] ?? '').toString().trim();
+    if (rawRole == 'front_desk') {
+      return 'administrative_staff';
+    }
+    return rawRole;
+  }
 
   bool get isArchived {
     final deletedAt = user['deleted_at'];
@@ -2944,6 +3119,9 @@ class _StaffRow {
     final value = (user['job_title'] ?? '').toString().trim();
     if (value.isNotEmpty) return value;
     if (role == 'citizen') return 'Citizen Account';
+    if (role == 'administrative_staff' || role == 'front_desk') {
+      return 'Administrative Staff';
+    }
     return 'Administrator';
   }
 
@@ -3007,6 +3185,11 @@ class _StaffRow {
         return const Color(0xFFEAB308);
       case 'citizen account':
         return const Color(0xFF38BDF8);
+      case 'administrative staff':
+      case 'front desk officer':
+      case 'public assistance officer':
+      case 'senior support officer':
+        return const Color(0xFF7C3AED);
       case 'administrator':
         return const Color(0xFFF97316);
       default:

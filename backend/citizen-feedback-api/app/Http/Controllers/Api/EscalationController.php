@@ -6,11 +6,17 @@ use App\Http\Controllers\Controller;
 use App\Models\Report;
 use App\Models\ReportEscalation;
 use App\Models\SystemSetting;
+use App\Support\DemoAccountService;
 use Illuminate\Http\Request;
 
 class EscalationController extends Controller
 {
     private const SETTINGS_KEY = 'super_admin_portal';
+
+    public function __construct(
+        private readonly DemoAccountService $demoAccounts,
+    ) {
+    }
 
     public function index(Request $request)
     {
@@ -28,6 +34,7 @@ class EscalationController extends Controller
                 'assignedAdmin',
                 'escalation.actor',
             ])
+            ->whereNotIn('user_id', $this->demoAccounts->demoUserIdsQuery())
             ->where('status', '!=', 'Resolved')
             ->where('created_at', '<=', $threshold)
             ->latest();
@@ -45,6 +52,15 @@ class EscalationController extends Controller
         $items = $reports->map(function (Report $report) {
             $escalation = $report->escalation;
             $status = $escalation?->status ?? 'Open';
+            $assignedAdmin = $report->assignedAdmin;
+            if ($assignedAdmin !== null && $this->demoAccounts->matchesEmail($assignedAdmin->email)) {
+                $assignedAdmin = null;
+            }
+
+            $actor = $escalation?->actor;
+            if ($actor !== null && $this->demoAccounts->matchesEmail($actor->email)) {
+                $actor = null;
+            }
 
             return [
                 'report_id' => $report->id,
@@ -56,7 +72,7 @@ class EscalationController extends Controller
                 'location' => $report->location,
                 'office' => optional($report->office)->name ?? 'Unassigned Office',
                 'reporter' => optional($report->user)->name ?? 'Citizen Reporter',
-                'assigned_to' => optional($report->assignedAdmin)->name,
+                'assigned_to' => $assignedAdmin?->name,
                 'age_hours' => (int) now()->diffInHours($report->created_at),
                 'created_at' => optional($report->created_at)?->toIso8601String(),
                 'updated_at' => optional($report->updated_at)?->toIso8601String(),
@@ -65,9 +81,9 @@ class EscalationController extends Controller
                     'notes' => $escalation?->notes,
                     'escalated_at' => optional($escalation?->escalated_at)?->toIso8601String(),
                     'last_action_at' => optional($escalation?->last_action_at)?->toIso8601String(),
-                    'actor' => $escalation?->actor ? [
-                        'id' => $escalation->actor->id,
-                        'name' => $escalation->actor->name,
+                    'actor' => $actor ? [
+                        'id' => $actor->id,
+                        'name' => $actor->name,
                     ] : null,
                 ],
             ];

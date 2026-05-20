@@ -1,10 +1,13 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/auth_service.dart';
+import '../../utils/citizen_theme_colors.dart';
+import '../../widgets/citizen_auth_scaffold.dart';
+import '../../widgets/citizen_branding.dart';
+import '../../widgets/custom_button.dart';
+import '../../widgets/custom_text_field.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -113,245 +116,66 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          Positioned.fill(
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Image.asset(
-                  'assets/images/Tacloban_City_bg.png',
-                  fit: BoxFit.cover,
-                ),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0C1727).withValues(alpha: 0.62),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 18,
-                  vertical: 18,
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(22),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                    child: Container(
-                      constraints: const BoxConstraints(maxWidth: 360),
-                      padding: const EdgeInsets.fromLTRB(22, 22, 22, 24),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(22),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.18),
-                        ),
-                        color: const Color(0xFF121B31).withValues(alpha: 0.92),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.24),
-                            blurRadius: 26,
-                            offset: const Offset(0, 12),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Align(
-                            alignment: Alignment.topRight,
-                            child: IconButton(
-                              onPressed: () => Navigator.pop(context),
-                              icon: Icon(
-                                Icons.close,
-                                color: Colors.white.withValues(alpha: 0.72),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Center(
-                            child: Container(
-                              width: 52,
-                              height: 52,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: const Color(
-                                  0xFF163E9C,
-                                ).withValues(alpha: 0.65),
-                                border: Border.all(
-                                  color: const Color(0xFF3B82F6),
-                                  width: 1.2,
-                                ),
-                              ),
-                              child: const Icon(
-                                Icons.lock_reset,
-                                color: Colors.white,
-                                size: 24,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-                          const Text(
-                            'Forgot Password?',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            "No worries! Enter your email and we'll send\nyou a reset link.",
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.74),
-                              fontSize: 14,
-                              height: 1.45,
-                            ),
-                          ),
-                          const SizedBox(height: 26),
-                          Text(
-                            'Email Address',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.92),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _emailController,
-                            keyboardType: TextInputType.emailAddress,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.deny(_emojiRegex),
-                            ],
-                            onChanged: (_) {
-                              if (_emailError != null) {
-                                setState(() => _emailError = null);
-                              }
-                            },
-                            style: const TextStyle(color: Colors.white),
-                            decoration: InputDecoration(
-                              hintText: 'your.email@example.com',
-                              hintStyle: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.45),
-                              ),
-                              prefixIcon: Icon(
-                                Icons.email_outlined,
-                                color: Colors.white.withValues(alpha: 0.65),
-                                size: 20,
-                              ),
-                              filled: true,
-                              fillColor: Colors.white.withValues(alpha: 0.12),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 16,
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                borderSide: BorderSide(
-                                  color: Colors.white.withValues(alpha: 0.2),
-                                ),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                borderSide: BorderSide(
-                                  color: Colors.white.withValues(alpha: 0.2),
-                                ),
-                              ),
-                              focusedBorder: const OutlineInputBorder(
-                                borderRadius: BorderRadius.all(
-                                  Radius.circular(10),
-                                ),
-                                borderSide: BorderSide(
-                                  color: Color(0xFF3B82F6),
-                                  width: 1.3,
-                                ),
-                              ),
-                              errorText: _emailError,
-                              errorMaxLines: 2,
-                              errorStyle: const TextStyle(
-                                color: Color(0xFFFFB4B4),
-                                fontSize: 12,
-                              ),
-                              errorBorder: const OutlineInputBorder(
-                                borderRadius: BorderRadius.all(
-                                  Radius.circular(10),
-                                ),
-                                borderSide: BorderSide(
-                                  color: Color(0xFFEF4444),
-                                  width: 1.2,
-                                ),
-                              ),
-                              focusedErrorBorder: const OutlineInputBorder(
-                                borderRadius: BorderRadius.all(
-                                  Radius.circular(10),
-                                ),
-                                borderSide: BorderSide(
-                                  color: Color(0xFFEF4444),
-                                  width: 1.3,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            height: 48,
-                            child: ElevatedButton(
-                              onPressed: _isLoading ? null : _sendResetLink,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF2563EB),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                elevation: 0,
-                              ),
-                              child: _isLoading
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 2.4,
-                                      ),
-                                    )
-                                  : const Text(
-                                      'Send Reset Link',
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: Text(
-                              'Back to Login',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.78),
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+    return CitizenAuthScaffold(
+      child: CitizenAuthCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Align(
+              alignment: Alignment.topRight,
+              child: IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: Icon(
+                  Icons.close_rounded,
+                  color: CitizenAppPalette.sand.withValues(alpha: 0.72),
                 ),
               ),
             ),
-          ),
-        ],
+            const CitizenBrandHeader(caption: 'Account Recovery', logoSize: 92),
+            const SizedBox(height: 18),
+            const CitizenSectionDivider(label: 'Reset your password'),
+            const SizedBox(height: 18),
+            Text(
+              "No worries. Enter your account email and we'll send you a secure reset link.",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: CitizenAppPalette.sand.withValues(alpha: 0.82),
+                fontSize: 13.5,
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: 22),
+            CitizenTextField(
+              controller: _emailController,
+              label: 'Email Address',
+              hintText: 'your.email@example.com',
+              keyboardType: TextInputType.emailAddress,
+              prefixIcon: Icon(
+                Icons.email_outlined,
+                color: CitizenAppPalette.sand.withValues(alpha: 0.82),
+              ),
+              inputFormatters: [FilteringTextInputFormatter.deny(_emojiRegex)],
+              errorText: _emailError,
+              onChanged: (_) {
+                if (_emailError != null) {
+                  setState(() => _emailError = null);
+                }
+              },
+            ),
+            const SizedBox(height: 18),
+            CitizenPrimaryButton(
+              label: 'Send Reset Link',
+              onPressed: _sendResetLink,
+              loading: _isLoading,
+              height: 50,
+            ),
+            const SizedBox(height: 14),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Back to Login'),
+            ),
+          ],
+        ),
       ),
     );
   }

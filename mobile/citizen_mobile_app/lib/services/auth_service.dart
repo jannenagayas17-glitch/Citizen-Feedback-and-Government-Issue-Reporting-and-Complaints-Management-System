@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 import '../config/api_config.dart';
 import 'google_auth_service.dart';
@@ -17,6 +19,19 @@ class AuthSessionExpiredException implements Exception {
 }
 
 class AuthService {
+  Future<void> persistSession({
+    required String token,
+    required Map<String, dynamic> user,
+    String fallbackRole = 'citizen',
+  }) async {
+    await TokenStorage.saveToken(token);
+    await TokenStorage.saveRole(user['role']?.toString() ?? fallbackRole);
+  }
+
+  Future<void> clearLocalSession() async {
+    await TokenStorage.clearAll();
+  }
+
   String _extractErrorMessage(Map<String, dynamic> data, String fallback) {
     final errors = data['errors'];
     if (errors is Map<String, dynamic>) {
@@ -79,8 +94,7 @@ class AuthService {
           throw Exception('Invalid login response from server');
         }
 
-        await TokenStorage.saveToken(token);
-        await TokenStorage.saveRole(user['role']?.toString() ?? 'citizen');
+        await persistSession(token: token, user: user);
 
         return data;
       }
@@ -121,8 +135,7 @@ class AuthService {
           throw Exception('Invalid Google login response from server');
         }
 
-        await TokenStorage.saveToken(token);
-        await TokenStorage.saveRole(user['role']?.toString() ?? 'citizen');
+        await persistSession(token: token, user: user);
 
         return data;
       }
@@ -136,6 +149,8 @@ class AuthService {
   }
 
   Future<Map<String, dynamic>> register({
+    required String firstName,
+    required String lastName,
     required String name,
     required String email,
     String? mobileNumber,
@@ -147,6 +162,8 @@ class AuthService {
         _buildUri('/auth/register'),
         headers: await _headers(),
         body: jsonEncode({
+          'first_name': firstName,
+          'last_name': lastName,
           'name': name,
           'email': email,
           if (mobileNumber != null && mobileNumber.isNotEmpty)
@@ -159,16 +176,6 @@ class AuthService {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final token = data['token']?.toString();
-        final user = data['user'] as Map<String, dynamic>?;
-
-        if (token == null || user == null) {
-          throw Exception('Invalid register response from server');
-        }
-
-        await TokenStorage.saveToken(token);
-        await TokenStorage.saveRole(user['role']?.toString() ?? 'citizen');
-
         return data;
       }
 
@@ -211,8 +218,7 @@ class AuthService {
       final user = data['user'] as Map<String, dynamic>?;
 
       if (token != null && user != null) {
-        await TokenStorage.saveToken(token);
-        await TokenStorage.saveRole(user['role']?.toString() ?? 'admin');
+        await persistSession(token: token, user: user, fallbackRole: 'admin');
       }
 
       return data;
@@ -320,6 +326,49 @@ class AuthService {
     }
 
     throw Exception(_extractErrorMessage(data, 'Failed to update profile'));
+  }
+
+  Future<Map<String, dynamic>> uploadProfileImage({
+    required Uint8List imageBytes,
+    String fileName = 'profile-photo.png',
+  }) async {
+    final token = await TokenStorage.getToken();
+    if (token == null || token.isEmpty) {
+      throw const AuthSessionExpiredException();
+    }
+
+    final request = http.MultipartRequest(
+      'POST',
+      _buildUri('/user/profile-image'),
+    );
+
+    request.headers['Accept'] = 'application/json';
+    request.headers['Authorization'] = 'Bearer $token';
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'profile_image',
+        imageBytes,
+        filename: fileName,
+        contentType: MediaType('image', 'png'),
+      ),
+    );
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+    if (response.statusCode == 200) {
+      return data;
+    }
+
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      await TokenStorage.clearAll();
+      throw const AuthSessionExpiredException();
+    }
+
+    throw Exception(
+      _extractErrorMessage(data, 'Failed to upload profile photo'),
+    );
   }
 
   Future<List<dynamic>> getAdminUsers() async {

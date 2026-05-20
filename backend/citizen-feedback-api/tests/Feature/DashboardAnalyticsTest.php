@@ -181,6 +181,121 @@ class DashboardAnalyticsTest extends TestCase
         );
     }
 
+    public function test_super_admin_analytics_combined_filters_return_only_matching_reports(): void
+    {
+        $citizen = User::create([
+            'name' => 'Filter Citizen',
+            'email' => 'filter-citizen@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'citizen',
+            'is_active' => true,
+        ]);
+
+        $superAdmin = User::create([
+            'name' => 'Filter Super Admin',
+            'email' => 'filter-super-admin@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'super_admin',
+            'is_active' => true,
+        ]);
+
+        $engineering = Office::create([
+            'name' => "City Engineer's Office",
+            'is_active' => true,
+        ]);
+
+        $health = Office::create([
+            'name' => 'City Health Office',
+            'is_active' => true,
+        ]);
+
+        $drainage = Category::create(['name' => 'Drainage']);
+        $sanitation = Category::create(['name' => 'Sanitation']);
+
+        Report::create([
+            'user_id' => $citizen->id,
+            'office_id' => $engineering->id,
+            'category_id' => $drainage->id,
+            'title' => 'Matching analytics filter report',
+            'description' => 'This report should match all analytics filters.',
+            'location' => 'Barangay 7, Tacloban City',
+            'barangay' => 'Barangay 7',
+            'status' => 'Pending',
+            'priority' => 'Normal',
+        ]);
+
+        Report::create([
+            'user_id' => $citizen->id,
+            'office_id' => $engineering->id,
+            'category_id' => $drainage->id,
+            'title' => 'Wrong status report',
+            'description' => 'Should be excluded by status filter.',
+            'location' => 'Barangay 7, Tacloban City',
+            'barangay' => 'Barangay 7',
+            'status' => 'Resolved',
+            'priority' => 'Normal',
+        ]);
+
+        Report::create([
+            'user_id' => $citizen->id,
+            'office_id' => $engineering->id,
+            'category_id' => $sanitation->id,
+            'title' => 'Wrong category report',
+            'description' => 'Should be excluded by category filter.',
+            'location' => 'Barangay 7, Tacloban City',
+            'barangay' => 'Barangay 7',
+            'status' => 'Pending',
+            'priority' => 'Normal',
+        ]);
+
+        Report::create([
+            'user_id' => $citizen->id,
+            'office_id' => $health->id,
+            'category_id' => $drainage->id,
+            'title' => 'Wrong office report',
+            'description' => 'Should be excluded by office filter.',
+            'location' => 'Barangay 7, Tacloban City',
+            'barangay' => 'Barangay 7',
+            'status' => 'Pending',
+            'priority' => 'Normal',
+        ]);
+
+        Report::create([
+            'user_id' => $citizen->id,
+            'office_id' => $engineering->id,
+            'category_id' => $drainage->id,
+            'title' => 'Wrong barangay report',
+            'description' => 'Should be excluded by barangay filter.',
+            'location' => 'Barangay 5, Tacloban City',
+            'barangay' => 'Barangay 5',
+            'status' => 'Pending',
+            'priority' => 'Normal',
+        ]);
+
+        Sanctum::actingAs($superAdmin);
+
+        $response = $this->getJson(
+            '/api/admin/analytics?office='.urlencode($engineering->name)
+            .'&barangay='.urlencode('Barangay 7')
+            .'&category='.urlencode($drainage->name)
+            .'&status='.urlencode('Pending')
+            .'&date_preset=all_time'
+        );
+
+        $response->assertOk()
+            ->assertJsonPath('overview.total_reports', 1)
+            ->assertJsonPath('overview.pending', 1)
+            ->assertJsonPath('overview.resolved', 0)
+            ->assertJsonPath('applied_filters.office', $engineering->name)
+            ->assertJsonPath('applied_filters.barangay', 'Barangay 7')
+            ->assertJsonPath('applied_filters.category', $drainage->name)
+            ->assertJsonPath('applied_filters.status', 'Pending')
+            ->assertJsonPath('category_breakdown.0.label', $drainage->name)
+            ->assertJsonPath('category_breakdown.0.count', 1)
+            ->assertJsonPath('barangay_breakdown.0.label', 'Barangay 7')
+            ->assertJsonPath('barangay_breakdown.0.count', 1);
+    }
+
     public function test_super_admin_analytics_monthly_trend_uses_the_latest_report_month_in_the_dataset(): void
     {
         $citizen = User::create([

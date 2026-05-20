@@ -143,6 +143,138 @@ class CitizenReportModel {
     return officeName.isEmpty ? 'Unassigned office' : officeName;
   }
 
+  static bool isAnonymousOf(Map<String, dynamic> report) {
+    final source = _unwrapReportEnvelope(report);
+    final rawValue = source['is_anonymous'];
+
+    if (rawValue is bool) {
+      return rawValue;
+    }
+
+    return '$rawValue'.trim().toLowerCase() == 'true' || '$rawValue' == '1';
+  }
+
+  static bool isWalkInOf(Map<String, dynamic> report) {
+    final source = _unwrapReportEnvelope(report);
+    final rawWalkIn = source['is_walk_in'];
+    if (rawWalkIn is bool) {
+      return rawWalkIn;
+    }
+
+    final normalizedSource = (source['source'] ?? '').toString().trim();
+    return normalizedSource == 'walk_in' ||
+        normalizedSource == 'Administrative Staff Assistance' ||
+        normalizedSource == 'Walk-in Assistance' ||
+        '$rawWalkIn'.trim().toLowerCase() == 'true' ||
+        '$rawWalkIn' == '1';
+  }
+
+  static String sourceLabelOf(Map<String, dynamic> report) {
+    final source = _unwrapReportEnvelope(report);
+    final label = (source['source_label'] ?? '').toString().trim();
+    if (label.isNotEmpty) {
+      return label;
+    }
+    return isWalkInOf(source)
+        ? 'Administrative Staff Assistance'
+        : 'Citizen Mobile App';
+  }
+
+  static String referenceNumberOf(Map<String, dynamic> report) {
+    final source = _unwrapReportEnvelope(report);
+    final value = (source['printable_reference_number'] ?? '')
+        .toString()
+        .trim();
+    return value.isEmpty ? 'Pending reference' : value;
+  }
+
+  static DateTime? expectedReturnAtOf(Map<String, dynamic> report) {
+    return timestampOf(_unwrapReportEnvelope(report)['expected_return_at']);
+  }
+
+  static String complainantNameOf(Map<String, dynamic> report) {
+    final normalized = _unwrapReportEnvelope(report);
+    final name =
+        (normalized['complainant_name'] ??
+                normalized['reporter_name'] ??
+                _mapFromAny(normalized['user'])?['name'] ??
+                '')
+            .toString()
+            .trim();
+    return name.isEmpty
+        ? (isWalkInOf(normalized) ? 'Walk-in complainant' : 'Unknown citizen')
+        : name;
+  }
+
+  static String complainantContactNumberOf(Map<String, dynamic> report) {
+    final normalized = _unwrapReportEnvelope(report);
+    final value =
+        (normalized['complainant_contact_number'] ??
+                normalized['reporter_contact_number'] ??
+                _mapFromAny(normalized['user'])?['mobile_number'] ??
+                '')
+            .toString()
+            .trim();
+    return value.isEmpty ? 'Not provided' : value;
+  }
+
+  static String complainantEmailOf(Map<String, dynamic> report) {
+    final normalized = _unwrapReportEnvelope(report);
+    final value =
+        (normalized['complainant_email'] ??
+                normalized['reporter_email'] ??
+                _mapFromAny(normalized['user'])?['email'] ??
+                '')
+            .toString()
+            .trim();
+    return value.isEmpty ? 'Not provided' : value;
+  }
+
+  static String complainantAddressOf(Map<String, dynamic> report) {
+    final normalized = _unwrapReportEnvelope(report);
+    final value =
+        (normalized['complainant_address'] ??
+                normalized['reporter_address'] ??
+                normalized['walk_in_address'] ??
+                normalized['barangay'] ??
+                normalized['location'] ??
+                '')
+            .toString()
+            .trim();
+    return value.isEmpty ? 'Not provided' : value;
+  }
+
+  static bool complainantIsSeniorCitizenOf(Map<String, dynamic> report) {
+    final value = _unwrapReportEnvelope(
+      report,
+    )['complainant_is_senior_citizen'];
+    return value is bool
+        ? value
+        : '$value'.trim().toLowerCase() == 'true' || '$value' == '1';
+  }
+
+  static bool complainantIsPwdOf(Map<String, dynamic> report) {
+    final value = _unwrapReportEnvelope(report)['complainant_is_pwd'];
+    return value is bool
+        ? value
+        : '$value'.trim().toLowerCase() == 'true' || '$value' == '1';
+  }
+
+  static String assistedByNameOf(Map<String, dynamic> report) {
+    final normalized = _unwrapReportEnvelope(report);
+    final assistedBy = _mapFromAny(
+      normalized['assisted_by_user'] ?? normalized['assistedByUser'],
+    );
+    final name = (assistedBy?['name'] ?? '').toString().trim();
+    return name.isEmpty ? 'Administrative Staff' : name;
+  }
+
+  static String privacyLabelOf(Map<String, dynamic> report) {
+    return isAnonymousOf(report)
+        ? 'Anonymous to admins'
+        : 'Identity visible to admins';
+  }
+
   static String locationOf(Map<String, dynamic> report) {
     final location = (_unwrapReportEnvelope(report)['location'] ?? '')
         .toString()

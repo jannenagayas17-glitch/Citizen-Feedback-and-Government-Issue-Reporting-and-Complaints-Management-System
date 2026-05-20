@@ -47,6 +47,9 @@ void main() {
                 const Scaffold(body: Center(child: Text('LOGIN PAGE'))),
             AppRoutes.citizenHome: (_) =>
                 const Scaffold(body: Center(child: Text('CITIZEN HOME'))),
+            AppRoutes.frontDeskHome: (_) => const Scaffold(
+              body: Center(child: Text('ADMINISTRATIVE STAFF HOME')),
+            ),
           },
         ),
       ),
@@ -86,6 +89,30 @@ void main() {
 
     expect(find.text('CITIZEN HOME'), findsOneWidget);
   });
+
+  testWidgets(
+    'opens the administrative staff home for a valid assisted-intake session',
+    (tester) async {
+      resetMockPreferences({
+        'auth_token': 'front-desk-token',
+        'user_role': 'administrative_staff',
+      });
+
+      await pumpSplashScreen(
+        tester,
+        authService: _FakeAuthService(
+          () async => {
+            'id': 27,
+            'name': 'Administrative Staff User',
+            'email': 'adminstaff@example.com',
+            'role': 'administrative_staff',
+          },
+        ),
+      );
+
+      expect(find.text('ADMINISTRATIVE STAFF HOME'), findsOneWidget);
+    },
+  );
 
   testWidgets(
     'clears stale session data and returns to login on invalid user',

@@ -63,6 +63,39 @@ class SystemSettingsTest extends TestCase
             ->assertJsonPath('settings.notifications.feedback_notifications', false);
     }
 
+    public function test_super_admin_get_settings_normalizes_legacy_notification_flags(): void
+    {
+        Sanctum::actingAs($this->makeSuperAdmin('legacy-settings@example.com'));
+
+        SystemSetting::query()->create([
+            'key' => 'super_admin_portal',
+            'value' => [
+                'notifications' => [
+                    'enable_alerts' => '0',
+                    'escalation_notifications' => 0,
+                    'feedback_notifications' => '1',
+                ],
+                'report_settings' => [
+                    'default_due_hours' => '72',
+                    'default_due_unit' => 'Hours',
+                ],
+                'escalation_settings' => [
+                    'trigger_time_hours' => '96',
+                    'notification_channel' => 'In-App Only',
+                    'priority' => 'Critical Priority',
+                ],
+            ],
+        ]);
+
+        $this->getJson('/api/admin/settings')
+            ->assertOk()
+            ->assertJsonPath('settings.notifications.enable_alerts', false)
+            ->assertJsonPath('settings.notifications.escalation_notifications', false)
+            ->assertJsonPath('settings.notifications.feedback_notifications', true)
+            ->assertJsonPath('settings.report_settings.default_due_hours', 72)
+            ->assertJsonPath('settings.escalation_settings.trigger_time_hours', 96);
+    }
+
     private function makeSuperAdmin(string $email = 'settings-super@example.com'): User
     {
         return User::create([

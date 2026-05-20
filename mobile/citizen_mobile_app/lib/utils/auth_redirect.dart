@@ -8,13 +8,21 @@ class AuthRedirect {
     if (normalized == 'staff') {
       return 'admin';
     }
+    if (normalized == 'front_desk') {
+      return 'administrative_staff';
+    }
     return normalized;
   }
 
   static String routeForRole(Object? role) {
-    return normalizeRole(role) == 'citizen'
-        ? AppRoutes.citizenHome
-        : AppRoutes.login;
+    switch (normalizeRole(role)) {
+      case 'administrative_staff':
+        return AppRoutes.frontDeskHome;
+      case 'citizen':
+        return AppRoutes.citizenHome;
+      default:
+        return AppRoutes.login;
+    }
   }
 
   static void goToRoleHome(BuildContext context, Object? role) {

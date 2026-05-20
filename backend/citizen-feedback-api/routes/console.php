@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\DemoAccountService;
 use App\Support\UserEmailDeduplicationService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -96,3 +97,58 @@ Artisan::command('users:dedupe {--apply : Reassign related records and archive d
 
     return 0;
 })->purpose('Preview or safely merge duplicate users grouped by normalized email');
+
+Artisan::command('users:cleanup-demo {--apply : Archive known seeded demo accounts} {--dry-run : Preview matched demo accounts without changing data}', function (DemoAccountService $demoAccounts) {
+    $apply = (bool) $this->option('apply');
+    $dryRun = (bool) $this->option('dry-run');
+
+    if ($apply && $dryRun) {
+        $this->error('Choose either --apply or --dry-run. Running without flags already defaults to a dry run.');
+
+        return 1;
+    }
+
+    $mode = $apply ? 'apply' : 'dry-run';
+    $previewUsers = $demoAccounts->previewDemoUsers();
+    $preview = $demoAccounts->summarizePreview($previewUsers);
+
+    $this->info('Demo account cleanup: '.strtoupper($mode));
+    $this->line('Matched demo accounts: '.$preview['matched_count']);
+    $this->line(
+        'Role counts: citizen='.$preview['role_counts']['citizen']
+        .', admin='.$preview['role_counts']['admin']
+        .', pending_admin='.$preview['role_counts']['pending_admin']
+        .', super_admin='.$preview['role_counts']['super_admin']
+        .', other='.$preview['role_counts']['other']
+    );
+
+    if ($preview['matched_count'] === 0) {
+        $this->line('No seeded demo accounts matched the protected cleanup patterns.');
+        $this->line('No real accounts, reports, feedback, complaints, attachments, or analytics rows were modified.');
+
+        return 0;
+    }
+
+    foreach ($preview['emails'] as $email) {
+        $this->line('- '.$email);
+    }
+
+    if (! $apply) {
+        $this->newLine();
+        $this->info('Dry run only: no database rows were changed.');
+        $this->line('Protected patterns only match known seeded demo addresses.');
+
+        return 0;
+    }
+
+    $result = $demoAccounts->archiveDemoUsers();
+
+    $this->newLine();
+    $this->info('Archived demo accounts: '.$result['archived_count']);
+    $this->line('Already archived demo accounts: '.$result['already_archived_count']);
+    $this->line('Deactivated demo accounts: '.$result['deactivated_count']);
+    $this->line('No real accounts, reports, feedback, complaints, attachments, or analytics rows were deleted by this command.');
+    $this->line('Demo-owned records remain preserved and are filtered out of portal views.');
+
+    return 0;
+})->purpose('Preview or safely archive known seeded demo accounts');

@@ -8,6 +8,7 @@ import '../test_helpers.dart';
 
 class _FakeStaffAuthService extends AuthService {
   bool requestCalled = false;
+  Map<String, dynamic>? lastRequest;
 
   @override
   Future<List<dynamic>> getOffices({bool includeInactive = false}) async {
@@ -20,6 +21,8 @@ class _FakeStaffAuthService extends AuthService {
   @override
   Future<Map<String, dynamic>> requestGovernmentAccount({
     required String name,
+    String? firstName,
+    String? lastName,
     required String email,
     String? mobileNumber,
     required String password,
@@ -28,6 +31,15 @@ class _FakeStaffAuthService extends AuthService {
     required String jobTitle,
   }) async {
     requestCalled = true;
+    lastRequest = {
+      'name': name,
+      'first_name': firstName,
+      'last_name': lastName,
+      'email': email,
+      'mobile_number': mobileNumber,
+      'department': department,
+      'job_title': jobTitle,
+    };
     return {'message': 'Admin request submitted.'};
   }
 }
@@ -105,6 +117,84 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(authService.requestCalled, isTrue);
+    expect(authService.lastRequest?['first_name'], 'Jericson');
+    expect(authService.lastRequest?['last_name'], 'Cupan');
+    expect(authService.lastRequest?['name'], 'Jericson Cupan');
     expect(find.text('Login Page'), findsOneWidget);
+  });
+
+  testWidgets('accepts +63 mobile numbers and title-cases admin names', (
+    tester,
+  ) async {
+    final authService = _FakeStaffAuthService();
+    await pumpRegisterScreen(tester, authService: authService);
+    final dropdowns = find.byWidgetPredicate((widget) => widget is DropdownButton);
+
+    await tester.ensureVisible(dropdowns.at(0));
+    await tester.tap(dropdowns.at(0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("City Engineer's Office").last);
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(dropdowns.at(1));
+    await tester.tap(dropdowns.at(1));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Office Head').last);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField).at(0), 'maria clara');
+    await tester.enterText(find.byType(TextField).at(1), 'santos-javier');
+    await tester.enterText(find.byType(TextField).at(2), 'maria.staff@test.com');
+    await tester.enterText(find.byType(TextField).at(3), '+639123456789');
+    await tester.enterText(find.byType(TextField).at(4), 'password123');
+    await tester.enterText(find.byType(TextField).at(5), 'password123');
+
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Register'));
+    await tester.pumpAndSettle();
+
+    expect(authService.requestCalled, isTrue);
+    expect(authService.lastRequest?['first_name'], 'Maria Clara');
+    expect(authService.lastRequest?['last_name'], 'Santos-Javier');
+    expect(authService.lastRequest?['name'], 'Maria Clara Santos-Javier');
+    expect(authService.lastRequest?['mobile_number'], '+639123456789');
+    expect(find.text('Login Page'), findsOneWidget);
+  });
+
+  testWidgets('blocks invalid Philippine mobile prefixes for admin registration', (
+    tester,
+  ) async {
+    final authService = _FakeStaffAuthService();
+    await pumpRegisterScreen(tester, authService: authService);
+    final dropdowns = find.byWidgetPredicate((widget) => widget is DropdownButton);
+
+    await tester.ensureVisible(dropdowns.at(0));
+    await tester.tap(dropdowns.at(0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("City Engineer's Office").last);
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(dropdowns.at(1));
+    await tester.tap(dropdowns.at(1));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Office Head').last);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField).at(0), 'Ana');
+    await tester.enterText(find.byType(TextField).at(1), 'De Leon');
+    await tester.enterText(find.byType(TextField).at(2), 'ana.staff@test.com');
+    await tester.enterText(find.byType(TextField).at(3), '0231231233');
+    await tester.enterText(find.byType(TextField).at(4), 'password123');
+    await tester.enterText(find.byType(TextField).at(5), 'password123');
+
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Register'));
+    await tester.pumpAndSettle();
+
+    expect(authService.requestCalled, isFalse);
+    expect(
+      find.text(
+        'Enter a valid Philippine mobile number. Use 09123456789 or +639123456789.',
+      ),
+      findsOneWidget,
+    );
   });
 }

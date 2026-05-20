@@ -91,6 +91,57 @@ class RegisterTest extends TestCase
             ->assertJsonValidationErrors('name');
     }
 
+    public function test_citizen_registration_accepts_compound_names_and_normalizes_ph_mobile_number(): void
+    {
+        $response = $this->postJson('/api/auth/register', [
+            'first_name' => 'Maria Clara',
+            'last_name' => 'Dela Cruz',
+            'email' => 'maria@example.com',
+            'mobile_number' => '+639123456789',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+        ]);
+
+        $response
+            ->assertCreated()
+            ->assertJsonPath('user.name', 'Maria Clara Dela Cruz')
+            ->assertJsonPath('user.mobile_number', '09123456789');
+
+        $this->assertDatabaseHas('users', [
+            'email' => 'maria@example.com',
+            'name' => 'Maria Clara Dela Cruz',
+            'mobile_number' => '09123456789',
+        ]);
+    }
+
+    public function test_citizen_registration_rejects_invalid_ph_mobile_prefixes(): void
+    {
+        $this->postJson('/api/auth/register', [
+            'first_name' => 'Ana',
+            'last_name' => 'Santos',
+            'email' => 'ana@example.com',
+            'mobile_number' => '0231231233',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+        ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('mobile_number');
+    }
+
+    public function test_citizen_registration_rejects_name_parts_longer_than_twenty_five_characters(): void
+    {
+        $this->postJson('/api/auth/register', [
+            'first_name' => str_repeat('A', 26),
+            'last_name' => 'Dela Cruz',
+            'email' => 'longname@example.com',
+            'mobile_number' => '09171234567',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+        ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('first_name');
+    }
+
     public function test_admin_request_creates_pending_admin_account(): void
     {
         Office::create([
@@ -119,6 +170,100 @@ class RegisterTest extends TestCase
             'department' => "City Engineer's Office",
             'job_title' => 'Office Head',
         ]);
+    }
+
+    public function test_admin_request_accepts_compound_names_and_normalizes_ph_mobile_number(): void
+    {
+        Office::create([
+            'name' => 'City Social Welfare Office',
+            'description' => 'Office description',
+            'is_active' => true,
+        ]);
+
+        $this->postJson('/api/auth/request-government-account', [
+            'name' => 'Maria Clara Santos-Javier',
+            'email' => 'maria.staff@example.com',
+            'mobile_number' => '+639123456789',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+            'department' => 'City Social Welfare Office',
+            'job_title' => 'Office Supervisor',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('user.name', 'Maria Clara Santos-Javier')
+            ->assertJsonPath('user.mobile_number', '09123456789');
+    }
+
+    public function test_admin_request_title_cases_lowercase_name_parts(): void
+    {
+        Office::create([
+            'name' => 'City Tourism Office',
+            'description' => 'Office description',
+            'is_active' => true,
+        ]);
+
+        $this->postJson('/api/auth/request-government-account', [
+            'first_name' => 'juan',
+            'last_name' => 'dela cruz',
+            'email' => 'juan.staff@example.com',
+            'mobile_number' => '09123456789',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+            'department' => 'City Tourism Office',
+            'job_title' => 'Office Head',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('user.name', 'Juan Dela Cruz');
+
+        $this->assertDatabaseHas('users', [
+            'email' => 'juan.staff@example.com',
+            'name' => 'Juan Dela Cruz',
+            'role' => 'pending_admin',
+        ]);
+    }
+
+    public function test_admin_request_rejects_invalid_mobile_prefixes(): void
+    {
+        Office::create([
+            'name' => 'City Planning Office',
+            'description' => 'Office description',
+            'is_active' => true,
+        ]);
+
+        $this->postJson('/api/auth/request-government-account', [
+            'name' => 'Ana De Leon',
+            'email' => 'ana.staff@example.com',
+            'mobile_number' => '0231231233',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+            'department' => 'City Planning Office',
+            'job_title' => 'Office Coordinator',
+        ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('mobile_number');
+    }
+
+    public function test_admin_request_rejects_unlisted_admin_type(): void
+    {
+        Office::create([
+            'name' => 'City Planning Office',
+            'description' => 'Office description',
+            'is_active' => true,
+        ]);
+
+        $this->postJson('/api/auth/request-government-account', [
+            'first_name' => 'Ana',
+            'last_name' => 'De Leon',
+            'email' => 'ana.planning@example.com',
+            'mobile_number' => '09171234567',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+            'department' => 'City Planning Office',
+            'job_title' => 'Planning Chief',
+        ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('job_title')
+            ->assertJsonPath('errors.job_title.0', 'Please select a valid admin type.');
     }
 
     public function test_admin_request_rejects_inactive_office(): void
