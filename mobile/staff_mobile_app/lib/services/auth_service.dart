@@ -162,6 +162,8 @@ class AuthService {
 
   Future<Map<String, dynamic>> requestGovernmentAccount({
     required String name,
+    String? firstName,
+    String? lastName,
     required String email,
     String? mobileNumber,
     required String password,
@@ -175,6 +177,10 @@ class AuthService {
       headers: await _headers(),
       body: jsonEncode({
         'name': name,
+        if (firstName != null && firstName.trim().isNotEmpty)
+          'first_name': firstName.trim(),
+        if (lastName != null && lastName.trim().isNotEmpty)
+          'last_name': lastName.trim(),
         'email': normalizedEmail,
         if (mobileNumber != null && mobileNumber.isNotEmpty)
           'mobile_number': mobileNumber.trim(),
@@ -270,12 +276,13 @@ class AuthService {
     required String email,
     String? mobileNumber,
   }) async {
+    final normalizedEmail = _normalizeEmail(email);
     final response = await http.put(
       _buildUri('/user/profile'),
       headers: await _headers(authRequired: true),
       body: jsonEncode({
         'name': name,
-        'email': email,
+        'email': normalizedEmail,
         'mobile_number': mobileNumber?.trim() ?? '',
       }),
     );

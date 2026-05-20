@@ -55,7 +55,7 @@ class CitizenBottomNav extends StatelessWidget {
             const SizedBox(width: 56),
             _CitizenNavItem(
               icon: Icons.notifications_active_outlined,
-              label: 'Alerts',
+              label: 'Updates',
               selected: currentIndex == 3,
               color: activeColor,
               inactiveColor: inactiveColor,

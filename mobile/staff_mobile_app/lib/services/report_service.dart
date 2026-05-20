@@ -73,6 +73,116 @@ class ReportService {
     );
   }
 
+  Future<Map<String, dynamic>> createWalkInReport({
+    int? categoryId,
+    String? categoryName,
+    required int officeId,
+    required String title,
+    required String description,
+    required String location,
+    required String barangay,
+    required String complainantName,
+    required String complainantContactNumber,
+    String? complainantEmail,
+    required String complainantAddress,
+    bool isSeniorCitizen = false,
+    bool isPwd = false,
+    DateTime? expectedReturnAt,
+    String? priority,
+    double? latitude,
+    double? longitude,
+    List<XFile> attachments = const [],
+  }) async {
+    final token = await TokenStorage.getToken();
+    if (token == null || token.isEmpty) {
+      throw Exception('Please log in again before submitting a walk-in complaint.');
+    }
+
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('${ApiConfig.baseUrl}/front-desk/reports'),
+    );
+
+    request.headers['Accept'] = 'application/json';
+    request.headers['Authorization'] = 'Bearer $token';
+
+    void addField(String key, String? value) {
+      final normalized = value?.trim() ?? '';
+      if (normalized.isNotEmpty) {
+        request.fields[key] = normalized;
+      }
+    }
+
+    addField('office_id', '$officeId');
+    addField('title', title);
+    addField('description', description);
+    addField('location', location);
+    addField('barangay', barangay);
+    addField('walk_in_full_name', complainantName);
+    addField('walk_in_contact_number', complainantContactNumber);
+    addField('walk_in_email', complainantEmail);
+    addField('walk_in_address', complainantAddress);
+    request.fields['walk_in_is_senior_citizen'] = isSeniorCitizen ? '1' : '0';
+    request.fields['walk_in_is_pwd'] = isPwd ? '1' : '0';
+
+    if (categoryId != null) {
+      request.fields['category_id'] = '$categoryId';
+    }
+    addField('category_name', categoryName);
+    addField('priority', priority);
+    if (latitude != null) {
+      request.fields['latitude'] = '$latitude';
+    }
+    if (longitude != null) {
+      request.fields['longitude'] = '$longitude';
+    }
+    if (expectedReturnAt != null) {
+      request.fields['expected_return_at'] = expectedReturnAt.toIso8601String();
+    }
+
+    for (final attachment in attachments.take(3)) {
+      final fileSize = await attachment.length();
+      if (fileSize > maxAttachmentBytes) {
+        throw Exception('Attachments must be 50MB or smaller.');
+      }
+
+      final bytes = await attachment.readAsBytes();
+      final detectedMimeType =
+          lookupMimeType(
+            attachment.name,
+            headerBytes: bytes.take(32).toList(),
+          ) ??
+          'application/octet-stream';
+
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'media[]',
+          bytes,
+          filename: attachment.name,
+          contentType: MediaType.parse(detectedMimeType),
+        ),
+      );
+    }
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+    final data = _decodeMapResponse(response.body);
+
+    if ((response.statusCode == 200 || response.statusCode == 201) &&
+        data != null) {
+      return data;
+    }
+
+    throw Exception(
+      data == null
+          ? 'Failed to submit walk-in complaint'
+          : data['message']?.toString() ??
+                (data['errors'] != null
+                    ? data['errors'].toString()
+                    : 'Failed to submit walk-in complaint'),
+    );
+  }
+
   Future<List<dynamic>> getReports() async {
     final response = await _apiClient.get('/reports', authRequired: true);
     return _decodeListResponse(
@@ -133,6 +243,41 @@ class ReportService {
                 (data['errors'] != null
                     ? data['errors'].toString()
                     : 'Failed to fetch admin reports'),
+    );
+  }
+
+  Future<AdminReportPage> getFrontDeskReportsPage({
+    int page = 1,
+    int perPage = 15,
+    String? search,
+    String? status,
+    String? category,
+  }) async {
+    final response = await _apiClient.get(
+      '/front-desk/reports',
+      authRequired: true,
+      queryParameters: {
+        'page': page,
+        'per_page': perPage,
+        if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+        if (status != null && status.trim().isNotEmpty) 'status': status.trim(),
+        if (category != null && category.trim().isNotEmpty)
+          'category': category.trim(),
+      },
+    );
+
+    final data = _decodeMapResponse(response.body);
+    if (response.statusCode == 200 && data != null && data['data'] is List) {
+      return AdminReportPage.fromJson(data);
+    }
+
+    throw Exception(
+      data == null
+          ? 'Failed to fetch assisted complaints'
+          : data['message']?.toString() ??
+                (data['errors'] != null
+                    ? data['errors'].toString()
+                    : 'Failed to fetch assisted complaints'),
     );
   }
 
@@ -398,6 +543,7 @@ class AdminReportPage {
     required this.total,
     required this.from,
     required this.to,
+    required this.availableFilters,
   });
 
   factory AdminReportPage.fromJson(Map<String, dynamic> json) {
@@ -418,6 +564,9 @@ class AdminReportPage {
       total: parseInt(json['total']),
       from: parseInt(json['from']),
       to: parseInt(json['to']),
+      availableFilters: ReportAvailableFilters.fromJson(
+        json['available_filters'] as Map<String, dynamic>?,
+      ),
     );
   }
 
@@ -428,7 +577,35 @@ class AdminReportPage {
   final int total;
   final int from;
   final int to;
+  final ReportAvailableFilters availableFilters;
 
   bool get hasPreviousPage => currentPage > 1;
   bool get hasNextPage => currentPage < lastPage;
+}
+
+class ReportAvailableFilters {
+  const ReportAvailableFilters({
+    required this.offices,
+    required this.categories,
+    required this.barangays,
+  });
+
+  factory ReportAvailableFilters.fromJson(Map<String, dynamic>? json) {
+    List<String> parseList(String key) {
+      return (json?[key] as List<dynamic>? ?? const [])
+          .map((value) => value.toString().trim())
+          .where((value) => value.isNotEmpty)
+          .toList();
+    }
+
+    return ReportAvailableFilters(
+      offices: parseList('offices'),
+      categories: parseList('categories'),
+      barangays: parseList('barangays'),
+    );
+  }
+
+  final List<String> offices;
+  final List<String> categories;
+  final List<String> barangays;
 }

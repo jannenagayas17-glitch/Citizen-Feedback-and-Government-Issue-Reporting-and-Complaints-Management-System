@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../services/report_service.dart';
 import '../../utils/admin_theme.dart';
-import '../../utils/department_issue_types.dart';
 import '../../utils/file_download.dart';
 import 'report_detail_dialog.dart';
 
@@ -25,150 +24,6 @@ class ComplaintManagementScreen extends StatefulWidget {
 }
 
 class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
-  static const List<String> _taclobanBarangays = [
-    'Barangay 1 (Libertad)',
-    'Barangay 2 (Jones)',
-    'Barangay 3 (Upper Nulatula)',
-    'Barangay 4 (Libertad)',
-    'Barangay 5 (T. Claudio)',
-    'Barangay 5-A (T. Claudio)',
-    'Barangay 6',
-    'Barangay 6-A (Sto. Nino)',
-    'Barangay 7',
-    'Barangay 8 (T. Claudio)',
-    'Barangay 8-A',
-    'Barangay 12 (GE Palanog)',
-    'Barangay 13 (Salazar/J. Romualdez)',
-    'Barangay 14',
-    'Barangay 15',
-    'Barangay 16',
-    'Barangay 17',
-    'Barangay 18',
-    'Barangay 19',
-    'Barangay 20',
-    'Barangay 21 (P. Burgos)',
-    'Barangay 22',
-    'Barangay 23',
-    'Barangay 23-A',
-    'Barangay 24',
-    'Barangay 25',
-    'Barangay 26 (P. Gomez)',
-    'Barangay 27',
-    'Barangay 28',
-    'Barangay 29 (P. Gomez)',
-    'Barangay 30 (Burgos)',
-    'Barangay 31',
-    'Barangay 32',
-    'Barangay 33',
-    'Barangay 34 (Real)',
-    'Barangay 35',
-    'Barangay 35-A',
-    'Barangay 36 (Sabang)',
-    'Barangay 36-A (Sabang)',
-    'Barangay 37 (Sea Wall)',
-    'Barangay 37-A (G.E. Palanog Gawad Kalinga Village)',
-    'Barangay 38 (Calvary Hill)',
-    'Barangay 39 (Calvary Hill)',
-    'Barangay 40 (Calvary Hill)',
-    'Barangay 41 (Calvary Hill)',
-    'Barangay 42',
-    'Barangay 42-A (Quarry)',
-    'Barangay 42-B (Quarry)',
-    'Barangay 43',
-    'Barangay 43-A (Quarry)',
-    'Barangay 43-B (Quarry)',
-    'Barangay 44',
-    'Barangay 44-A (Quarry)',
-    'Barangay 44-B (Quarry)',
-    'Barangay 45',
-    'Barangay 46 (Imelda/Juan Luna)',
-    'Barangay 47',
-    'Barangay 48',
-    'Barangay 48-A',
-    'Barangay 48-B',
-    'Barangay 49 (Youngfield)',
-    'Barangay 50 (Youngfield)',
-    'Barangay 50-A (Youngfield)',
-    'Barangay 50-B (Youngfield)',
-    'Barangay 51',
-    'Barangay 51-A',
-    'Barangay 52 (Lucban Magallanes)',
-    'Barangay 53 (Magallanes)',
-    'Barangay 54 (Magallanes)',
-    'Barangay 54-A (Magallanes)',
-    'Barangay 55 (El Reposo)',
-    'Barangay 56 (El Reposo)',
-    'Barangay 56-A (El Reposo)',
-    'Barangay 57 (Whitelane Sampaguita)',
-    'Barangay 58',
-    'Barangay 59 (Sagkahan Picas)',
-    'Barangay 59-A (Sampaguita)',
-    'Barangay 59-B (Sampaguita)',
-    'Barangay 59-E (Sagkahan Picas)',
-    'Barangay 60 (Sagkahan Aslum)',
-    'Barangay 60-A (Sagkahan)',
-    'Barangay 61 (Sagkahan)',
-    'Barangay 62 (Sagkahan Saging)',
-    'Barangay 62-A (Sagkahan Ilong)',
-    'Barangay 62-B (Sagkahan Picas)',
-    'Barangay 63 (Sagkahan Mangga)',
-    'Barangay 64 (Sagkahan Bliss)',
-    'Barangay 65 (Paseo de Legaspi)',
-    'Barangay 66 (Anibong)',
-    'Barangay 66-A (Anibong)',
-    'Barangay 67 (Anibong)',
-    'Barangay 68 (Anibong)',
-    'Barangay 69 (Anibong, Happy Land)',
-    'Barangay 70 (Anibong, Rawis)',
-    'Barangay 71 (Naga-naga)',
-    'Barangay 72 (PHHC Seaside)',
-    'Barangay 73 (PHHC Mountainside)',
-    'Barangay 74 (Lower Nula-Tula)',
-    'Barangay 75 (Fatima Village)',
-    'Barangay 76 (Fatima Village)',
-    'Barangay 77 (Fatima Village)',
-    'Barangay 78 (Marasbaras)',
-    'Barangay 79 (Marasbaras)',
-    'Barangay 80 (Marasbaras)',
-    'Barangay 81 (Marasbaras)',
-    'Barangay 82 (Marasbaras)',
-    'Barangay 83 (Paraiso)',
-    'Barangay 83-A (Burayan)',
-    'Barangay 83-B (San Jose, Cogon)',
-    'Barangay 83-C (San Jose)',
-    'Barangay 84 (San Jose)',
-    'Barangay 85 (San Jose)',
-    'Barangay 86 (San Jose)',
-    'Barangay 87 (San Jose)',
-    'Barangay 88 (San Jose)',
-    'Barangay 89 (San Jose, Baybay)',
-    'Barangay 90 (San Jose)',
-    'Barangay 91 (Abucay)',
-    'Barangay 92 (Apitong)',
-    'Barangay 93 (Bagacay)',
-    'Barangay 94 (Tigbao)',
-    'Barangay 94-A (Basper)',
-    'Barangay 95 (Caibaan)',
-    'Barangay 95-A (Caibaan)',
-    'Barangay 96 (Calanipawan)',
-    'Barangay 97 (Cabalawan)',
-    'Barangay 98 (Camansihay)',
-    'Barangay 99 (Diit)',
-    'Barangay 100 (San Roque)',
-    'Barangay 101 (New Kawayan)',
-    'Barangay 102 (Kawayan)',
-    'Barangay 103 (Palanog)',
-    'Barangay 103-A (San Paglaum)',
-    'Barangay 104 (Salvacion)',
-    'Barangay 105 (Suhi)',
-    'Barangay 106 (Santo Nino)',
-    'Barangay 107 (Santa Elena)',
-    'Barangay 108 (Tagapuro)',
-    'Barangay 109 (V&G Subdivision)',
-    'Barangay 109-A (V&G Subdivision)',
-    'Barangay 110 (Utap)',
-  ];
-
   final ReportService _reportService = ReportService();
   final AuthService _authService = AuthService();
   final TextEditingController _searchController = TextEditingController();
@@ -176,7 +31,9 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
 
   _ReportListContext? _contextCache;
   late Future<_ReportsPayload> _payloadFuture;
+  _ReportsPayload? _resolvedPayload;
   Timer? _searchDebounce;
+  int _requestVersion = 0;
   bool _exporting = false;
   String _search = '';
   String _selectedCategory = 'All Categories';
@@ -191,7 +48,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
     _selectedOffice = widget.initialOfficeName?.trim().isNotEmpty == true
         ? widget.initialOfficeName!.trim()
         : 'All Departments';
-    _payloadFuture = _loadPayload(refreshContext: true);
+    _payloadFuture = _queueLoad(refreshContext: true);
     _searchController.addListener(() {
       final nextSearch = _searchController.text.trim();
       _searchDebounce?.cancel();
@@ -203,10 +60,15 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
         setState(() {
           _search = nextSearch;
           _page = 1;
-          _payloadFuture = _loadPayload();
+          _payloadFuture = _queueLoad();
         });
       });
     });
+  }
+
+  Future<_ReportsPayload> _queueLoad({bool refreshContext = false}) {
+    final requestId = ++_requestVersion;
+    return _loadPayload(refreshContext: refreshContext, requestId: requestId);
   }
 
   @override
@@ -243,7 +105,10 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
     return context;
   }
 
-  Future<_ReportsPayload> _loadPayload({bool refreshContext = false}) async {
+  Future<_ReportsPayload> _loadPayload({
+    bool refreshContext = false,
+    required int requestId,
+  }) async {
     final context = await _loadContext(refresh: refreshContext);
     var pageData = await _reportService.getAdminReportsPage(
       page: _page,
@@ -274,11 +139,17 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
       );
     }
 
-    return _ReportsPayload(context: context, page: pageData);
+    final payload = _ReportsPayload(context: context, page: pageData);
+    if (requestId == _requestVersion) {
+      _resolvedPayload = payload;
+      _page = pageData.currentPage;
+    }
+
+    return payload;
   }
 
   Future<void> _refresh() async {
-    final future = _loadPayload(refreshContext: true);
+    final future = _queueLoad(refreshContext: true);
     setState(() => _payloadFuture = future);
     await future;
   }
@@ -290,7 +161,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
 
     setState(() {
       _page = page;
-      _payloadFuture = _loadPayload();
+      _payloadFuture = _queueLoad();
     });
     await _payloadFuture;
   }
@@ -400,37 +271,41 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
     return [allLabel, ...sortedValues];
   }
 
-  List<String> _categoryOptions(_ReportListContext payload) {
-    final selectedDepartments = _selectedOffice == 'All Departments'
-        ? payload.offices.map((office) => (office['name'] ?? '').toString())
-        : [_selectedOffice];
-    final mappedIssueTypes = issueTypesForDepartments(selectedDepartments);
+  List<String> _categoryOptions(_ReportsPayload payload) {
+    final availableCategories = payload.page.availableFilters.categories;
 
     return _options([
-      ...mappedIssueTypes,
-      if (mappedIssueTypes.isEmpty)
-        ...payload.categories.map(
+      if (_selectedCategory != 'All Categories') _selectedCategory,
+      ...availableCategories,
+      if (availableCategories.isEmpty)
+        ...payload.context.categories.map(
           (category) => (category['name'] ?? '').toString(),
         ),
     ], 'All Categories');
   }
 
-  List<String> _departmentOptions(_ReportListContext payload) {
-    if (!_isSuperAdmin(payload.user)) {
-      final department = _departmentLabel(payload.user);
+  List<String> _departmentOptions(_ReportsPayload payload) {
+    if (!_isSuperAdmin(payload.context.user)) {
+      final department = _departmentLabel(payload.context.user);
       return department.isEmpty ? ['Assigned Department'] : [department];
     }
 
-    final officeNames = payload.offices.map(
-      (office) => (office['name'] ?? '').toString(),
-    );
+    final availableOffices = payload.page.availableFilters.offices;
 
-    return _options(officeNames, 'All Departments');
+    return _options([
+      if (_selectedOffice != 'All Departments') _selectedOffice,
+      ...availableOffices,
+      if (availableOffices.isEmpty)
+        ...payload.context.offices.map((office) => (office['name'] ?? '').toString()),
+    ], 'All Departments');
   }
 
-  List<String> _barangayOptions() {
+  List<String> _barangayOptions(_ReportsPayload payload) {
     return _options(
-      _taclobanBarangays,
+      [
+        if (_selectedBarangay != 'All Barangays') _selectedBarangay,
+        ...payload.page.availableFilters.barangays,
+      ],
       'All Barangays',
       compare: _compareBarangays,
     );
@@ -644,12 +519,17 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
       child: RefreshIndicator(
         onRefresh: _refresh,
         child: FutureBuilder<_ReportsPayload>(
+          initialData: _resolvedPayload,
           future: _payloadFuture,
           builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
+            final isLoading =
+                snapshot.connectionState != ConnectionState.done;
+            final payload = snapshot.data ?? _resolvedPayload;
+
+            if (isLoading && payload == null) {
               return const Center(child: CircularProgressIndicator());
             }
-            if (snapshot.hasError) {
+            if (snapshot.hasError && payload == null) {
               return ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
@@ -663,17 +543,20 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
               );
             }
 
-            final payload = snapshot.data!;
+            if (payload == null) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
             final contextData = payload.context;
             final pageData = payload.page;
             final superAdmin = _isSuperAdmin(contextData.user);
             final reports = pageData.reports;
-            final offices = _departmentOptions(contextData);
+            final offices = _departmentOptions(payload);
             if (!offices.contains(_selectedOffice)) {
               _selectedOffice = offices.first;
             }
-            final categories = _categoryOptions(contextData);
-            final barangays = _barangayOptions();
+            final categories = _categoryOptions(payload);
+            final barangays = _barangayOptions(payload);
             const statuses = [
               'All Status',
               'New',
@@ -697,8 +580,25 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                 : _selectedBarangay != 'All Barangays'
                 ? ' - $_selectedBarangay'
                 : '';
+            final exportDisabled = _exporting || isLoading;
 
             final content = [
+              if (isLoading) ...[
+                const LinearProgressIndicator(
+                  minHeight: 3,
+                  color: Color(0xFF2557D6),
+                ),
+                const SizedBox(height: 14),
+              ],
+              if (snapshot.hasError) ...[
+                _panel(
+                  child: Text(
+                    snapshot.error.toString().replaceFirst('Exception: ', ''),
+                    style: TextStyle(color: colors.text),
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
               Text(
                 'All Reports',
                 style: TextStyle(
@@ -719,73 +619,102 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(child: _searchField()),
-                        const SizedBox(width: 12),
-                        _filterDropdown(
-                          value: _selectedCategory,
-                          items: categories,
-                          width: 180,
-                          onChanged: (value) {
-                            if (value == null) return;
-                            setState(() {
-                              _selectedCategory = value;
-                              _page = 1;
-                              _payloadFuture = _loadPayload();
-                            });
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final useStackedToolbar = constraints.maxWidth < 1320;
+                        final filters = LayoutBuilder(
+                          builder: (context, filterConstraints) {
+                            final useInlineFilters =
+                                filterConstraints.maxWidth >= 760;
+                            final categoryFilter = _filterDropdown(
+                              value: _selectedCategory,
+                              items: categories,
+                              width: 180,
+                              onChanged: (value) {
+                                if (value == null) return;
+                                setState(() {
+                                  _selectedCategory = value;
+                                  _page = 1;
+                                  _payloadFuture = _queueLoad();
+                                });
+                              },
+                            );
+                            final officeFilter = _filterDropdown(
+                              value: _selectedOffice,
+                              items: offices,
+                              width: 210,
+                              onChanged: (value) {
+                                if (value == null) return;
+                                setState(() {
+                                  _selectedOffice = value;
+                                  _selectedCategory = 'All Categories';
+                                  _page = 1;
+                                  _payloadFuture = _queueLoad();
+                                });
+                              },
+                            );
+                            final barangayFilter = _filterDropdown(
+                              value: _selectedBarangay,
+                              items: barangays,
+                              width: 180,
+                              onChanged: (value) {
+                                if (value == null) return;
+                                setState(() {
+                                  _selectedBarangay = value;
+                                  _page = 1;
+                                  _payloadFuture = _queueLoad();
+                                });
+                              },
+                            );
+                            final statusFilter = _filterDropdown(
+                              value: _selectedStatus,
+                              items: statuses,
+                              width: 160,
+                              onChanged: (value) {
+                                if (value == null) return;
+                                setState(() {
+                                  _selectedStatus = value;
+                                  _page = 1;
+                                  _payloadFuture = _queueLoad();
+                                });
+                              },
+                            );
+
+                            if (useInlineFilters) {
+                              return SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  children: [
+                                    categoryFilter,
+                                    const SizedBox(width: 12),
+                                    officeFilter,
+                                    const SizedBox(width: 12),
+                                    barangayFilter,
+                                    const SizedBox(width: 12),
+                                    statusFilter,
+                                  ],
+                                ),
+                              );
+                            }
+
+                            return Wrap(
+                              spacing: 12,
+                              runSpacing: 12,
+                              children: [
+                                categoryFilter,
+                                officeFilter,
+                                barangayFilter,
+                                statusFilter,
+                              ],
+                            );
                           },
-                        ),
-                        const SizedBox(width: 12),
-                        _filterDropdown(
-                          value: _selectedOffice,
-                          items: offices,
-                          width: 210,
-                          onChanged: (value) {
-                            if (value == null) return;
-                            setState(() {
-                              _selectedOffice = value;
-                              _selectedCategory = 'All Categories';
-                              _page = 1;
-                              _payloadFuture = _loadPayload();
-                            });
-                          },
-                        ),
-                        const SizedBox(width: 12),
-                        _filterDropdown(
-                          value: _selectedBarangay,
-                          items: barangays,
-                          width: 180,
-                          onChanged: (value) {
-                            if (value == null) return;
-                            setState(() {
-                              _selectedBarangay = value;
-                              _page = 1;
-                              _payloadFuture = _loadPayload();
-                            });
-                          },
-                        ),
-                        const SizedBox(width: 12),
-                        _filterDropdown(
-                          value: _selectedStatus,
-                          items: statuses,
-                          width: 160,
-                          onChanged: (value) {
-                            if (value == null) return;
-                            setState(() {
-                              _selectedStatus = value;
-                              _page = 1;
-                              _payloadFuture = _loadPayload();
-                            });
-                          },
-                        ),
-                        const SizedBox(width: 12),
-                        FilledButton.icon(
-                          onPressed: _exporting ? null : _exportReports,
+                        );
+                        final exportButton = FilledButton.icon(
+                          onPressed: exportDisabled ? null : _exportReports,
                           style: FilledButton.styleFrom(
                             backgroundColor: const Color(0xFF2557D6),
                           ),
-                          icon: _exporting
+                          icon: exportDisabled
                               ? const SizedBox(
                                   width: 14,
                                   height: 14,
@@ -799,10 +728,38 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                                   size: 16,
                                 ),
                           label: Text(
-                            _exporting ? 'Exporting...' : 'Export Excel',
+                            _exporting
+                                ? 'Exporting...'
+                                : (isLoading ? 'Syncing filters...' : 'Export Excel'),
                           ),
-                        ),
-                      ],
+                        );
+
+                        if (!useStackedToolbar) {
+                          return Row(
+                            children: [
+                              Expanded(child: _searchField()),
+                              const SizedBox(width: 12),
+                              Expanded(flex: 3, child: filters),
+                              const SizedBox(width: 12),
+                              exportButton,
+                            ],
+                          );
+                        }
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _searchField(),
+                            const SizedBox(height: 12),
+                            filters,
+                            const SizedBox(height: 12),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: exportButton,
+                            ),
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 14),
                     Text(

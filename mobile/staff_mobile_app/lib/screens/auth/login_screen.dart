@@ -39,7 +39,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   static const String _configuredSuperAdminEmail = String.fromEnvironment(
     'SUPER_ADMIN_EMAIL',
-    defaultValue: 'superadmin@gmail.com',
+    defaultValue: '',
   );
 
   late final AuthService _authService;
@@ -58,7 +58,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool get _isSuperAdminMode => _selectedMode == LoginMode.superAdmin;
   _LoginModeConfig get _modeConfig => _LoginModeConfig.fromMode(_selectedMode);
-  bool get _showGoogleLogin => !_isSuperAdminMode;
+  bool get _showGoogleLogin => _selectedMode == LoginMode.admin;
   bool get _isSuperAdminEmailLocked =>
       _isSuperAdminMode && _resolvedSuperAdminEmail.isNotEmpty;
 
@@ -82,6 +82,13 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     return '';
+  }
+
+  bool _isPortalRole(String role) {
+    final normalized = AuthRedirect.normalizeRole(role);
+    return normalized == 'admin' ||
+        normalized == 'super_admin' ||
+        normalized == 'administrative_staff';
   }
 
   bool _isAllowedForSelection(String role) {
@@ -112,9 +119,15 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    final rememberedEmail = await TokenStorage.getLastEmailForRole(
+    var rememberedEmail = await TokenStorage.getLastEmailForRole(
       _modeConfig.expectedRole,
     );
+    if (! _isSuperAdminMode &&
+        (rememberedEmail == null || rememberedEmail.trim().isEmpty)) {
+      rememberedEmail = await TokenStorage.getLastEmailForRole(
+        'administrative_staff',
+      );
+    }
 
     if (!mounted) return;
 
@@ -125,7 +138,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _login() async {
     final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
+    final password = _passwordController.text;
 
     setState(() {
       _clearErrors();
@@ -162,9 +175,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
 
-      if (!_isAllowedForSelection(role)) {
+      if (!_isPortalRole(role)) {
         await TokenStorage.clearAll();
-        _showSnackBar(_modeConfig.unauthorizedMessage);
+        _showSnackBar(
+          'This portal is only for authorized staff accounts.',
+        );
         return;
       }
 
@@ -249,7 +264,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _openRegisterScreen() {
-    if (_isSuperAdminMode) {
+    if (_selectedMode == LoginMode.superAdmin) {
       _showSnackBar('Super admin accounts are created by the system only.');
       return;
     }
@@ -417,7 +432,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Admin & Super Admin Access',
+                            'Admin, Super Admin and Administrative Staff Access',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.82),
@@ -751,12 +766,12 @@ class _LoginModeConfig {
           expectedRole: 'admin',
           emailHint: 'official@taclobancity.gov',
           unauthorizedMessage:
-              'This account is not authorized for admin login.',
+              'This account is not authorized for staff login.',
         );
       case LoginMode.superAdmin:
         return const _LoginModeConfig(
           expectedRole: 'super_admin',
-          emailHint: 'superadmin@gmail.com',
+          emailHint: 'super-admin@city.gov.ph',
           unauthorizedMessage:
               'This email is not registered as a super admin account.',
         );

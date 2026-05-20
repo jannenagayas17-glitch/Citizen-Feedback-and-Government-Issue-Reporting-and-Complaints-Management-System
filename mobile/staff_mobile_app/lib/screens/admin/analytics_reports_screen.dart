@@ -6,9 +6,7 @@ import '../../services/auth_service.dart';
 import '../../services/dashboard_service.dart';
 import '../../services/report_service.dart';
 import '../../utils/admin_theme.dart';
-import '../../utils/department_issue_types.dart';
 import '../../utils/file_download.dart';
-import '../../utils/tacloban_barangays.dart';
 
 class AnalyticsReportsScreen extends StatefulWidget {
   const AnalyticsReportsScreen({super.key, this.embedded = false});
@@ -26,72 +24,110 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
 
   late Future<_Payload> _payloadFuture;
   _Payload? _cachedPayload;
+  Map<String, dynamic>? _userCache;
+  List<Map<String, dynamic>>? _officeCache;
+  List<Map<String, dynamic>>? _categoryCache;
+  int _loadVersion = 0;
   bool _exporting = false;
   String _department = 'All Departments';
   String _barangay = 'All Barangays';
   String _category = 'All Categories';
   String _status = 'All Statuses';
   String _datePreset = 'all_time';
-  late DateTimeRange _range;
 
   @override
   void initState() {
     super.initState();
-    _range = _defaultRange();
-    _payloadFuture = _load();
+    _payloadFuture = _load(refreshReferenceData: true);
   }
 
-  Future<_Payload> _load() async {
-    final user = await _authService.getCurrentUser();
+  Future<_Payload> _load({bool refreshReferenceData = false}) async {
+    final requestId = ++_loadVersion;
+    final user = await _loadUser(refresh: refreshReferenceData);
     final isSuperAdmin = _isSuperAdmin(user);
-    final results = await Future.wait<dynamic>([
-      _authService.getOffices(includeInactive: isSuperAdmin),
-      _reportService.getCategories(),
-      _dashboardService.getAnalytics(
-        office: _department == 'All Departments' ? null : _department,
-        barangay: _barangay == 'All Barangays' ? null : _barangay,
-        category: _category == 'All Categories' ? null : _category,
-        status: _status == 'All Statuses' ? null : _status,
-        datePreset: _datePreset,
-        startDate: _datePreset == 'custom' ? _range.start : null,
-        endDate: _datePreset == 'custom' ? _range.end : null,
-      ),
-    ]);
-    final payload = _Payload(
-      user: Map<String, dynamic>.from(user),
-      reports: const [],
-      offices: (results[0] as List)
-          .whereType<Map<String, dynamic>>()
-          .map(Map<String, dynamic>.from)
-          .toList(),
-      categories: (results[1] as List)
-          .whereType<Map<String, dynamic>>()
-          .map(Map<String, dynamic>.from)
-          .toList(),
-      analytics: Map<String, dynamic>.from(results[2] as Map),
+    final referenceData = await _loadReferenceData(
+      isSuperAdmin: isSuperAdmin,
+      refresh: refreshReferenceData,
     );
-    _cachedPayload = payload;
+    final analytics = await _dashboardService.getAnalytics(
+      office: _selectedValueOrNull(_department, 'All Departments'),
+      barangay: _selectedValueOrNull(_barangay, 'All Barangays'),
+      category: _selectedValueOrNull(_category, 'All Categories'),
+      status: _selectedValueOrNull(_status, 'All Statuses'),
+      datePreset: _datePreset,
+    );
+    final payload = _Payload(
+      user: user,
+      offices: referenceData.offices,
+      categories: referenceData.categories,
+      analytics: Map<String, dynamic>.from(analytics),
+    );
+    if (requestId == _loadVersion) {
+      _cachedPayload = payload;
+    }
 
     return payload;
   }
 
+  Future<Map<String, dynamic>> _loadUser({bool refresh = false}) async {
+    if (!refresh && _userCache != null) {
+      return Map<String, dynamic>.from(_userCache!);
+    }
+
+    final user = Map<String, dynamic>.from(await _authService.getCurrentUser());
+    _userCache = Map<String, dynamic>.from(user);
+    return user;
+  }
+
+  Future<_ReferenceData> _loadReferenceData({
+    required bool isSuperAdmin,
+    bool refresh = false,
+  }) async {
+    if (!refresh && _officeCache != null && _categoryCache != null) {
+      return _ReferenceData(
+        offices: List<Map<String, dynamic>>.from(_officeCache!),
+        categories: List<Map<String, dynamic>>.from(_categoryCache!),
+      );
+    }
+
+    final results = await Future.wait<dynamic>([
+      _authService.getOffices(includeInactive: isSuperAdmin),
+      _reportService.getCategories(),
+    ]);
+    final offices = (results[0] as List)
+        .whereType<Map<String, dynamic>>()
+        .map(Map<String, dynamic>.from)
+        .toList();
+    final categories = (results[1] as List)
+        .whereType<Map<String, dynamic>>()
+        .map(Map<String, dynamic>.from)
+        .toList();
+
+    _officeCache = List<Map<String, dynamic>>.from(offices);
+    _categoryCache = List<Map<String, dynamic>>.from(categories);
+
+    return _ReferenceData(offices: offices, categories: categories);
+  }
+
   Future<void> _refresh() async {
-    final future = _load();
+    final future = _load(refreshReferenceData: true);
     setState(() => _payloadFuture = future);
     await future;
   }
 
-  Future<void> _export() async {
+  Future<void> _export(_Payload payload) async {
+    final appliedFilters = _appliedFilters(payload.analytics);
     setState(() => _exporting = true);
     try {
       final file = await _reportService.exportAdminReports(
-        office: _department == 'All Departments' ? null : _department,
-        barangay: _barangay == 'All Barangays' ? null : _barangay,
-        category: _category == 'All Categories' ? null : _category,
-        status: _status == 'All Statuses' ? null : _status,
-        datePreset: _datePreset,
-        startDate: _datePreset == 'custom' ? _range.start : null,
-        endDate: _datePreset == 'custom' ? _range.end : null,
+        office: _nullableFilterValue(appliedFilters['office']),
+        barangay: _nullableFilterValue(appliedFilters['barangay']),
+        category: _nullableFilterValue(appliedFilters['category']),
+        status: _nullableFilterValue(appliedFilters['status']),
+        datePreset:
+            _nullableFilterValue(appliedFilters['date_preset']) ?? 'all_time',
+        startDate: _parseDateOnly(appliedFilters['start_date']),
+        endDate: _parseDateOnly(appliedFilters['end_date']),
       );
       await downloadFile(
         bytes: file.bytes,
@@ -125,81 +161,57 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
     return (user['department'] ?? '').toString().trim();
   }
 
-  DateTimeRange _defaultRange() {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
+  String? _selectedValueOrNull(String value, String allLabel) {
+    return value == allLabel ? null : value;
+  }
 
-    return DateTimeRange(
-      start: DateTime(today.year, today.month, 1),
-      end: today,
+  String? _nullableFilterValue(dynamic value) {
+    final normalized = value?.toString().trim() ?? '';
+    return normalized.isEmpty ? null : normalized;
+  }
+
+  DateTime? _parseDateOnly(dynamic value) {
+    final normalized = value?.toString().trim() ?? '';
+    if (normalized.isEmpty) return null;
+
+    return DateTime.tryParse(normalized);
+  }
+
+  Map<String, dynamic> _appliedFilters(Map<String, dynamic> analytics) {
+    return Map<String, dynamic>.from(
+      analytics['applied_filters'] as Map? ?? const {},
     );
   }
 
-  DateTimeRange _rangeForPreset(String? preset) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-
-    switch (preset) {
-      case 'weekly':
-        final start = today.subtract(Duration(days: today.weekday - 1));
-        return DateTimeRange(start: start, end: today);
-      case 'monthly':
-        return DateTimeRange(start: DateTime(today.year, today.month, 1), end: today);
-      case 'yearly':
-        return DateTimeRange(start: DateTime(today.year, 1, 1), end: today);
-      case 'last_7_days':
-        return DateTimeRange(
-          start: today.subtract(const Duration(days: 6)),
-          end: today,
-        );
-      case 'last_30_days':
-        return DateTimeRange(
-          start: today.subtract(const Duration(days: 29)),
-          end: today,
-        );
-      case 'custom':
-        return _range;
-      default:
-        return _defaultRange();
-    }
-  }
-
-  String _datePresetLabel() {
-    switch (_datePreset) {
+  String _datePresetLabel([String? preset]) {
+    switch (preset ?? _datePreset) {
       case 'weekly':
         return 'Weekly';
       case 'monthly':
         return 'Monthly';
       case 'yearly':
         return 'Yearly';
-      case 'custom':
-        return 'Custom Range';
       default:
         return 'All Time';
     }
   }
 
   void _setDatePreset(String label) {
-    switch (label) {
-      case 'All Time':
-        _datePreset = 'all_time';
-        _range = _defaultRange();
-        break;
-      case 'Weekly':
-        _datePreset = 'weekly';
-        _range = _rangeForPreset(_datePreset);
-        break;
-      case 'Monthly':
-        _datePreset = 'monthly';
-        _range = _rangeForPreset(_datePreset);
-        break;
-      case 'Yearly':
-        _datePreset = 'yearly';
-        _range = _rangeForPreset(_datePreset);
-        break;
+    final nextPreset = switch (label) {
+      'Weekly' => 'weekly',
+      'Monthly' => 'monthly',
+      'Yearly' => 'yearly',
+      _ => 'all_time',
+    };
+
+    if (nextPreset == _datePreset) {
+      return;
     }
 
-    _refresh();
+    setState(() {
+      _datePreset = nextPreset;
+      _payloadFuture = _load();
+    });
   }
 
   int _intValue(dynamic value) {
@@ -271,30 +283,46 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
   }
 
   List<String> _barangayOptions(_Payload payload) {
+    final availableBarangays = _availableFilterValues(
+      payload.analytics,
+      'barangays',
+    );
     return _options(
-      taclobanBarangays,
+      [
+        if (_barangay != 'All Barangays') _barangay,
+        ...availableBarangays,
+      ],
       'All Barangays',
       compare: _compareBarangays,
     );
   }
 
   List<String> _categoryOptions(_Payload payload) {
-    final selectedDepartments = _department == 'All Departments'
-        ? [
-            ...payload.offices.map(
-              (office) => (office['name'] ?? '').toString(),
-            ),
-          ]
-        : [_department];
-    final mappedIssueTypes = issueTypesForDepartments(selectedDepartments);
+    final availableCategories = _availableFilterValues(
+      payload.analytics,
+      'categories',
+    );
 
     return _options([
-      ...mappedIssueTypes,
-      if (mappedIssueTypes.isEmpty)
-        ...payload.categories.map(
-          (category) => (category['name'] ?? '').toString(),
-        ),
+      if (_category != 'All Categories') _category,
+      ...availableCategories,
+      if (availableCategories.isEmpty)
+        ...payload.categories.map((category) => (category['name'] ?? '').toString()),
     ], 'All Categories');
+  }
+
+  List<String> _availableFilterValues(
+    Map<String, dynamic> analytics,
+    String key,
+  ) {
+    final filters = Map<String, dynamic>.from(
+      analytics['available_filters'] as Map? ?? const {},
+    );
+
+    return (filters[key] as List<dynamic>? ?? const [])
+        .map((value) => value.toString().trim())
+        .where((value) => value.isNotEmpty)
+        .toList();
   }
 
   List<String> _statusOptions() {
@@ -337,6 +365,43 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
       return current > 0 ? 100 : 0;
     }
     return (((current - previous) / previous) * 100).round();
+  }
+
+  void _updateDepartment(String value) {
+    if (value == _department) return;
+
+    setState(() {
+      _department = value;
+      _category = 'All Categories';
+      _payloadFuture = _load();
+    });
+  }
+
+  void _updateBarangay(String value) {
+    if (value == _barangay) return;
+
+    setState(() {
+      _barangay = value;
+      _payloadFuture = _load();
+    });
+  }
+
+  void _updateCategory(String value) {
+    if (value == _category) return;
+
+    setState(() {
+      _category = value;
+      _payloadFuture = _load();
+    });
+  }
+
+  void _updateStatus(String value) {
+    if (value == _status) return;
+
+    setState(() {
+      _status = value;
+      _payloadFuture = _load();
+    });
   }
 
   @override
@@ -383,6 +448,7 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
 
               final payload = resolvedPayload;
               final analytics = payload.analytics;
+              final appliedFilters = _appliedFilters(analytics);
               final departments = _departmentOptions(payload);
               if (!departments.contains(_department)) {
                 _department = departments.first;
@@ -404,6 +470,8 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
               final roleScope = Map<String, dynamic>.from(
                 analytics['role_scope'] as Map? ?? const {},
               );
+              final activeDatePreset =
+                  (appliedFilters['date_preset'] ?? _datePreset).toString();
               final counts = <String, int>{
                 'total': _intValue(overview['total_reports']),
                 'pending': _intValue(overview['pending']),
@@ -427,14 +495,6 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
               final timelineBuckets = _bucketsFromAnalytics(
                 analytics['timeline_breakdown'] as List?,
               );
-              final officeBreakdown =
-                  (analytics['office_breakdown'] as List<dynamic>? ?? const [])
-                      .whereType<Map<String, dynamic>>()
-                      .map(Map<String, dynamic>.from)
-                      .toList();
-              final departmentTrend = _DepartmentTrendData.fromAnalytics(
-                analytics['department_trend'] as Map?,
-              );
               final totalCount = counts['total'] ?? 0;
               final resolvedCount = counts['resolved'] ?? 0;
               final resolutionRate = totalCount == 0
@@ -444,16 +504,21 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
               final useWideFilters = contentWidth >= 1320;
               final superAdmin = _isSuperAdmin(payload.user);
               final dateLabel =
-                  (timelineMeta['range_label'] ?? _datePresetLabel()).toString();
-              final groupingLabel =
-                  (timelineMeta['grouping_label'] ?? '').toString();
+                  (timelineMeta['range_label'] ?? _datePresetLabel(activeDatePreset))
+                      .toString();
+              final groupingLabel = (timelineMeta['grouping_label'] ?? '')
+                  .toString();
               final scopeLabel =
                   (roleScope['selected_department'] ?? _department).toString();
-              final hasComparison = _datePreset != 'all_time';
+              final hasComparison = activeDatePreset != 'all_time';
               final statuses = _statusOptions();
               if (!statuses.contains(_status)) {
                 _status = statuses.first;
               }
+              final exportDisabled = _exporting || isLoading;
+              final exportLabel = _exporting
+                  ? 'Exporting...'
+                  : (isLoading ? 'Syncing filters...' : 'Export Excel');
 
               Widget card(
                 String label,
@@ -543,68 +608,66 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                       children: [
                         Expanded(
                           flex: 4,
-                          child: _dropdown(_department, departments, (v) {
-                            if (v == null) return;
-                            setState(() {
-                              _department = v;
-                              _category = 'All Categories';
-                              _payloadFuture = _load();
-                            });
-                          }),
+                          child: _filterControl(
+                            label: 'Department',
+                            child: _dropdown(_department, departments, (v) {
+                              if (v == null) return;
+                              _updateDepartment(v);
+                            }),
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           flex: 4,
-                          child: _dropdown(_barangay, barangays, (v) {
-                            if (v == null) return;
-                            setState(() {
-                              _barangay = v;
-                              _payloadFuture = _load();
-                            });
-                          }),
+                          child: _filterControl(
+                            label: 'Barangay',
+                            child: _dropdown(_barangay, barangays, (v) {
+                              if (v == null) return;
+                              _updateBarangay(v);
+                            }),
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           flex: 4,
-                          child: _dropdown(_category, categories, (v) {
-                            if (v == null) return;
-                            setState(() {
-                              _category = v;
-                              _payloadFuture = _load();
-                            });
-                          }),
+                          child: _filterControl(
+                            label: 'Category',
+                            child: _dropdown(_category, categories, (v) {
+                              if (v == null) return;
+                              _updateCategory(v);
+                            }),
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           flex: 4,
-                          child: _dropdown(_status, statuses, (v) {
-                            if (v == null) return;
-                            setState(() {
-                              _status = v;
-                              _payloadFuture = _load();
-                            });
-                          }),
+                          child: _filterControl(
+                            label: 'Status',
+                            child: _dropdown(_status, statuses, (v) {
+                              if (v == null) return;
+                              _updateStatus(v);
+                            }),
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           flex: 5,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _dropdown(
-                                _datePresetLabel(),
-                                const [
-                                  'All Time',
-                                  'Weekly',
-                                  'Monthly',
-                                  'Yearly',
-                                ],
-                                (v) {
-                                  if (v == null) return;
-                                  _setDatePreset(v);
-                                },
-                              ),
-                            ],
+                          child: _filterControl(
+                            label: 'Time Period',
+                            helperText: dateLabel,
+                            child: _dropdown(
+                              _datePresetLabel(),
+                              const [
+                                'All Time',
+                                'Weekly',
+                                'Monthly',
+                                'Yearly',
+                              ],
+                              (v) {
+                                if (v == null) return;
+                                _setDatePreset(v);
+                              },
+                            ),
                           ),
                         ),
                       ],
@@ -613,54 +676,54 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                       spacing: 12,
                       runSpacing: 12,
                       children: [
-                        _dropdown(_department, departments, (v) {
-                          if (v == null) return;
-                          setState(() {
-                            _department = v;
-                            _category = 'All Categories';
-                            _payloadFuture = _load();
-                          });
-                        }, width: 240),
-                        _dropdown(_barangay, barangays, (v) {
-                          if (v == null) return;
-                          setState(() {
-                            _barangay = v;
-                            _payloadFuture = _load();
-                          });
-                        }, width: 240),
-                        _dropdown(_category, categories, (v) {
-                          if (v == null) return;
-                          setState(() {
-                            _category = v;
-                            _payloadFuture = _load();
-                          });
-                        }, width: 240),
-                        _dropdown(_status, statuses, (v) {
-                          if (v == null) return;
-                          setState(() {
-                            _status = v;
-                            _payloadFuture = _load();
-                          });
-                        }, width: 220),
-                        SizedBox(
+                        _filterControl(
+                          label: 'Department',
+                          width: 240,
+                          child: _dropdown(_department, departments, (v) {
+                            if (v == null) return;
+                            _updateDepartment(v);
+                          }),
+                        ),
+                        _filterControl(
+                          label: 'Barangay',
+                          width: 240,
+                          child: _dropdown(_barangay, barangays, (v) {
+                            if (v == null) return;
+                            _updateBarangay(v);
+                          }),
+                        ),
+                        _filterControl(
+                          label: 'Category',
+                          width: 240,
+                          child: _dropdown(_category, categories, (v) {
+                            if (v == null) return;
+                            _updateCategory(v);
+                          }),
+                        ),
+                        _filterControl(
+                          label: 'Status',
+                          width: 220,
+                          child: _dropdown(_status, statuses, (v) {
+                            if (v == null) return;
+                            _updateStatus(v);
+                          }),
+                        ),
+                        _filterControl(
+                          label: 'Time Period',
                           width: 280,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _dropdown(
-                                _datePresetLabel(),
-                                const [
-                                  'All Time',
-                                  'Weekly',
-                                  'Monthly',
-                                  'Yearly',
-                                ],
-                                (v) {
-                                  if (v == null) return;
-                                  _setDatePreset(v);
-                                },
-                              ),
+                          helperText: dateLabel,
+                          child: _dropdown(
+                            _datePresetLabel(),
+                            const [
+                              'All Time',
+                              'Weekly',
+                              'Monthly',
+                              'Yearly',
                             ],
+                            (v) {
+                              if (v == null) return;
+                              _setDatePreset(v);
+                            },
                           ),
                         ),
                       ],
@@ -745,7 +808,7 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
 
               final chartTrailing = groupingLabel.isEmpty
                   ? dateLabel
-                  : '$groupingLabel • $dateLabel';
+                  : '$groupingLabel / $dateLabel';
               final analyticsPanelsCore = isWide
                   ? Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -832,7 +895,7 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                 duration: const Duration(milliseconds: 240),
                 switchInCurve: Curves.easeOutCubic,
                 switchOutCurve: Curves.easeInCubic,
-                child: Column(
+                child: SizedBox(
                   key: ValueKey(
                     [
                       analytics['generated_at'],
@@ -843,21 +906,7 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                       _datePreset,
                     ].join('|'),
                   ),
-                  children: [
-                    _metricPanel(
-                      superAdmin
-                          ? 'Department Activity Trends'
-                          : 'Assigned Department Trend',
-                      _departmentTrendPanel(
-                        departmentTrend: departmentTrend,
-                        officeBreakdown: officeBreakdown,
-                        scopeLabel: scopeLabel,
-                      ),
-                      trailing: chartTrailing,
-                    ),
-                    const SizedBox(height: 16),
-                    analyticsPanelsCore,
-                  ],
+                  child: analyticsPanelsCore,
                 ),
               );
 
@@ -888,9 +937,11 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                                 const SizedBox(height: 6),
                                 Text(
                                   superAdmin
-                                      ? 'Compare departments and track live citywide report behavior.'
+                                      ? 'Track live citywide report behavior with backend-driven filters.'
                                       : 'Live analytics for $scopeLabel using real scoped report records.',
-                                  style: TextStyle(color: themeColors.mutedText),
+                                  style: TextStyle(
+                                    color: themeColors.mutedText,
+                                  ),
                                 ),
                               ],
                             ),
@@ -898,7 +949,9 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                           if (isWide) ...[
                             const SizedBox(width: 16),
                             FilledButton.icon(
-                              onPressed: _exporting ? null : _export,
+                              onPressed: exportDisabled
+                                  ? null
+                                  : () => _export(payload),
                               style: FilledButton.styleFrom(
                                 backgroundColor: const Color(0xFF2557D6),
                                 padding: const EdgeInsets.symmetric(
@@ -909,7 +962,7 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                                   borderRadius: BorderRadius.circular(14),
                                 ),
                               ),
-                              icon: _exporting
+                              icon: exportDisabled
                                   ? const SizedBox(
                                       width: 14,
                                       height: 14,
@@ -918,10 +971,11 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                                         color: Colors.white,
                                       ),
                                     )
-                                  : const Icon(Icons.download_rounded, size: 16),
-                              label: Text(
-                                _exporting ? 'Exporting...' : 'Export Excel',
-                              ),
+                                  : const Icon(
+                                      Icons.download_rounded,
+                                      size: 16,
+                                    ),
+                              label: Text(exportLabel),
                             ),
                           ],
                         ],
@@ -944,11 +998,13 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                         Align(
                           alignment: Alignment.centerRight,
                           child: FilledButton.icon(
-                            onPressed: _exporting ? null : _export,
+                            onPressed: exportDisabled
+                                ? null
+                                : () => _export(payload),
                             style: FilledButton.styleFrom(
                               backgroundColor: const Color(0xFF2557D6),
                             ),
-                            icon: _exporting
+                            icon: exportDisabled
                                 ? const SizedBox(
                                     width: 14,
                                     height: 14,
@@ -958,9 +1014,7 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
                                     ),
                                   )
                                 : const Icon(Icons.download_rounded, size: 16),
-                            label: Text(
-                              _exporting ? 'Exporting...' : 'Export Excel',
-                            ),
+                            label: Text(exportLabel),
                           ),
                         ),
                       ],
@@ -1120,22 +1174,32 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
     );
   }
 
-  Widget _panel(Widget child) => Container(
+  Widget _panel(
+    Widget child, {
+    EdgeInsetsGeometry padding = const EdgeInsets.all(18),
+    double radius = 18,
+  }) => Container(
     width: double.infinity,
-    padding: const EdgeInsets.all(18),
+    padding: padding,
     decoration: BoxDecoration(
       color: AdminThemeColors.of(context).panel,
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(radius),
       border: Border.all(color: AdminThemeColors.of(context).border),
     ),
     child: child,
   );
 
-  Widget _metricPanel(String title, Widget child, {String? trailing}) => _panel(
+  Widget _metricPanel(
+    String title,
+    Widget child, {
+    String? trailing,
+    bool compact = false,
+  }) => _panel(
     Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: Text(
@@ -1148,42 +1212,60 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
               ),
             ),
             if (trailing != null)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 7,
-                ),
-                decoration: BoxDecoration(
-                  color: AdminThemeColors.of(context).input,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: AdminThemeColors.of(context).border,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.schedule_rounded,
+              Flexible(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 12, top: 2),
+                  child: Text(
+                    trailing,
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
                       color: AdminThemeColors.of(context).mutedText,
-                      size: 14,
+                      fontSize: compact ? 11 : 12,
+                      fontWeight: FontWeight.w600,
                     ),
-                    const SizedBox(width: 6),
-                    Text(
-                      trailing,
-                      style: TextStyle(
-                        color: AdminThemeColors.of(context).text,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
           ],
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: compact ? 12 : 16),
         child,
+      ],
+    ),
+    padding: EdgeInsets.all(compact ? 14 : 18),
+    radius: compact ? 16 : 18,
+  );
+
+  Widget _filterControl({
+    required String label,
+    required Widget child,
+    String? helperText,
+    double? width,
+  }) => SizedBox(
+    width: width,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: AdminThemeColors.of(context).mutedText,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        child,
+        if (helperText != null && helperText.trim().isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(
+            helperText,
+            style: TextStyle(
+              color: AdminThemeColors.of(context).mutedText,
+              fontSize: 11,
+            ),
+          ),
+        ],
       ],
     ),
   );
@@ -1518,205 +1600,6 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
     );
   }
 
-  Widget _departmentTrendPanel({
-    required _DepartmentTrendData departmentTrend,
-    required List<Map<String, dynamic>> officeBreakdown,
-    required String scopeLabel,
-  }) {
-    final colors = AdminThemeColors.of(context);
-    final series = departmentTrend.series;
-    final labels = departmentTrend.labels;
-    final maxValue = series.isEmpty
-        ? 1
-        : series
-              .expand((item) => item.counts)
-              .fold<int>(1, (current, value) => math.max(current, value));
-
-    if (series.isEmpty && officeBreakdown.isEmpty) {
-      return Text(
-        'No department activity data is available for the selected filters.',
-        style: TextStyle(color: colors.mutedText),
-      );
-    }
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 860;
-        final labelWidth = compact ? 120.0 : 180.0;
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              compact
-                  ? scopeLabel
-                  : '$scopeLabel • Real report activity by time period',
-              style: TextStyle(color: colors.mutedText, fontSize: 12),
-            ),
-            if (labels.isNotEmpty) ...[
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  SizedBox(width: labelWidth + 20),
-                  Expanded(
-                    child: Row(
-                      children: labels
-                          .map(
-                            (label) => Expanded(
-                              child: Text(
-                                label,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: colors.mutedText,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-            if (series.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              ...series.asMap().entries.map((entry) {
-                final index = entry.key;
-                final item = entry.value;
-                final color = _palette(index);
-
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 14),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      SizedBox(
-                        width: labelWidth,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item.label,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: colors.text,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${item.total} reports • ${item.resolutionRate}% resolved',
-                              style: TextStyle(
-                                color: colors.mutedText,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: SizedBox(
-                          height: 54,
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: item.counts.asMap().entries.map((point) {
-                              final count = point.value;
-                              final pointLabel = point.key < labels.length
-                                  ? labels[point.key]
-                                  : 'Period ${point.key + 1}';
-                              final height = maxValue == 0
-                                  ? 8.0
-                                  : math.max(8.0, (count / maxValue) * 42);
-                              return Expanded(
-                                child: Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(horizontal: 3),
-                                  child: Tooltip(
-                                    message:
-                                        '${item.label} • $pointLabel: $count',
-                                    child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.end,
-                                      children: [
-                                        Text(
-                                          '$count',
-                                          style: TextStyle(
-                                            color: colors.mutedText,
-                                            fontSize: 10,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 6),
-                                        AnimatedContainer(
-                                          duration:
-                                              const Duration(milliseconds: 220),
-                                          curve: Curves.easeOutCubic,
-                                          height: height,
-                                          decoration: BoxDecoration(
-                                            gradient: LinearGradient(
-                                              begin: Alignment.topCenter,
-                                              end: Alignment.bottomCenter,
-                                              colors: [
-                                                color.withValues(alpha: 0.55),
-                                                color,
-                                              ],
-                                            ),
-                                            borderRadius:
-                                                BorderRadius.circular(999),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
-            ],
-            if (officeBreakdown.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: officeBreakdown.take(4).map((item) {
-                  final label = (item['label'] ?? 'Department').toString();
-                  final total = _intValue(item['count']);
-                  final resolution = _intValue(item['resolution_rate']);
-                  return Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: colors.input,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: colors.border),
-                    ),
-                    child: Text(
-                      '$label • $total reports • $resolution% resolved',
-                      style: TextStyle(
-                        color: colors.text,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-          ],
-        );
-      },
-    );
-  }
-
   Color _colorFor(String key) {
     switch (key) {
       case 'pending':
@@ -1747,16 +1630,24 @@ class _AnalyticsReportsScreenState extends State<AnalyticsReportsScreen> {
 class _Payload {
   const _Payload({
     required this.user,
-    required this.reports,
     required this.offices,
     required this.categories,
     required this.analytics,
   });
   final Map<String, dynamic> user;
-  final List<Map<String, dynamic>> reports;
   final List<Map<String, dynamic>> offices;
   final List<Map<String, dynamic>> categories;
   final Map<String, dynamic> analytics;
+}
+
+class _ReferenceData {
+  const _ReferenceData({
+    required this.offices,
+    required this.categories,
+  });
+
+  final List<Map<String, dynamic>> offices;
+  final List<Map<String, dynamic>> categories;
 }
 
 class _Bucket {
@@ -1774,61 +1665,6 @@ class _Bucket {
   final int progress;
   final int resolved;
   final int rejected;
-}
-
-class _DepartmentTrendData {
-  const _DepartmentTrendData({
-    required this.labels,
-    required this.series,
-  });
-
-  factory _DepartmentTrendData.fromAnalytics(Map<dynamic, dynamic>? raw) {
-    final data = raw == null ? const <dynamic, dynamic>{} : Map<dynamic, dynamic>.from(raw);
-    final labels = (data['labels'] as List<dynamic>? ?? const [])
-        .map((value) => value.toString())
-        .where((value) => value.trim().isNotEmpty)
-        .toList();
-    final series = (data['series'] as List<dynamic>? ?? const [])
-        .whereType<Map<String, dynamic>>()
-        .map(_DepartmentTrendSeries.fromJson)
-        .toList();
-
-    return _DepartmentTrendData(labels: labels, series: series);
-  }
-
-  final List<String> labels;
-  final List<_DepartmentTrendSeries> series;
-}
-
-class _DepartmentTrendSeries {
-  const _DepartmentTrendSeries({
-    required this.label,
-    required this.counts,
-    required this.total,
-    required this.resolutionRate,
-  });
-
-  factory _DepartmentTrendSeries.fromJson(Map<String, dynamic> json) {
-    int parseInt(dynamic value) {
-      if (value is int) return value;
-      if (value is num) return value.toInt();
-      return int.tryParse('$value') ?? 0;
-    }
-
-    return _DepartmentTrendSeries(
-      label: (json['label'] ?? '').toString(),
-      counts: (json['counts'] as List<dynamic>? ?? const [])
-          .map(parseInt)
-          .toList(),
-      total: parseInt(json['total']),
-      resolutionRate: parseInt(json['resolution_rate']),
-    );
-  }
-
-  final String label;
-  final List<int> counts;
-  final int total;
-  final int resolutionRate;
 }
 
 class _TrendLegend extends StatelessWidget {

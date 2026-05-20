@@ -16,6 +16,13 @@ class AdminReportListingTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+
+        parent::tearDown();
+    }
+
     public function test_admin_reports_and_export_are_scoped_to_the_assigned_office(): void
     {
         $citizen = User::create([
@@ -145,6 +152,145 @@ class AdminReportListingTest extends TestCase
 
         $this->getJson("/api/reports/{$hiddenReport->id}")
             ->assertForbidden();
+    }
+
+    public function test_export_applies_combined_filters_and_uses_matching_filename_metadata(): void
+    {
+        Carbon::setTestNow(Carbon::create(2026, 5, 20, 11, 0, 0, 'Asia/Manila'));
+
+        $citizen = User::create([
+            'name' => 'Export Citizen',
+            'email' => 'citizen-filtered-export@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'citizen',
+            'is_active' => true,
+        ]);
+
+        $superAdmin = User::create([
+            'name' => 'Export Super Admin',
+            'email' => 'super-admin-filtered-export@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'super_admin',
+            'is_active' => true,
+        ]);
+
+        $engineering = Office::create([
+            'name' => "City Engineer's Office",
+            'is_active' => true,
+        ]);
+
+        $health = Office::create([
+            'name' => 'City Health Office',
+            'is_active' => true,
+        ]);
+
+        $drainage = Category::create(['name' => 'Drainage']);
+        $sanitation = Category::create(['name' => 'Sanitation']);
+
+        $createReport = function (
+            int $officeId,
+            int $categoryId,
+            string $status,
+            string $barangay,
+            string $title,
+            string $createdAt
+        ) use ($citizen): void {
+            $timestamp = Carbon::parse($createdAt, 'Asia/Manila');
+            $report = new Report([
+                'user_id' => $citizen->id,
+                'office_id' => $officeId,
+                'category_id' => $categoryId,
+                'title' => $title,
+                'description' => 'Filtered export validation for '.$title,
+                'location' => $barangay.', Tacloban City',
+                'barangay' => $barangay,
+                'status' => $status,
+                'priority' => 'Normal',
+                'resolved_at' => $status === 'Resolved' ? $timestamp->copy()->addDay() : null,
+            ]);
+            $report->created_at = $timestamp;
+            $report->updated_at = $timestamp;
+            $report->save();
+        };
+
+        $createReport(
+            $engineering->id,
+            $drainage->id,
+            'Resolved',
+            'Barangay 7',
+            'Matching export report',
+            '2026-05-05 09:00:00'
+        );
+        $createReport(
+            $health->id,
+            $drainage->id,
+            'Resolved',
+            'Barangay 7',
+            'Wrong office export report',
+            '2026-05-05 10:00:00'
+        );
+        $createReport(
+            $engineering->id,
+            $sanitation->id,
+            'Resolved',
+            'Barangay 7',
+            'Wrong category export report',
+            '2026-05-05 11:00:00'
+        );
+        $createReport(
+            $engineering->id,
+            $drainage->id,
+            'Pending',
+            'Barangay 7',
+            'Wrong status export report',
+            '2026-05-05 12:00:00'
+        );
+        $createReport(
+            $engineering->id,
+            $drainage->id,
+            'Resolved',
+            'Barangay 5',
+            'Wrong barangay export report',
+            '2026-05-05 13:00:00'
+        );
+        $createReport(
+            $engineering->id,
+            $drainage->id,
+            'Resolved',
+            'Barangay 7',
+            'Outside monthly export report',
+            '2026-04-28 09:00:00'
+        );
+
+        Sanctum::actingAs($superAdmin);
+
+        $export = $this->get(
+            '/api/admin/reports/export?office='.urlencode($engineering->name)
+            .'&barangay='.urlencode('Barangay 7')
+            .'&category='.urlencode($drainage->name)
+            .'&status='.urlencode('Resolved')
+            .'&date_preset=monthly'
+        );
+        $content = $export->streamedContent();
+
+        $export->assertOk()
+            ->assertHeader('Content-Type', 'application/vnd.ms-excel; charset=UTF-8');
+
+        $this->assertStringContainsString('Applied Filters', $content);
+        $this->assertStringContainsString('Rows exported: 1', $content);
+        $this->assertStringContainsString('Matching export report', $content);
+        $this->assertStringContainsString(e($engineering->name), $content);
+        $this->assertStringContainsString('2026-05-01 to 2026-05-20', $content);
+        $this->assertStringNotContainsString('Wrong office export report', $content);
+        $this->assertStringNotContainsString('Wrong category export report', $content);
+        $this->assertStringNotContainsString('Wrong status export report', $content);
+        $this->assertStringNotContainsString('Wrong barangay export report', $content);
+        $this->assertStringNotContainsString('Outside monthly export report', $content);
+
+        $contentDisposition = (string) $export->headers->get('content-disposition');
+        $this->assertStringContainsString('city-engineers-office', $contentDisposition);
+        $this->assertStringContainsString('monthly', $contentDisposition);
+        $this->assertStringContainsString('reports-and-analytics', $contentDisposition);
     }
 
     public function test_admin_reports_pagination_returns_distinct_stable_pages(): void

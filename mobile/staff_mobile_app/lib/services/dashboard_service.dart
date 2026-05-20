@@ -6,7 +6,11 @@ class DashboardService {
 
   Future<Map<String, dynamic>> getDashboardStats() async {
     final response = await _apiClient.get('/dashboard', authRequired: true);
-    return jsonDecode(response.body);
+    return _decodeRequiredMapResponse(
+      response.body,
+      statusCode: response.statusCode,
+      fallbackMessage: 'Failed to fetch dashboard statistics',
+    );
   }
 
   Future<Map<String, dynamic>> getAnalytics({
@@ -34,7 +38,11 @@ class DashboardService {
         if (endDate != null) 'end_date': _formatDateOnly(endDate),
       },
     );
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    return _decodeRequiredMapResponse(
+      response.body,
+      statusCode: response.statusCode,
+      fallbackMessage: 'Failed to fetch analytics',
+    );
   }
 
   String _formatDateOnly(DateTime date) {
@@ -43,5 +51,28 @@ class DashboardService {
     final month = normalized.month.toString().padLeft(2, '0');
     final day = normalized.day.toString().padLeft(2, '0');
     return '$year-$month-$day';
+  }
+
+  Map<String, dynamic> _decodeRequiredMapResponse(
+    String responseBody, {
+    required int statusCode,
+    required String fallbackMessage,
+  }) {
+    final decoded = jsonDecode(responseBody);
+
+    if (statusCode == 200 && decoded is Map<String, dynamic>) {
+      return decoded;
+    }
+
+    if (decoded is Map<String, dynamic>) {
+      throw Exception(
+        decoded['message']?.toString() ??
+            (decoded['errors'] != null
+                ? decoded['errors'].toString()
+                : fallbackMessage),
+      );
+    }
+
+    throw Exception(fallbackMessage);
   }
 }

@@ -24,6 +24,7 @@ class CitizenFeedbackQueryService
     public function scopedForUser($user): Builder
     {
         $query = CitizenFeedback::query();
+        $this->excludeDemoSeedData($query);
         $role = $user->role ?? 'citizen';
 
         if ($role === 'citizen') {
@@ -43,35 +44,43 @@ class CitizenFeedbackQueryService
         return $query;
     }
 
-    public function applyFilters(Builder $query, array $filters): void
+    private function excludeDemoSeedData(Builder $query): void
     {
-        if (! empty($filters['type'])) {
+        $query->whereNotIn(
+            'citizen_feedback.user_id',
+            $this->reportQueries->demoUserIdsQuery()
+        );
+    }
+
+    public function applyFilters(Builder $query, array $filters, array $except = []): void
+    {
+        if (! in_array('type', $except, true) && ! empty($filters['type'])) {
             $query->whereRaw('LOWER(citizen_feedback.type) = ?', [
                 mb_strtolower(trim((string) $filters['type'])),
             ]);
         }
 
-        if (! empty($filters['rating'])) {
+        if (! in_array('rating', $except, true) && ! empty($filters['rating'])) {
             $query->where('citizen_feedback.rating', (int) $filters['rating']);
         }
 
-        if (! empty($filters['office_id'])) {
+        if (! in_array('office', $except, true) && ! empty($filters['office_id'])) {
             $query->where('citizen_feedback.office_id', (int) $filters['office_id']);
-        } elseif (! empty($filters['office'])) {
+        } elseif (! in_array('office', $except, true) && ! empty($filters['office'])) {
             $office = trim((string) $filters['office']);
             $query->whereHas('office', function (Builder $officeQuery) use ($office) {
                 $officeQuery->whereRaw('LOWER(name) = ?', [mb_strtolower($office)]);
             });
         }
 
-        if (! empty($filters['barangay'])) {
+        if (! in_array('barangay', $except, true) && ! empty($filters['barangay'])) {
             $barangay = trim((string) $filters['barangay']);
             $query->whereHas('report', function (Builder $reportQuery) use ($barangay) {
                 $reportQuery->whereRaw('LOWER(barangay) = ?', [mb_strtolower($barangay)]);
             });
         }
 
-        if (! empty($filters['search'])) {
+        if (! in_array('search', $except, true) && ! empty($filters['search'])) {
             $search = trim((string) $filters['search']);
             $normalizedSearch = mb_strtolower($search);
             $numericSearch = preg_replace('/[^0-9]/', '', $search) ?? '';

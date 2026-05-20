@@ -4,7 +4,6 @@ namespace Database\Seeders;
 
 use App\Models\Category;
 use App\Models\Office;
-use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -127,38 +126,5 @@ class DatabaseSeeder extends Seeder
             );
         }
 
-        User::updateOrCreate(
-            ['email' => 'test@example.com'],
-            [
-                'name' => 'Test User',
-                'mobile_number' => '09170000001',
-                'password' => 'password123',
-                'role' => 'citizen',
-            ]
-        );
-
-        User::updateOrCreate(
-            ['email' => 'admin@gov.ph'],
-            [
-                'name' => 'System Admin',
-                'mobile_number' => '09170000002',
-                'password' => 'admin12345',
-                'role' => 'admin',
-                'department' => "City Engineer's Office",
-                'job_title' => 'Administrator',
-            ]
-        );
-
-        User::updateOrCreate(
-            ['email' => 'superadmin@gmail.com'],
-            [
-                'name' => 'Super Admin',
-                'mobile_number' => '09170000003',
-                'password' => 'superadmin123',
-                'role' => 'super_admin',
-                'department' => 'System Administration',
-                'job_title' => 'Administrator',
-            ]
-        );
     }
 }

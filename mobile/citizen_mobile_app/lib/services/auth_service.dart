@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 import '../config/api_config.dart';
 import 'google_auth_service.dart';
@@ -324,6 +326,49 @@ class AuthService {
     }
 
     throw Exception(_extractErrorMessage(data, 'Failed to update profile'));
+  }
+
+  Future<Map<String, dynamic>> uploadProfileImage({
+    required Uint8List imageBytes,
+    String fileName = 'profile-photo.png',
+  }) async {
+    final token = await TokenStorage.getToken();
+    if (token == null || token.isEmpty) {
+      throw const AuthSessionExpiredException();
+    }
+
+    final request = http.MultipartRequest(
+      'POST',
+      _buildUri('/user/profile-image'),
+    );
+
+    request.headers['Accept'] = 'application/json';
+    request.headers['Authorization'] = 'Bearer $token';
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'profile_image',
+        imageBytes,
+        filename: fileName,
+        contentType: MediaType('image', 'png'),
+      ),
+    );
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+    if (response.statusCode == 200) {
+      return data;
+    }
+
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      await TokenStorage.clearAll();
+      throw const AuthSessionExpiredException();
+    }
+
+    throw Exception(
+      _extractErrorMessage(data, 'Failed to upload profile photo'),
+    );
   }
 
   Future<List<dynamic>> getAdminUsers() async {

@@ -381,6 +381,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
       'totalReports': totalReports,
       'totalDepartments':
           int.tryParse('${analytics['active_offices_count'] ?? 0}') ?? 0,
+      'resolvedReports': resolved,
       'avgResponseHours': avgHours,
       'avgResponseLabel': avgResponseLabel,
       'resolutionRate': resolutionRate,
@@ -589,7 +590,14 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
         const <String, dynamic>{};
     final monthlySeries =
         (metrics['monthlySeries'] as List<dynamic>? ?? const []);
-    final subtitle = 'Tacloban City Government - All Offices and Departments';
+    final subtitle =
+        'Live citywide activity across all offices and departments';
+    final staleReportsCount = (metrics['staleReportsCount'] as int?) ?? 0;
+    final escalationTriggerHours =
+        (metrics['escalationTriggerHours'] as int?) ?? 72;
+    final feedbackRecent = (feedback['recent'] as int?) ?? 0;
+    final feedbackTotal = (feedback['total'] as int?) ?? 0;
+    final resolvedReports = (metrics['resolvedReports'] as int?) ?? 0;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -628,28 +636,30 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
                   width: summaryCardWidth,
                   label: 'Total Reports',
                   value: '${metrics['totalReports'] ?? 0}',
-                  hint: '+12 this week',
+                  hint: staleReportsCount > 0
+                      ? '$staleReportsCount open longer than ${escalationTriggerHours}h'
+                      : 'Current citywide report volume',
                   color: const Color(0xFF5F92FF),
                 ),
                 _DashboardStatCard(
                   width: summaryCardWidth,
                   label: 'Total Departments',
                   value: '${metrics['totalDepartments'] ?? 0}',
-                  hint: 'Roads, Water, etc.',
+                  hint: 'Active offices with report activity',
                   color: const Color(0xFF8D90A6),
                 ),
                 _DashboardStatCard(
                   width: summaryCardWidth,
                   label: 'Avg. Response Time',
                   value: (metrics['avgResponseLabel'] ?? '0 Hours').toString(),
-                  hint: 'Target < 12h',
+                  hint: 'Average across the current report scope',
                   color: const Color(0xFFF2A84B),
                 ),
                 _DashboardStatCard(
                   width: summaryCardWidth,
                   label: 'Resolution Rate',
                   value: '${metrics['resolutionRate'] ?? 0}%',
-                  hint: '+3% this month',
+                  hint: '$resolvedReports resolved from live records',
                   color: const Color(0xFF66D2A3),
                 ),
               ],
@@ -668,7 +678,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
                     flex: 6,
                     child: _DashboardPanel(
                       title: 'Top 5 Barangays by Complaints',
-                      trailing: 'Sorted by report count',
+                      trailing: 'Current highest-volume locations',
                       child: _HeatMapCard(
                         items: barangays.cast<Map<String, dynamic>>(),
                       ),
@@ -694,7 +704,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
             else ...[
               _DashboardPanel(
                 title: 'Top 5 Barangays by Complaints',
-                trailing: 'Sorted by report count',
+                trailing: 'Current highest-volume locations',
                 child: _HeatMapCard(
                   items: barangays.cast<Map<String, dynamic>>(),
                 ),
@@ -714,7 +724,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
             const SizedBox(height: 16),
             _DashboardPanel(
               title: 'Departments Resolved',
-              trailing: 'Resolution tracking',
+              trailing: 'Live performance snapshot',
               child: _DepartmentGrid(
                 items: officeStats.cast<Map<String, dynamic>>(),
               ),
@@ -728,7 +738,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
                     flex: 5,
                     child: _DashboardPanel(
                       title: 'Account Management',
-                      trailing: 'Create / Disable / Assign',
+                      trailing: 'Live account directory',
                       child: _AdminManagementTable(
                         items: adminRows.cast<Map<String, dynamic>>(),
                         onManageTap: _openUsers,
@@ -740,7 +750,9 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
                     flex: 4,
                     child: _DashboardPanel(
                       title: 'Feedback Analytics',
-                      trailing: 'All departments',
+                      trailing: feedbackRecent > 0
+                          ? 'Last 7 days: $feedbackRecent'
+                          : '$feedbackTotal total feedback records',
                       child: _FeedbackAnalyticsCard(
                         feedback: feedback,
                         onFeedbackTap: _openFeedback,
@@ -752,7 +764,7 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
             else ...[
               _DashboardPanel(
                 title: 'Account Management',
-                trailing: 'Create / Disable / Assign',
+                trailing: 'Live account directory',
                 child: _AdminManagementTable(
                   items: adminRows.cast<Map<String, dynamic>>(),
                   onManageTap: _openUsers,
@@ -761,7 +773,9 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
               const SizedBox(height: 16),
               _DashboardPanel(
                 title: 'Feedback Analytics',
-                trailing: 'All departments',
+                trailing: feedbackRecent > 0
+                    ? 'Last 7 days: $feedbackRecent'
+                    : '$feedbackTotal total feedback records',
                 child: _FeedbackAnalyticsCard(
                   feedback: feedback,
                   onFeedbackTap: _openFeedback,

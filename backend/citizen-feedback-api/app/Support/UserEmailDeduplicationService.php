@@ -363,11 +363,12 @@ class UserEmailDeduplicationService
 
     private function rolePriority(User $user): int
     {
-        return match ($user->role) {
+        return match (User::normalizeRole($user->role)) {
             'super_admin' => 0,
             'admin' => 1,
-            'pending_admin' => 2,
-            'citizen' => 3,
+            User::ROLE_ADMINISTRATIVE_STAFF => 2,
+            'pending_admin' => 3,
+            'citizen' => 4,
             default => 9,
         };
     }
@@ -376,7 +377,7 @@ class UserEmailDeduplicationService
     {
         $reasons = [];
         $roles = $group
-            ->map(fn (User $user) => (string) $user->role)
+            ->map(fn (User $user) => User::normalizeRole($user->role))
             ->filter()
             ->unique()
             ->values();
@@ -386,13 +387,21 @@ class UserEmailDeduplicationService
         }
 
         $containsCitizen = $roles->contains('citizen');
-        $containsStaff = $roles->contains(fn ($role) => in_array($role, ['admin', 'pending_admin'], true));
+        $containsStaff = $roles->contains(
+            fn ($role) => in_array($role, ['admin', 'pending_admin', User::ROLE_ADMINISTRATIVE_STAFF], true)
+        );
         if ($containsCitizen && $containsStaff) {
             $reasons[] = 'Contains both citizen and staff roles with the same email.';
         }
 
         $staffDepartments = $group
-            ->filter(fn (User $user) => in_array($user->role, ['admin', 'pending_admin'], true))
+            ->filter(
+                fn (User $user) => in_array(
+                    User::normalizeRole($user->role),
+                    ['admin', 'pending_admin', User::ROLE_ADMINISTRATIVE_STAFF],
+                    true
+                )
+            )
             ->map(fn (User $user) => trim((string) ($user->department ?? '')))
             ->filter()
             ->unique()

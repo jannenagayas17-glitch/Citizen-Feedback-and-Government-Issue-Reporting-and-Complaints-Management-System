@@ -64,6 +64,13 @@ class CitizenDemoUsersSeeder extends Seeder
 
     public function run(): void
     {
+        if (! app()->environment('testing')
+            && ! filter_var((string) env('ALLOW_DEMO_DATA_SEEDING', false), FILTER_VALIDATE_BOOLEAN)) {
+            $this->command?->warn('Skipped citizen demo user seeding. Set ALLOW_DEMO_DATA_SEEDING=true to enable it intentionally.');
+
+            return;
+        }
+
         $targetCount = (int) env('DEMO_CITIZEN_COUNT', 50);
         $targetCount = max(50, $targetCount);
 

@@ -33,7 +33,7 @@ class _SplashScreenState extends State<SplashScreen> {
     } else if (role == 'admin' || role == 'staff') {
       Navigator.pushReplacementNamed(context, '/admin-home');
     } else {
-      Navigator.pushReplacementNamed(context, '/citizen-home');
+      Navigator.pushReplacementNamed(context, '/login');
     }
   }
 

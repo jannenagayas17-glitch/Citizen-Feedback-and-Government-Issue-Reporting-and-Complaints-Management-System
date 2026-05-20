@@ -5,6 +5,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../services/auth_service.dart';
 import '../../services/citizen_data_cache.dart';
 import '../../services/google_auth_service.dart';
+import '../../utils/auth_redirect.dart';
 import '../../utils/app_routes.dart';
 import '../../utils/app_theme_controller.dart';
 import '../../utils/citizen_theme_colors.dart';
@@ -50,7 +51,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _authService = widget.authService ?? AuthService();
-    _loadSavedCitizenEmail();
+    _loadSavedEmail();
   }
 
   GoogleAuthService get _resolvedGoogleAuthService =>
@@ -102,8 +103,10 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> _loadSavedCitizenEmail() async {
-    final rememberedEmail = await TokenStorage.getLastEmailForRole('citizen');
+  Future<void> _loadSavedEmail() async {
+    final rememberedEmail =
+        await TokenStorage.getLastEmailForRole('citizen') ??
+        await TokenStorage.getLastEmailForRole('administrative_staff');
 
     if (!mounted || _shouldKeepRoutePrefilledEmail) return;
 
@@ -147,29 +150,29 @@ class _LoginScreenState extends State<LoginScreen> {
       final data = await _authService.login(email: email, password: password);
 
       final user = data['user'] as Map<String, dynamic>? ?? {};
-      final role = (user['role']?.toString() ?? '').trim().toLowerCase();
+      final role = AuthRedirect.normalizeRole(user['role']);
 
       if (!mounted) return;
 
-      if (role != 'citizen') {
+      if (role != 'citizen' && role != 'administrative_staff') {
         CitizenDataCache.clear();
         await TokenStorage.clearAll();
         _showSnackBar(
-          'This mobile app is for citizen accounts only. Please use the web admin portal for staff access.',
+          'This mobile app is for citizen and administrative staff accounts only. Please use the web admin portal for admin access.',
         );
         return;
       }
 
       final themeController = AppThemeScope.of(context);
       CitizenDataCache.clear();
-      await TokenStorage.saveLastEmailForRole(role: 'citizen', email: email);
+      await TokenStorage.saveLastEmailForRole(role: role, email: email);
       await themeController.loadForUser(user);
 
       if (!mounted) return;
 
       Navigator.pushNamedAndRemoveUntil(
         context,
-        AppRoutes.citizenHome,
+        AuthRedirect.routeForRole(role),
         (route) => false,
       );
     } catch (e) {
@@ -211,7 +214,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       final backendUser = data['user'] as Map<String, dynamic>? ?? {};
-      final role = (backendUser['role']?.toString() ?? '').trim().toLowerCase();
+      final role = AuthRedirect.normalizeRole(backendUser['role']);
 
       if (!mounted) return;
 
@@ -220,7 +223,9 @@ class _LoginScreenState extends State<LoginScreen> {
         CitizenDataCache.clear();
         await TokenStorage.clearAll();
         _showSnackBar(
-          'This mobile app is for citizen accounts only. Please use the web admin portal for staff access.',
+          role == 'administrative_staff'
+              ? 'Administrative staff accounts should sign in with their assigned email and password.'
+              : 'This mobile app is for citizen accounts only when using Google sign-in. Please use the web admin portal for admin access.',
         );
         return;
       }
@@ -304,7 +309,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Sign in with your registered account to submit reports, follow updates, and continue securely with Google.',
+              'Citizens can sign in to submit reports and track updates. Administrative staff can also use their assigned account to assist walk-in complainants.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: CitizenAppPalette.sand.withValues(alpha: 0.86),
@@ -351,6 +356,16 @@ class _LoginScreenState extends State<LoginScreen> {
             TextButton(
               onPressed: _openRegisterScreen,
               child: const Text("Don't have an account? Register here"),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Front desk accounts are created by the super admin and must use email and password sign-in.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: CitizenAppPalette.sand.withValues(alpha: 0.78),
+                fontSize: 11.5,
+                height: 1.45,
+              ),
             ),
           ],
         ),

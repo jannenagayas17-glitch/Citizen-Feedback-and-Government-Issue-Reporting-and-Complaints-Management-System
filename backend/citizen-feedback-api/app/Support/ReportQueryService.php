@@ -4,11 +4,15 @@ namespace App\Support;
 
 use App\Models\Office;
 use App\Models\Report;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Schema;
 
 class ReportQueryService
 {
+    private ?array $reportColumns = null;
+
     public function __construct(
         private readonly DemoAccountService $demoAccounts,
     ) {
@@ -51,7 +55,7 @@ class ReportQueryService
     {
         $query = Report::query();
         $this->excludeDemoSeedData($query);
-        $role = $user->role ?? 'citizen';
+        $role = User::normalizeRole($user->role ?? 'citizen');
 
         if ($role === 'citizen') {
             $query->where('reports.user_id', $user->id);
@@ -63,6 +67,9 @@ class ReportQueryService
             } else {
                 $query->where('reports.office_id', $officeId);
             }
+        } elseif ($role === User::ROLE_ADMINISTRATIVE_STAFF) {
+            $this->applyWalkInFilter($query);
+            $this->applyAdministrativeStaffOwnershipFilter($query, $user);
         }
 
         return $query;
@@ -81,32 +88,32 @@ class ReportQueryService
         return $this->demoAccounts->demoUserIdsQuery();
     }
 
-    public function applyFilters(Builder $query, array $filters): void
+    public function applyFilters(Builder $query, array $filters, array $except = []): void
     {
-        if (! empty($filters['status'])) {
+        if (! in_array('status', $except, true) && ! empty($filters['status'])) {
             $query->where('reports.status', trim((string) $filters['status']));
         }
 
-        if (! empty($filters['office'])) {
+        if (! in_array('office', $except, true) && ! empty($filters['office'])) {
             $office = trim((string) $filters['office']);
             $query->whereHas('office', function (Builder $officeQuery) use ($office) {
                 $officeQuery->whereRaw('LOWER(name) = ?', [mb_strtolower($office)]);
             });
         }
 
-        if (! empty($filters['barangay'])) {
+        if (! in_array('barangay', $except, true) && ! empty($filters['barangay'])) {
             $barangay = trim((string) $filters['barangay']);
             $query->whereRaw('LOWER(reports.barangay) = ?', [mb_strtolower($barangay)]);
         }
 
-        if (! empty($filters['category'])) {
+        if (! in_array('category', $except, true) && ! empty($filters['category'])) {
             $category = trim((string) $filters['category']);
             $query->whereHas('category', function (Builder $categoryQuery) use ($category) {
                 $categoryQuery->whereRaw('LOWER(name) = ?', [mb_strtolower($category)]);
             });
         }
 
-        if (! empty($filters['search'])) {
+        if (! in_array('search', $except, true) && ! empty($filters['search'])) {
             $search = trim((string) $filters['search']);
             $normalizedSearch = mb_strtolower($search);
             $trackingId = preg_replace('/[^0-9]/', '', $search) ?? '';
@@ -127,6 +134,9 @@ class ReportQueryService
                     ->orWhere('reports.location', 'like', $like)
                     ->orWhere('reports.barangay', 'like', $like)
                     ->orWhere('reports.status', 'like', $like)
+                    ->orWhere('reports.printable_reference_number', 'like', $like)
+                    ->orWhere('reports.walk_in_full_name', 'like', $like)
+                    ->orWhere('reports.walk_in_contact_number', 'like', $like)
                     ->orWhereHas('category', function (Builder $categoryQuery) use ($normalizedSearch) {
                         $categoryQuery->whereRaw('LOWER(name) like ?', ['%' . $normalizedSearch . '%']);
                     })
@@ -267,6 +277,67 @@ class ReportQueryService
         ];
     }
 
+    public function reportColumnExists(string $column): bool
+    {
+        if ($this->reportColumns === null) {
+            $this->reportColumns = Schema::hasTable('reports')
+                ? array_fill_keys(Schema::getColumnListing('reports'), true)
+                : [];
+        }
+
+        return isset($this->reportColumns[$column]);
+    }
+
+    public function filterPersistableReportAttributes(array $attributes): array
+    {
+        return array_filter(
+            $attributes,
+            fn (string $column): bool => $this->reportColumnExists($column),
+            ARRAY_FILTER_USE_KEY
+        );
+    }
+
+    public function applyWalkInFilter(Builder $query): void
+    {
+        if ($this->reportColumnExists('source')) {
+            $query->where('reports.source', 'walk_in');
+
+            return;
+        }
+
+        $query->where(function (Builder $walkInQuery) {
+            $hasMarker = false;
+
+            if ($this->reportColumnExists('assisted_by_user_id')) {
+                $walkInQuery->whereNotNull('reports.assisted_by_user_id');
+                $hasMarker = true;
+            }
+
+            foreach (['walk_in_full_name', 'walk_in_contact_number', 'walk_in_address'] as $column) {
+                if (! $this->reportColumnExists($column)) {
+                    continue;
+                }
+
+                $callback = function (Builder $markerQuery) use ($column) {
+                    $markerQuery
+                        ->whereNotNull('reports.'.$column)
+                        ->where('reports.'.$column, '!=', '');
+                };
+
+                if ($hasMarker) {
+                    $walkInQuery->orWhere($callback);
+                } else {
+                    $walkInQuery->where($callback);
+                    $hasMarker = true;
+                }
+            }
+
+            if (! $hasMarker) {
+                $walkInQuery->whereRaw('1 = 0');
+            }
+        });
+    }
+
     public function resolveAdminOfficeId($user): ?int
     {
         if (($user->role ?? null) !== 'admin') {
@@ -293,5 +364,20 @@ class ReportQueryService
     private function excludeDemoSeedData(Builder $query): void
     {
         $query->whereNotIn('reports.user_id', $this->demoUserIdsQuery());
+    }
+
+    private function applyAdministrativeStaffOwnershipFilter(Builder $query, User $user): void
+    {
+        $query->where(function (Builder $frontDeskQuery) use ($user) {
+            if ($this->reportColumnExists('assisted_by_user_id')) {
+                $frontDeskQuery
+                    ->where('reports.assisted_by_user_id', $user->id)
+                    ->orWhere('reports.user_id', $user->id);
+
+                return;
+            }
+
+            $frontDeskQuery->where('reports.user_id', $user->id);
+        });
     }
 }

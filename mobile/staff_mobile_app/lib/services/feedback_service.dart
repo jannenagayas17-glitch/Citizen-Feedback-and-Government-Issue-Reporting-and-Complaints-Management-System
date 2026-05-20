@@ -276,6 +276,7 @@ class FeedbackSummaryData {
     required this.recentFeedbackCount,
     required this.typeCounts,
     required this.typeBreakdown,
+    required this.availableFilters,
   });
 
   factory FeedbackSummaryData.fromJson(Map<String, dynamic> json) {
@@ -290,6 +291,9 @@ class FeedbackSummaryData {
       recentFeedbackCount: _parseInt(json['recent_feedback_count']),
       typeCounts: {for (final item in breakdown) item.label: item.count},
       typeBreakdown: breakdown,
+      availableFilters: FeedbackAvailableFilters.fromJson(
+        json['available_filters'] as Map<String, dynamic>?,
+      ),
     );
   }
 
@@ -298,6 +302,7 @@ class FeedbackSummaryData {
   final int recentFeedbackCount;
   final Map<String, int> typeCounts;
   final List<FeedbackBreakdownItem> typeBreakdown;
+  final FeedbackAvailableFilters availableFilters;
 
   bool get hasData => totalFeedback > 0;
 }
@@ -380,6 +385,30 @@ class FeedbackPage {
 
   bool get hasPreviousPage => currentPage > 1;
   bool get hasNextPage => currentPage < lastPage;
+}
+
+class FeedbackAvailableFilters {
+  const FeedbackAvailableFilters({
+    required this.offices,
+    required this.barangays,
+  });
+
+  factory FeedbackAvailableFilters.fromJson(Map<String, dynamic>? json) {
+    List<String> parseList(String key) {
+      return (json?[key] as List<dynamic>? ?? const [])
+          .map((value) => value.toString().trim())
+          .where((value) => value.isNotEmpty)
+          .toList();
+    }
+
+    return FeedbackAvailableFilters(
+      offices: parseList('offices'),
+      barangays: parseList('barangays'),
+    );
+  }
+
+  final List<String> offices;
+  final List<String> barangays;
 }
 
 class FeedbackBreakdownItem {

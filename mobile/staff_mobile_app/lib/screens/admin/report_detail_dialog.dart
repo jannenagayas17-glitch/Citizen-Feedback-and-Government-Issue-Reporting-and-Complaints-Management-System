@@ -327,6 +327,16 @@ class _AdminReportDetailDialogState extends State<_AdminReportDetailDialog> {
                   colors: colors,
                 ),
                 _DetailTile(
+                  label: 'Source',
+                  value: _sourceLabel(report),
+                  colors: colors,
+                ),
+                _DetailTile(
+                  label: 'Reference Number',
+                  value: _referenceNumber(report),
+                  colors: colors,
+                ),
+                _DetailTile(
                   label: 'Date Created',
                   value: _formatDate(report['created_at']),
                   colors: colors,
@@ -334,6 +344,16 @@ class _AdminReportDetailDialogState extends State<_AdminReportDetailDialog> {
                 _DetailTile(
                   label: 'Assigned Staff',
                   value: _assignedStaff(assignedAdmin),
+                  colors: colors,
+                ),
+                _DetailTile(
+                  label: 'Expected Return',
+                  value: _formatDate(report['expected_return_at']),
+                  colors: colors,
+                ),
+                _DetailTile(
+                  label: 'Assisted By',
+                  value: _assistedBy(report),
                   colors: colors,
                 ),
               ],
@@ -511,6 +531,42 @@ class _AdminReportDetailDialogState extends State<_AdminReportDetailDialog> {
     }
 
     return 'Unassigned';
+  }
+
+  String _sourceLabel(Map<String, dynamic> report) {
+    final sourceLabel = (report['source_label'] ?? '').toString().trim();
+    if (sourceLabel.isNotEmpty) {
+      return sourceLabel;
+    }
+
+    return (report['source'] ?? 'citizen_app').toString() == 'walk_in'
+        ? 'Administrative Staff Assistance'
+        : 'Citizen Mobile App';
+  }
+
+  String _referenceNumber(Map<String, dynamic> report) {
+    final reference = (report['printable_reference_number'] ?? '')
+        .toString()
+        .trim();
+    if (reference.isNotEmpty) {
+      return reference;
+    }
+
+    return _trackingId(report['id']);
+  }
+
+  String _assistedBy(Map<String, dynamic> report) {
+    final assistedBy = report['assisted_by_user'];
+    if (assistedBy is Map<String, dynamic>) {
+      final name = (assistedBy['name'] ?? '').toString().trim();
+      if (name.isNotEmpty) {
+        return name;
+      }
+    }
+
+    return report['is_walk_in'] == true
+        ? 'Front desk assistance'
+        : 'Not applicable';
   }
 
   String _locationSummary(Map<String, dynamic> report) {

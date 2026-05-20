@@ -1,6 +1,3 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 
 import '../services/citizen_avatar_service.dart';
@@ -30,59 +27,69 @@ class CitizenAvatar extends StatelessWidget {
     return ValueListenableBuilder<int>(
       valueListenable: CitizenAvatarService.revision,
       builder: (context, _, _) {
-        return FutureBuilder<String?>(
-          future: CitizenAvatarService.getAvatarBase64(),
-          initialData: CitizenAvatarService.cachedAvatarBase64,
-          builder: (context, snapshot) {
-            final avatarBase64 = snapshot.data;
-            final imageBytes = _decodeImageBytes(avatarBase64);
-            final initial = name.trim().isEmpty
-                ? 'C'
-                : name.trim()[0].toUpperCase();
+        final avatarUrl = CitizenAvatarService.cachedAvatarUrl;
+        final initial = name.trim().isEmpty
+            ? 'C'
+            : name.trim()[0].toUpperCase();
 
-            return Container(
-              width: size,
-              height: size,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: backgroundColor,
-                border: borderColor == null
-                    ? null
-                    : Border.all(color: borderColor!, width: borderWidth),
-                image: imageBytes == null
-                    ? null
-                    : DecorationImage(
-                        image: MemoryImage(imageBytes),
-                        fit: BoxFit.cover,
-                      ),
-              ),
-              child: imageBytes == null
-                  ? Text(
-                      initial,
-                      style: TextStyle(
-                        color: textColor,
-                        fontSize: fontSize ?? (size * 0.46),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    )
-                  : null,
-            );
-          },
+        return Container(
+          width: size,
+          height: size,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: backgroundColor,
+            border: borderColor == null
+                ? null
+                : Border.all(color: borderColor!, width: borderWidth),
+          ),
+          child: ClipOval(
+            child: avatarUrl == null
+                ? _InitialAvatar(
+                    initial: initial,
+                    textColor: textColor,
+                    fontSize: fontSize ?? (size * 0.46),
+                  )
+                : Image.network(
+                    avatarUrl,
+                    width: size,
+                    height: size,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => _InitialAvatar(
+                      initial: initial,
+                      textColor: textColor,
+                      fontSize: fontSize ?? (size * 0.46),
+                    ),
+                  ),
+          ),
         );
       },
     );
   }
+}
 
-  Uint8List? _decodeImageBytes(String? value) {
-    if (value == null || value.isEmpty) {
-      return null;
-    }
+class _InitialAvatar extends StatelessWidget {
+  const _InitialAvatar({
+    required this.initial,
+    required this.textColor,
+    required this.fontSize,
+  });
 
-    try {
-      return base64Decode(value);
-    } catch (_) {
-      return null;
-    }
+  final String initial;
+  final Color textColor;
+  final double fontSize;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text(
+        initial,
+        style: TextStyle(
+          color: textColor,
+          fontSize: fontSize,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
   }
 }

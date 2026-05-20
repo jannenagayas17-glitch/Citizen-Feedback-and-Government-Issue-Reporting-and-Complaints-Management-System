@@ -281,6 +281,7 @@ class _CitizenReportCard extends StatelessWidget {
         : ReportFeedbackService.buildTrackingId(reportId);
     final status = CitizenReportModel.displayStatusOf(report);
     final latestUpdate = CitizenReportModel.latestAdminRemarkOrNull(report);
+    final isAnonymous = CitizenReportModel.isAnonymousOf(report);
     final statusColor = _statusColor(status);
 
     return InkWell(
@@ -323,6 +324,12 @@ class _CitizenReportCard extends StatelessWidget {
                         label: CitizenReportModel.officeNameOf(report),
                         accent: citizenAccentColor(context),
                       ),
+                      if (isAnonymous)
+                        _MetaPill(
+                          icon: Icons.shield_outlined,
+                          label: 'Anonymous',
+                          accent: citizenHighlightColor(context),
+                        ),
                     ],
                   ),
                 ),

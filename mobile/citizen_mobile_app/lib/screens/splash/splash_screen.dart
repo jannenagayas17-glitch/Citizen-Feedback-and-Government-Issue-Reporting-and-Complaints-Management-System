@@ -47,14 +47,19 @@ class _SplashScreenState extends State<SplashScreen> {
 
       if (!mounted) return;
 
-      if (!result.shouldOpenCitizenHome) {
+      if (!result.shouldOpenCitizenHome && !result.shouldOpenFrontDeskHome) {
         _goTo(AppRoutes.login);
         return;
       }
 
+      CitizenAvatarService.syncFromUser(result.user);
       await AppThemeScope.of(context).loadForUser(result.user!);
       if (mounted) {
-        _goTo(AppRoutes.citizenHome);
+        _goTo(
+          result.shouldOpenFrontDeskHome
+              ? AppRoutes.frontDeskHome
+              : AppRoutes.citizenHome,
+        );
       }
     } catch (_) {
       await _clearLocalSession();
@@ -136,7 +141,7 @@ class _SplashScreenState extends State<SplashScreen> {
                   border: Border.all(color: citizenInfoBorderColor(context)),
                 ),
                 child: Text(
-                  'Preparing secure citizen access',
+                  'Preparing secure access',
                   style: TextStyle(
                     color: citizenInfoTextColor(context),
                     fontSize: 13,

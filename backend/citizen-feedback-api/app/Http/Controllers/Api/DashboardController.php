@@ -228,20 +228,21 @@ class DashboardController extends Controller
             ->values();
 
         $triggerHours = $this->triggerTimeHours();
-        $recentReports = $this->buildReportPreviews(clone $baseQuery, 12);
+        $recentReports = $this->buildReportPreviews(clone $baseQuery, 12, $request->user());
         $triageReports = $this->buildReportPreviews(
             (clone $baseQuery)
                 ->whereIn('reports.status', ['New', 'Pending', 'In Progress'])
                 ->orderByDesc('reports.updated_at')
                 ->orderByDesc('reports.id'),
             6,
+            $request->user(),
             applyDefaultOrder: false,
         );
         $staleReportsCount = (clone $baseQuery)
             ->whereIn('reports.status', ['New', 'Pending', 'In Progress'])
             ->where('reports.created_at', '<=', now()->subHours($triggerHours))
             ->count();
-        $escalationPreview = $this->buildEscalationPreview(clone $baseQuery, $triggerHours);
+        $escalationPreview = $this->buildEscalationPreview(clone $baseQuery, $triggerHours, $request->user());
         $monthlyVolume = $this->buildMonthlyVolume(clone $baseQuery);
         $averageOpenHours = $this->averageOpenHours(clone $baseQuery);
         $activeOfficesCount = (clone $baseQuery)
@@ -249,6 +250,7 @@ class DashboardController extends Controller
             ->distinct()
             ->count('reports.office_id');
         $adminPreview = $this->buildAdminPreview($request->user());
+        $availableFilters = $this->buildAvailableFilters($request->user(), $filters);
 
         return response()->json([
             'overview' => $overview,
@@ -285,6 +287,7 @@ class DashboardController extends Controller
                 'department_locked' => ($request->user()->role ?? null) === 'admin',
                 'selected_department' => $this->selectedDepartmentLabel($request->user(), $filters['office'] ?? null),
             ],
+            'available_filters' => $availableFilters,
             'applied_filters' => [
                 'office' => $filters['office'] ?? null,
                 'barangay' => $filters['barangay'] ?? null,
@@ -296,6 +299,51 @@ class DashboardController extends Controller
             ],
             'generated_at' => now()->toIso8601String(),
         ]);
+    }
+
+    private function buildAvailableFilters(User $user, array $filters): array
+    {
+        return [
+            'barangays' => $this->availableBarangays($user, $filters),
+            'categories' => $this->availableCategories($user, $filters),
+        ];
+    }
+
+    private function availableBarangays(User $user, array $filters): array
+    {
+        $query = $this->reportQueries->scopedForUser($user);
+        $this->reportQueries->applyFilters($query, $filters, ['barangay']);
+        $this->reportQueries->applyDateRangeFilter($query, $filters);
+
+        return (clone $query)
+            ->whereNotNull('reports.barangay')
+            ->where('reports.barangay', '!=', '')
+            ->select('reports.barangay')
+            ->distinct()
+            ->orderBy('reports.barangay')
+            ->pluck('reports.barangay')
+            ->map(fn ($value) => trim((string) $value))
+            ->filter(fn (string $value) => $value !== '')
+            ->values()
+            ->all();
+    }
+
+    private function availableCategories(User $user, array $filters): array
+    {
+        $query = $this->reportQueries->scopedForUser($user);
+        $this->reportQueries->applyFilters($query, $filters, ['category']);
+        $this->reportQueries->applyDateRangeFilter($query, $filters);
+
+        return (clone $query)
+            ->leftJoin('categories', 'reports.category_id', '=', 'categories.id')
+            ->selectRaw("COALESCE(categories.name, 'General') as label")
+            ->groupBy(DB::raw("COALESCE(categories.name, 'General')"))
+            ->orderBy('label')
+            ->pluck('label')
+            ->map(fn ($value) => trim((string) $value))
+            ->filter(fn (string $value) => $value !== '')
+            ->values()
+            ->all();
     }
 
     private function previousDateRange(array $range): array
@@ -851,28 +899,17 @@ class DashboardController extends Controller
     private function buildReportPreviews(
         Builder $query,
         int $limit,
+        $viewer,
         bool $applyDefaultOrder = true,
     ): array
     {
         $reportQuery = $query
-            ->select([
-                'reports.id',
-                'reports.user_id',
-                'reports.category_id',
-                'reports.office_id',
-                'reports.title',
-                'reports.location',
-                'reports.barangay',
-                'reports.status',
-                'reports.priority',
-                'reports.assigned_to',
-                'reports.created_at',
-                'reports.updated_at',
-            ])
+            ->select('reports.*')
             ->with([
-                'user:id,name,email',
+                'user:id,name,email,mobile_number',
                 'category:id,name',
                 'office:id,name',
+                'assistedByUser:id,name,email,mobile_number,department,job_title',
                 'assignedAdmin:id,name,email',
             ]);
 
@@ -886,7 +923,10 @@ class DashboardController extends Controller
             ->limit($limit)
             ->get();
 
-        return $reports->map(function (Report $report) {
+        return $reports->map(function (Report $report) use ($viewer) {
+            $identityHidden = $report->hidesReporterIdentityFrom($viewer);
+            $isWalkIn = $report->isWalkInComplaint();
+
             return [
                 'id' => $report->id,
                 'title' => $report->title,
@@ -894,14 +934,25 @@ class DashboardController extends Controller
                 'barangay' => $report->barangay,
                 'status' => $report->status,
                 'priority' => $report->priority,
+                'is_anonymous' => (bool) $report->is_anonymous,
+                'is_walk_in' => $isWalkIn,
+                'source' => $isWalkIn ? 'walk_in' : 'citizen_app',
+                'source_label' => $isWalkIn ? 'Administrative Staff Assistance' : 'Citizen Mobile App',
+                'reporter_name' => $report->reporterNameForViewer($viewer),
+                'reporter_identity_hidden' => $identityHidden,
+                'user_id' => ($identityHidden || $isWalkIn) ? null : $report->user_id,
                 'assigned_to' => $report->assigned_to,
+                'printable_reference_number' => $report->printable_reference_number,
+                'expected_return_at' => optional($report->expected_return_at)?->toIso8601String(),
+                'complainant_name' => $report->reporterNameForViewer($viewer),
+                'complainant_contact_number' => $report->reporterContactNumberForViewer($viewer),
+                'complainant_email' => $report->reporterEmailForViewer($viewer),
+                'complainant_address' => $report->reporterAddressForViewer($viewer),
+                'complainant_is_senior_citizen' => (bool) $report->walk_in_is_senior_citizen,
+                'complainant_is_pwd' => (bool) $report->walk_in_is_pwd,
                 'created_at' => optional($report->created_at)?->toIso8601String(),
                 'updated_at' => optional($report->updated_at)?->toIso8601String(),
-                'user' => $report->user === null ? null : [
-                    'id' => $report->user->id,
-                    'name' => $report->user->name,
-                    'email' => $report->user->email,
-                ],
+                'user' => $report->sanitizedUserPayloadForViewer($viewer),
                 'category' => $report->category === null ? null : [
                     'id' => $report->category->id,
                     'name' => $report->category->name,
@@ -909,6 +960,14 @@ class DashboardController extends Controller
                 'office' => $report->office === null ? null : [
                     'id' => $report->office->id,
                     'name' => $report->office->name,
+                ],
+                'assisted_by_user' => $report->assistedByUser === null ? null : [
+                    'id' => $report->assistedByUser->id,
+                    'name' => $report->assistedByUser->name,
+                    'email' => $report->assistedByUser->email,
+                    'mobile_number' => $report->assistedByUser->mobile_number,
+                    'department' => $report->assistedByUser->department,
+                    'job_title' => $report->assistedByUser->job_title,
                 ],
                 'assigned_admin' => $report->assignedAdmin === null ? null : [
                     'id' => $report->assignedAdmin->id,
@@ -919,7 +978,7 @@ class DashboardController extends Controller
         })->values()->all();
     }
 
-    private function buildEscalationPreview(Builder $query, int $triggerHours): array
+    private function buildEscalationPreview(Builder $query, int $triggerHours, $viewer): array
     {
         return $this->buildReportPreviews(
             $query
@@ -928,6 +987,7 @@ class DashboardController extends Controller
                 ->orderBy('reports.created_at')
                 ->orderBy('reports.id'),
             4,
+            $viewer,
             applyDefaultOrder: false,
         );
     }

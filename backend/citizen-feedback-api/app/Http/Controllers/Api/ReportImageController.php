@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Report;
 use App\Models\ReportImage;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rules\File;
@@ -70,7 +71,7 @@ class ReportImageController extends Controller
     private function authorizeReportAccess(Request $request, Report $report): void
     {
         $user = $request->user();
-        $role = $user?->role ?? 'citizen';
+        $role = User::normalizeRole($user?->role ?? 'citizen');
 
         if ($role === 'super_admin') {
             return;
@@ -87,7 +88,20 @@ class ReportImageController extends Controller
             $officeName = trim((string) optional($report->office)->name);
 
             abort_if(
-                $department === '' || $officeName === '' || $department !== $officeName,
+                $department === ''
+                    || $officeName === ''
+                    || mb_strtolower($department) !== mb_strtolower($officeName),
+                403,
+                'Unauthorized action.'
+            );
+
+            return;
+        }
+
+        if ($role === User::ROLE_ADMINISTRATIVE_STAFF) {
+            abort_if(
+                ! $report->isWalkInComplaint()
+                    || ((int) ($report->assisted_by_user_id ?? $report->user_id) !== (int) ($user?->id ?? 0)),
                 403,
                 'Unauthorized action.'
             );

@@ -130,9 +130,21 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
               final latestRemark = CitizenReportModel.latestAdminRemarkOrNull(
                 report,
               );
-              final submittedBy =
-                  ((_mapValue(report['user'])?['name'] ?? 'Unknown citizen'))
-                      .toString();
+              final privacyLabel = CitizenReportModel.privacyLabelOf(report);
+              final isAnonymous = CitizenReportModel.isAnonymousOf(report);
+              final isWalkIn = CitizenReportModel.isWalkInOf(report);
+              final submittedBy = isWalkIn
+                  ? CitizenReportModel.complainantNameOf(report)
+                  : ((_mapValue(report['user'])?['name'] ?? 'Unknown citizen'))
+                        .toString();
+              final sourceLabel = CitizenReportModel.sourceLabelOf(report);
+              final referenceNumber = CitizenReportModel.referenceNumberOf(
+                report,
+              );
+              final expectedReturnAt = CitizenReportModel.expectedReturnAtOf(
+                report,
+              );
+              final assistedBy = CitizenReportModel.assistedByNameOf(report);
               final assignedStaff = CitizenReportModel.assignedStaffNameOf(
                 report,
               );
@@ -151,6 +163,8 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                     category: CitizenReportModel.categoryNameOf(report),
                     title: CitizenReportModel.titleOf(report),
                     latestRemark: latestRemark,
+                    privacyLabel: privacyLabel,
+                    showPrivacy: isAnonymous,
                   ),
                   const SizedBox(height: 16),
                   _DetailSection(
@@ -164,6 +178,12 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                               : '#$reportId',
                         ),
                         _DetailRow(label: 'Tracking ID', value: trackingId),
+                        if (isWalkIn)
+                          _DetailRow(
+                            label: 'Reference number',
+                            value: referenceNumber,
+                          ),
+                        _DetailRow(label: 'Source', value: sourceLabel),
                         _DetailRow(
                           label: 'Department',
                           value: CitizenReportModel.officeNameOf(report),
@@ -182,7 +202,64 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                           label: 'Location',
                           value: CitizenReportModel.locationOf(report),
                         ),
-                        _DetailRow(label: 'Submitted by', value: submittedBy),
+                        _DetailRow(
+                          label: isWalkIn ? 'Complainant' : 'Submitted by',
+                          value: submittedBy,
+                        ),
+                        if (isWalkIn) ...[
+                          _DetailRow(
+                            label: 'Mobile number',
+                            value: CitizenReportModel.complainantContactNumberOf(
+                              report,
+                            ),
+                          ),
+                          _DetailRow(
+                            label: 'Email',
+                            value: CitizenReportModel.complainantEmailOf(report),
+                          ),
+                          _DetailRow(
+                            label: 'Address',
+                            value: CitizenReportModel.complainantAddressOf(
+                              report,
+                            ),
+                          ),
+                          _DetailRow(
+                            label: 'Priority support',
+                            value: [
+                              if (CitizenReportModel.complainantIsSeniorCitizenOf(
+                                report,
+                              ))
+                                'Senior Citizen',
+                              if (CitizenReportModel.complainantIsPwdOf(report))
+                                'PWD',
+                            ].join(' / ').trim().isEmpty
+                                ? 'None declared'
+                                : [
+                                    if (CitizenReportModel
+                                        .complainantIsSeniorCitizenOf(report))
+                                      'Senior Citizen',
+                                    if (CitizenReportModel.complainantIsPwdOf(
+                                      report,
+                                    ))
+                                      'PWD',
+                                  ].join(' / '),
+                          ),
+                          _DetailRow(
+                            label: 'Assisted by',
+                            value: assistedBy,
+                          ),
+                          _DetailRow(
+                            label: 'Expected return',
+                            value: _formattedDate(expectedReturnAt),
+                          ),
+                        ],
+                        _DetailRow(
+                          label: 'Privacy',
+                          value: privacyLabel,
+                          highlight: isAnonymous
+                              ? citizenHighlightColor(context)
+                              : null,
+                        ),
                         _DetailRow(
                           label: 'Submitted date',
                           value: _formattedDate(
@@ -595,6 +672,8 @@ class _HeroCard extends StatelessWidget {
     required this.category,
     required this.title,
     required this.latestRemark,
+    this.privacyLabel,
+    this.showPrivacy = false,
   });
 
   final String trackingId;
@@ -602,6 +681,8 @@ class _HeroCard extends StatelessWidget {
   final String category;
   final String title;
   final String? latestRemark;
+  final String? privacyLabel;
+  final bool showPrivacy;
 
   @override
   Widget build(BuildContext context) {
@@ -634,6 +715,12 @@ class _HeroCard extends StatelessWidget {
                 label: category,
                 accent: citizenAccentColor(context),
               ),
+              if (showPrivacy && privacyLabel != null)
+                _HeroPill(
+                  icon: Icons.shield_outlined,
+                  label: privacyLabel!,
+                  accent: citizenHighlightColor(context),
+                ),
             ],
           ),
           const SizedBox(height: 14),

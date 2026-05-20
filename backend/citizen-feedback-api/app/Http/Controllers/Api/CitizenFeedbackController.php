@@ -9,11 +9,13 @@ use App\Support\CitizenFeedbackQueryService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class CitizenFeedbackController extends Controller
 {
     private const EMOJI_REGEX = '/[\x{1F1E6}-\x{1F1FF}\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}]/u';
+    private const DUPLICATE_SUBMISSION_WINDOW_MINUTES = 2;
 
     public function __construct(
         private readonly CitizenFeedbackQueryService $feedbackQueries,
@@ -30,7 +32,9 @@ class CitizenFeedbackController extends Controller
         $query = $this->feedbackListQuery($request);
 
         $this->feedbackQueries->applyFilters($query, $filters);
-        $this->feedbackQueries->applyDateRangeFilter($query, $filters);
+        $dateRange = $this->feedbackQueries->applyDateRangeFilter($query, $filters);
+        $availableFilters = $this->buildAvailableFilters($request, $filters);
+        $appliedFilters = $this->appliedFiltersPayload($filters, $dateRange);
 
         $shouldPaginate = $request->boolean('paginate')
             || $request->filled('page')
@@ -41,10 +45,14 @@ class CitizenFeedbackController extends Controller
         }
 
         $perPage = (int) ($filters['per_page'] ?? 20);
+        $page = $query->paginate($perPage)->appends($request->query());
 
-        return response()->json(
-            $query->paginate($perPage)->appends($request->query())
-        );
+        return response()->json([
+            ...$page->toArray(),
+            'available_filters' => $availableFilters,
+            'applied_filters' => $appliedFilters,
+            'role_scope' => $this->roleScopePayload($request),
+        ]);
     }
 
     public function summary(Request $request)
@@ -57,20 +65,13 @@ class CitizenFeedbackController extends Controller
         $this->feedbackQueries->applyFilters($query, $filters);
         $dateRange = $this->feedbackQueries->applyDateRangeFilter($query, $filters);
         $summary = $this->feedbackQueries->buildSummary($query);
+        $availableFilters = $this->buildAvailableFilters($request, $filters);
 
         return response()->json([
             ...$summary,
-            'applied_filters' => [
-                'search' => $filters['search'] ?? null,
-                'type' => $filters['type'] ?? null,
-                'office' => $filters['office'] ?? null,
-                'office_id' => $filters['office_id'] ?? null,
-                'barangay' => $filters['barangay'] ?? null,
-                'rating' => $filters['rating'] ?? null,
-                'date_preset' => $filters['date_preset'] ?? null,
-                'start_date' => $dateRange === null ? null : $dateRange['start']->toDateString(),
-                'end_date' => $dateRange === null ? null : $dateRange['end']->toDateString(),
-            ],
+            'available_filters' => $availableFilters,
+            'applied_filters' => $this->appliedFiltersPayload($filters, $dateRange),
+            'role_scope' => $this->roleScopePayload($request),
             'generated_at' => now()->toIso8601String(),
         ]);
     }
@@ -160,6 +161,7 @@ class CitizenFeedbackController extends Controller
                 ];
             })
             ->values();
+        $availableFilters = $this->buildAvailableFilters($request, $filters);
 
         return response()->json([
             'rating_breakdown' => $ratingBreakdown->all(),
@@ -167,17 +169,9 @@ class CitizenFeedbackController extends Controller
             'office_breakdown' => $officeBreakdown->all(),
             'barangay_breakdown' => $barangayBreakdown->all(),
             'trend_breakdown' => $this->buildTrendBreakdown(clone $query, $dateRange),
-            'applied_filters' => [
-                'search' => $filters['search'] ?? null,
-                'type' => $filters['type'] ?? null,
-                'office' => $filters['office'] ?? null,
-                'office_id' => $filters['office_id'] ?? null,
-                'barangay' => $filters['barangay'] ?? null,
-                'rating' => $filters['rating'] ?? null,
-                'date_preset' => $filters['date_preset'] ?? null,
-                'start_date' => $dateRange['start']->toDateString(),
-                'end_date' => $dateRange['end']->toDateString(),
-            ],
+            'available_filters' => $availableFilters,
+            'applied_filters' => $this->appliedFiltersPayload($filters, $dateRange),
+            'role_scope' => $this->roleScopePayload($request),
             'generated_at' => now()->toIso8601String(),
         ]);
     }
@@ -207,35 +201,60 @@ class CitizenFeedbackController extends Controller
                 ->firstOrFail();
 
             if ((int) $report->office_id !== (int) $validated['office_id']) {
-                abort(422, 'The selected department does not match this report.');
+                throw ValidationException::withMessages([
+                    'office_id' => ['The selected department does not match this report.'],
+                ]);
             }
-        } else {
-            $report = Report::query()
-                ->where('user_id', $request->user()->id)
-                ->where('office_id', $validated['office_id'])
-                ->orderByRaw("case when status = 'Resolved' then 0 else 1 end")
-                ->latest()
-                ->first();
         }
 
-        $feedback = CitizenFeedback::create([
-            'user_id' => $request->user()->id,
-            'office_id' => $validated['office_id'],
-            'report_id' => $report?->id,
-            'type' => $validated['type'],
-            'message' => trim($validated['message']),
-            'rating' => (int) $validated['rating'],
-        ]);
+        $message = trim((string) $validated['message']);
+        $submission = DB::transaction(function () use ($request, $validated, $report, $message) {
+            $duplicateQuery = CitizenFeedback::query()
+                ->where('user_id', $request->user()->id)
+                ->where('office_id', (int) $validated['office_id'])
+                ->where('type', $validated['type'])
+                ->where('message', $message)
+                ->where('rating', (int) $validated['rating'])
+                ->where('created_at', '>=', now()->subMinutes(self::DUPLICATE_SUBMISSION_WINDOW_MINUTES))
+                ->latest('id')
+                ->lockForUpdate();
+
+            if ($report === null) {
+                $duplicateQuery->whereNull('report_id');
+            } else {
+                $duplicateQuery->where('report_id', $report->id);
+            }
+
+            $existingFeedback = $duplicateQuery->first();
+
+            if ($existingFeedback instanceof CitizenFeedback) {
+                return [
+                    'created' => false,
+                    'feedback' => $this->loadFeedbackResource($existingFeedback),
+                ];
+            }
+
+            $feedback = CitizenFeedback::create([
+                'user_id' => $request->user()->id,
+                'office_id' => $validated['office_id'],
+                'report_id' => $report?->id,
+                'type' => $validated['type'],
+                'message' => $message,
+                'rating' => (int) $validated['rating'],
+            ]);
+
+            return [
+                'created' => true,
+                'feedback' => $this->loadFeedbackResource($feedback),
+            ];
+        });
 
         return response()->json([
-            'message' => 'Feedback sent successfully.',
-            'feedback' => $feedback->load([
-                'user:id,name,email',
-                'office:id,name',
-                'report:id,title,barangay,status,location,office_id,user_id',
-                'report.office:id,name',
-            ]),
-        ], 201);
+            'message' => $submission['created']
+                ? 'Feedback sent successfully.'
+                : 'This feedback was already submitted recently.',
+            'feedback' => $submission['feedback'],
+        ], $submission['created'] ? 201 : 200);
     }
 
     public function export(Request $request): StreamedResponse
@@ -330,6 +349,16 @@ class CitizenFeedbackController extends Controller
     private function feedbackListQuery(Request $request): Builder
     {
         return $this->feedbackBaseQuery($request)
+            ->select([
+                'citizen_feedback.id',
+                'citizen_feedback.user_id',
+                'citizen_feedback.office_id',
+                'citizen_feedback.report_id',
+                'citizen_feedback.type',
+                'citizen_feedback.message',
+                'citizen_feedback.rating',
+                'citizen_feedback.created_at',
+            ])
             ->with([
                 'user:id,name,email',
                 'office:id,name',
@@ -338,6 +367,96 @@ class CitizenFeedbackController extends Controller
             ])
             ->orderByDesc('citizen_feedback.created_at')
             ->orderByDesc('citizen_feedback.id');
+    }
+
+    private function buildAvailableFilters(Request $request, array $filters): array
+    {
+        return [
+            'offices' => $this->availableOffices($request, $filters),
+            'barangays' => $this->availableBarangays($request, $filters),
+        ];
+    }
+
+    private function availableOffices(Request $request, array $filters): array
+    {
+        $query = $this->feedbackBaseQuery($request);
+        $this->feedbackQueries->applyFilters($query, $filters, ['office']);
+        $this->feedbackQueries->applyDateRangeFilter($query, $filters);
+
+        return (clone $query)
+            ->leftJoin('offices', 'citizen_feedback.office_id', '=', 'offices.id')
+            ->selectRaw("COALESCE(offices.name, 'Unassigned Office') as label")
+            ->groupBy('label')
+            ->orderBy('label')
+            ->pluck('label')
+            ->map(fn ($value) => trim((string) $value))
+            ->filter(fn (string $value) => $value !== '')
+            ->values()
+            ->all();
+    }
+
+    private function availableBarangays(Request $request, array $filters): array
+    {
+        $query = $this->feedbackBaseQuery($request);
+        $this->feedbackQueries->applyFilters($query, $filters, ['barangay']);
+        $this->feedbackQueries->applyDateRangeFilter($query, $filters);
+
+        return (clone $query)
+            ->leftJoin('reports', 'citizen_feedback.report_id', '=', 'reports.id')
+            ->whereNotNull('reports.barangay')
+            ->where('reports.barangay', '!=', '')
+            ->select('reports.barangay')
+            ->distinct()
+            ->orderBy('reports.barangay')
+            ->pluck('reports.barangay')
+            ->map(fn ($value) => trim((string) $value))
+            ->filter(fn (string $value) => $value !== '')
+            ->values()
+            ->all();
+    }
+
+    private function appliedFiltersPayload(array $filters, ?array $dateRange): array
+    {
+        return [
+            'search' => $filters['search'] ?? null,
+            'type' => $filters['type'] ?? null,
+            'office' => $filters['office'] ?? null,
+            'office_id' => $filters['office_id'] ?? null,
+            'barangay' => $filters['barangay'] ?? null,
+            'rating' => $filters['rating'] ?? null,
+            'date_preset' => $filters['date_preset'] ?? null,
+            'start_date' => $dateRange === null ? null : $dateRange['start']->toDateString(),
+            'end_date' => $dateRange === null ? null : $dateRange['end']->toDateString(),
+        ];
+    }
+
+    private function roleScopePayload(Request $request): array
+    {
+        return [
+            'role' => (string) ($request->user()->role ?? 'citizen'),
+            'department_locked' => ($request->user()->role ?? null) === 'admin',
+            'selected_department' => $this->selectedDepartmentLabel($request),
+        ];
+    }
+
+    private function selectedDepartmentLabel(Request $request): string
+    {
+        $office = $request->input('office');
+        if (is_string($office) && trim($office) !== '') {
+            return trim($office);
+        }
+
+        $userOffice = $request->user()->office;
+        if (is_object($userOffice) || is_array($userOffice)) {
+            $officeName = data_get($userOffice, 'name');
+            if (is_string($officeName) && trim($officeName) !== '') {
+                return trim($officeName);
+            }
+        }
+
+        $department = trim((string) ($request->user()->department ?? ''));
+
+        return $department !== '' ? $department : 'Assigned Department';
     }
 
     private function buildTrendBreakdown(Builder $query, array $range): array
@@ -402,6 +521,16 @@ class CitizenFeedbackController extends Controller
                 'average_rating' => round((float) ($row->average_rating ?? 0), 2),
             ];
         })->values()->all();
+    }
+
+    private function loadFeedbackResource(CitizenFeedback $feedback): CitizenFeedback
+    {
+        return $feedback->load([
+            'user:id,name,email',
+            'office:id,name',
+            'report:id,title,barangay,status,location,office_id,user_id',
+            'report.office:id,name',
+        ]);
     }
 
     private function dateExpression(string $column): string

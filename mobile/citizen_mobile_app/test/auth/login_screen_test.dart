@@ -1,4 +1,7 @@
 import 'package:citizen_mobile_app/screens/auth/login_screen.dart';
+import 'package:citizen_mobile_app/services/auth_service.dart';
+import 'package:citizen_mobile_app/utils/app_routes.dart';
+import 'package:citizen_mobile_app/utils/app_theme_controller.dart';
 import 'package:citizen_mobile_app/utils/token_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,9 +15,27 @@ void main() {
     resetMockPreferences();
   });
 
-  Future<void> pumpLoginScreen(WidgetTester tester) async {
+  Future<void> pumpLoginScreen(
+    WidgetTester tester, {
+    AuthService? authService,
+  }) async {
     configureTestViewport(tester);
-    await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
+    final themeController = AppThemeController();
+    await themeController.load();
+    await tester.pumpWidget(
+      AppThemeScope(
+        controller: themeController,
+        child: MaterialApp(
+          home: LoginScreen(authService: authService),
+          routes: {
+            AppRoutes.citizenHome: (_) =>
+                const Scaffold(body: Text('Citizen Home')),
+            AppRoutes.frontDeskHome: (_) =>
+                const Scaffold(body: Text('Administrative Staff Home')),
+          },
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
   }
 
@@ -41,4 +62,54 @@ void main() {
 
     expect(find.text('saved@citizen.test'), findsOneWidget);
   });
+
+  testWidgets(
+    'routes an administrative staff account to the assisted workspace',
+    (tester) async {
+      await pumpLoginScreen(
+        tester,
+        authService: _FakeAuthService(
+          user: const {
+            'id': 12,
+            'role': 'administrative_staff',
+            'email': 'adminstaff@test.com',
+          },
+        ),
+      );
+
+      await tester.enterText(
+        find.byType(TextField).at(0),
+        'adminstaff@test.com',
+      );
+      await tester.enterText(find.byType(TextField).at(1), 'FrontDeskPass123');
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Sign In'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Administrative Staff Home'), findsOneWidget);
+    },
+  );
+}
+
+class _FakeAuthService extends AuthService {
+  // ignore: unused_element_parameter
+  _FakeAuthService({required this.user, this.error});
+
+  final Map<String, dynamic>? user;
+  final Exception? error;
+
+  @override
+  Future<Map<String, dynamic>> login({
+    required String email,
+    required String password,
+  }) async {
+    if (error != null) {
+      throw error!;
+    }
+
+    if (user == null) {
+      throw Exception('Missing fake user.');
+    }
+
+    return {'token': 'fake-token', 'user': user!};
+  }
 }

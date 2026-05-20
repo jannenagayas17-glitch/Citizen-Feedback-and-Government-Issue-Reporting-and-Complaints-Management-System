@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/report_model.dart';
 import '../../services/auth_service.dart';
+import '../../services/citizen_avatar_service.dart';
 import '../../services/citizen_data_cache.dart';
 import '../../utils/app_routes.dart';
 import '../../utils/citizen_theme_colors.dart';
@@ -157,6 +158,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
                 final user =
                     payload['user'] as Map<String, dynamic>? ?? const {};
                 _cachedUser = user;
+                CitizenAvatarService.syncFromUser(user);
                 final visibleReports = _applyCategoryFilter(reports);
                 final notificationCount = reports
                     .where(

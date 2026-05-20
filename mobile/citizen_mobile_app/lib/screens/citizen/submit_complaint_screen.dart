@@ -38,6 +38,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   String? _selectedOfficeNameValue;
   String? _selectedCustomIssueType;
   String _selectedPriority = 'Normal';
+  bool _submitAnonymously = false;
   bool _isSubmitting = false;
   final List<_SelectedMediaItem> _selectedMedia = [];
 
@@ -459,6 +460,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
         location: location,
         barangay: barangay,
         priority: _selectedPriority,
+        isAnonymous: _submitAnonymously,
         mediaFiles: _selectedMedia.map((media) => media.file).toList(),
       );
 
@@ -495,7 +497,9 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Your complaint has been sent successfully.',
+              _submitAnonymously
+                  ? 'Your complaint has been sent successfully. Admins will see it as an anonymous report.'
+                  : 'Your complaint has been sent successfully.',
               style: TextStyle(color: citizenBodyColor(context)),
             ),
             const SizedBox(height: 12),
@@ -671,6 +675,10 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                     _buildLabel('Priority'),
                     const SizedBox(height: 8),
                     _buildPrioritySelector(),
+                    const SizedBox(height: 14),
+                    _buildLabel('Privacy'),
+                    const SizedBox(height: 8),
+                    _buildPrivacySelector(),
                     const SizedBox(height: 14),
                     _buildLabel('Upload Evidence'),
                     const SizedBox(height: 8),
@@ -1034,6 +1042,62 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
     );
   }
 
+  Widget _buildPrivacySelector() {
+    final infoColor = citizenPrimaryActionColor(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _PrivacyOptionCard(
+          title: 'Submit with my identity',
+          subtitle:
+              'Admins can see your name and contact details while handling this complaint.',
+          selected: !_submitAnonymously,
+          onTap: () => setState(() => _submitAnonymously = false),
+        ),
+        const SizedBox(height: 10),
+        _PrivacyOptionCard(
+          title: 'Submit anonymously',
+          subtitle:
+              'Admins will only see "Anonymous Citizen" while the system keeps secure internal records if needed.',
+          selected: _submitAnonymously,
+          onTap: () => setState(() => _submitAnonymously = true),
+        ),
+        const SizedBox(height: 10),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: infoColor.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: infoColor.withValues(alpha: 0.14)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.shield_outlined,
+                size: 18,
+                color: infoColor,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Anonymous reports hide your name, email, and phone from admin and super admin report views. Internal records may still be kept securely for account protection, misuse prevention, and legal compliance.',
+                  style: TextStyle(
+                    color: citizenBodyColor(context),
+                    fontSize: 12.5,
+                    height: 1.45,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildEvidenceCard() {
     final isDark = citizenIsDark(context);
     final attachmentText = _selectedMedia.isEmpty
@@ -1155,6 +1219,83 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
             Icon(
               Icons.chevron_right_rounded,
               color: citizenMutedColor(context),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PrivacyOptionCard extends StatelessWidget {
+  const _PrivacyOptionCard({
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = citizenPrimaryActionColor(context);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: selected
+              ? accent.withValues(alpha: 0.08)
+              : citizenInputColor(context),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected
+                ? accent.withValues(alpha: 0.22)
+                : citizenBorderColor(context),
+            width: selected ? 1.2 : 1,
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              selected
+                  ? Icons.radio_button_checked_rounded
+                  : Icons.radio_button_off_rounded,
+              color: selected ? accent : citizenMutedColor(context),
+              size: 20,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: citizenTitleColor(context),
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: citizenBodyColor(context),
+                      fontSize: 12.5,
+                      height: 1.45,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

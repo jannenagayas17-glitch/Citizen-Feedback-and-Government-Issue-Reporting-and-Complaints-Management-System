@@ -97,6 +97,7 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
   void initState() {
     super.initState();
     _user = Map<String, dynamic>.from(widget.user);
+    CitizenAvatarService.syncFromUser(_user);
   }
 
   Future<void> _logout() async {
@@ -171,6 +172,7 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
         );
       });
       CitizenDataCache.updateUser(_user);
+      CitizenAvatarService.syncFromUser(_user);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Profile updated successfully.')),
@@ -204,7 +206,15 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
 
       setState(() => _isSavingAvatar = true);
 
-      await CitizenAvatarService.saveAvatarBytes(croppedBytes);
+      final response = await _authService.uploadProfileImage(
+        imageBytes: croppedBytes,
+      );
+      final updatedUser = response['user'] as Map<String, dynamic>?;
+      if (updatedUser != null) {
+        _user = Map<String, dynamic>.from(updatedUser);
+        CitizenDataCache.updateUser(_user);
+        CitizenAvatarService.syncFromUser(_user);
+      }
 
       if (!mounted) return;
       setState(() => _isSavingAvatar = false);

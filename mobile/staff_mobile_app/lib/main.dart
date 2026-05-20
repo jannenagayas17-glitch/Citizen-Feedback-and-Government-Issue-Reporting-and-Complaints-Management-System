@@ -6,6 +6,16 @@ import 'utils/app_theme_controller.dart';
 import 'utils/app_routes.dart';
 import 'utils/portal_session_controller.dart';
 
+const PageTransitionsTheme _pageTransitionsTheme = PageTransitionsTheme(
+  builders: {
+    TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
+    TargetPlatform.iOS: FadeUpwardsPageTransitionsBuilder(),
+    TargetPlatform.linux: FadeUpwardsPageTransitionsBuilder(),
+    TargetPlatform.macOS: FadeUpwardsPageTransitionsBuilder(),
+    TargetPlatform.windows: FadeUpwardsPageTransitionsBuilder(),
+  },
+);
+
 final ThemeData _lightTheme = ThemeData(
   colorScheme: ColorScheme.fromSeed(
     seedColor: const Color(0xFF2563EB),
@@ -13,6 +23,7 @@ final ThemeData _lightTheme = ThemeData(
   ),
   useMaterial3: true,
   scaffoldBackgroundColor: const Color(0xFFF5F8FC),
+  pageTransitionsTheme: _pageTransitionsTheme,
 );
 
 final ThemeData _darkTheme = ThemeData(
@@ -22,6 +33,7 @@ final ThemeData _darkTheme = ThemeData(
   ),
   useMaterial3: true,
   scaffoldBackgroundColor: const Color(0xFF0C1727),
+  pageTransitionsTheme: _pageTransitionsTheme,
 );
 
 Future<void> main() async {

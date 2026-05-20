@@ -40,6 +40,7 @@ class ReportService {
     required String location,
     String? barangay,
     String? priority,
+    bool isAnonymous = false,
     double? latitude,
     double? longitude,
     List<XFile> mediaFiles = const <XFile>[],
@@ -54,6 +55,7 @@ class ReportService {
         location: location,
         barangay: barangay,
         priority: priority,
+        isAnonymous: isAnonymous,
         latitude: latitude,
         longitude: longitude,
         mediaFiles: mediaFiles,
@@ -72,6 +74,7 @@ class ReportService {
         location: location,
         barangay: barangay,
         priority: priority,
+        isAnonymous: isAnonymous,
         latitude: latitude,
         longitude: longitude,
       ),
@@ -91,6 +94,81 @@ class ReportService {
     );
   }
 
+  Future<Map<String, dynamic>> createWalkInReport({
+    int? categoryId,
+    String? categoryName,
+    required int officeId,
+    required String title,
+    required String description,
+    required String location,
+    required String barangay,
+    required String walkInFullName,
+    required String walkInContactNumber,
+    required String walkInAddress,
+    String? walkInEmail,
+    String? priority,
+    bool isSeniorCitizen = false,
+    bool isPwd = false,
+    DateTime? expectedReturnAt,
+    List<XFile> mediaFiles = const <XFile>[],
+  }) async {
+    if (mediaFiles.isNotEmpty) {
+      return _createMultipartWalkInReport(
+        categoryId: categoryId,
+        categoryName: categoryName,
+        officeId: officeId,
+        title: title,
+        description: description,
+        location: location,
+        barangay: barangay,
+        walkInFullName: walkInFullName,
+        walkInContactNumber: walkInContactNumber,
+        walkInAddress: walkInAddress,
+        walkInEmail: walkInEmail,
+        priority: priority,
+        isSeniorCitizen: isSeniorCitizen,
+        isPwd: isPwd,
+        expectedReturnAt: expectedReturnAt,
+        mediaFiles: mediaFiles,
+      );
+    }
+
+    final response = await _apiClient.post(
+      '/administrative-staff/reports',
+      authRequired: true,
+      body: _buildWalkInPayload(
+        categoryId: categoryId,
+        categoryName: categoryName,
+        officeId: officeId,
+        title: title,
+        description: description,
+        location: location,
+        barangay: barangay,
+        walkInFullName: walkInFullName,
+        walkInContactNumber: walkInContactNumber,
+        walkInAddress: walkInAddress,
+        walkInEmail: walkInEmail,
+        priority: priority,
+        isSeniorCitizen: isSeniorCitizen,
+        isPwd: isPwd,
+        expectedReturnAt: expectedReturnAt,
+      ),
+    );
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return data;
+    }
+
+    throw Exception(
+      data['message']?.toString() ??
+          (data['errors'] != null
+              ? data['errors'].toString()
+              : 'Failed to submit walk-in complaint'),
+    );
+  }
+
   Future<Map<String, dynamic>> requestSubmissionVerification({
     int? categoryId,
     String? categoryName,
@@ -100,6 +178,7 @@ class ReportService {
     required String location,
     String? barangay,
     String? priority,
+    bool isAnonymous = false,
     double? latitude,
     double? longitude,
   }) async {
@@ -115,6 +194,7 @@ class ReportService {
         location: location,
         barangay: barangay,
         priority: priority,
+        isAnonymous: isAnonymous,
         latitude: latitude,
         longitude: longitude,
       ),
@@ -291,6 +371,7 @@ class ReportService {
     required String location,
     String? barangay,
     String? priority,
+    bool isAnonymous = false,
     double? latitude,
     double? longitude,
     required List<XFile> mediaFiles,
@@ -317,6 +398,7 @@ class ReportService {
         location: location,
         barangay: barangay,
         priority: priority,
+        isAnonymous: isAnonymous,
         latitude: latitude,
         longitude: longitude,
       ).map((key, value) => MapEntry(key, value.toString())),
@@ -368,6 +450,102 @@ class ReportService {
     );
   }
 
+  Future<Map<String, dynamic>> _createMultipartWalkInReport({
+    int? categoryId,
+    String? categoryName,
+    required int officeId,
+    required String title,
+    required String description,
+    required String location,
+    required String barangay,
+    required String walkInFullName,
+    required String walkInContactNumber,
+    required String walkInAddress,
+    String? walkInEmail,
+    String? priority,
+    bool isSeniorCitizen = false,
+    bool isPwd = false,
+    DateTime? expectedReturnAt,
+    required List<XFile> mediaFiles,
+  }) async {
+    final token = await TokenStorage.getToken();
+    if (token == null || token.isEmpty) {
+      throw Exception('Please log in again before submitting a complaint.');
+    }
+
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('${ApiConfig.baseUrl}/administrative-staff/reports'),
+    );
+
+    request.headers['Accept'] = 'application/json';
+    request.headers['Authorization'] = 'Bearer $token';
+    request.fields.addAll(
+      _buildWalkInPayload(
+        categoryId: categoryId,
+        categoryName: categoryName,
+        officeId: officeId,
+        title: title,
+        description: description,
+        location: location,
+        barangay: barangay,
+        walkInFullName: walkInFullName,
+        walkInContactNumber: walkInContactNumber,
+        walkInAddress: walkInAddress,
+        walkInEmail: walkInEmail,
+        priority: priority,
+        isSeniorCitizen: isSeniorCitizen,
+        isPwd: isPwd,
+        expectedReturnAt: expectedReturnAt,
+      ).map((key, value) => MapEntry(key, value.toString())),
+    );
+
+    for (final mediaFile in mediaFiles) {
+      final fileSize = await mediaFile.length();
+      if (fileSize > maxAttachmentBytes) {
+        throw Exception('Attachments must be 50MB or smaller.');
+      }
+
+      final bytes = await mediaFile.readAsBytes();
+      final detectedMimeType =
+          lookupMimeType(
+            mediaFile.name,
+            headerBytes: bytes.take(32).toList(),
+          ) ??
+          'application/octet-stream';
+
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'media[]',
+          bytes,
+          filename: mediaFile.name,
+          contentType: MediaType.parse(detectedMimeType),
+        ),
+      );
+    }
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      await TokenStorage.clearAll();
+      throw const AuthSessionExpiredException();
+    }
+    final data = _decodeMapResponse(response.body);
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return data ?? <String, dynamic>{};
+    }
+
+    throw Exception(
+      data == null
+          ? 'Failed to submit walk-in complaint (HTTP ${response.statusCode})'
+          : data['message']?.toString() ??
+                (data['errors'] != null
+                    ? data['errors'].toString()
+                    : 'Failed to submit walk-in complaint'),
+    );
+  }
+
   Map<String, dynamic> _buildReportPayload({
     int? categoryId,
     String? categoryName,
@@ -377,6 +555,7 @@ class ReportService {
     required String location,
     String? barangay,
     String? priority,
+    bool isAnonymous = false,
     double? latitude,
     double? longitude,
   }) {
@@ -407,10 +586,70 @@ class ReportService {
     if (officeId != null) payload['office_id'] = officeId;
     if (barangayValue != null) payload['barangay'] = barangayValue;
     if (priorityValue != null) payload['priority'] = priorityValue;
+    if (isAnonymous) payload['is_anonymous'] = true;
     if (latitude != null) payload['latitude'] = latitude;
     if (longitude != null) payload['longitude'] = longitude;
 
     return payload;
+  }
+
+  Map<String, dynamic> _buildWalkInPayload({
+    int? categoryId,
+    String? categoryName,
+    required int officeId,
+    required String title,
+    required String description,
+    required String location,
+    required String barangay,
+    required String walkInFullName,
+    required String walkInContactNumber,
+    required String walkInAddress,
+    String? walkInEmail,
+    String? priority,
+    bool isSeniorCitizen = false,
+    bool isPwd = false,
+    DateTime? expectedReturnAt,
+  }) {
+    final payload = _buildReportPayload(
+      categoryId: categoryId,
+      categoryName: categoryName,
+      officeId: officeId,
+      title: title,
+      description: description,
+      location: location,
+      barangay: barangay,
+      priority: priority,
+    );
+
+    payload['walk_in_full_name'] = walkInFullName.trim();
+    payload['walk_in_contact_number'] = _normalizeWalkInContactNumber(
+      walkInContactNumber,
+    );
+    payload['walk_in_address'] = walkInAddress.trim();
+    payload['walk_in_is_senior_citizen'] = isSeniorCitizen;
+    payload['walk_in_is_pwd'] = isPwd;
+
+    final normalizedEmail = walkInEmail?.trim() ?? '';
+    if (normalizedEmail.isNotEmpty) {
+      payload['walk_in_email'] = normalizedEmail;
+    }
+
+    if (expectedReturnAt != null) {
+      payload['expected_return_at'] = expectedReturnAt.toIso8601String();
+    }
+
+    return payload;
+  }
+
+  String _normalizeWalkInContactNumber(String value) {
+    final digitsOnly = value.replaceAll(RegExp(r'\D+'), '');
+    if (digitsOnly.startsWith('63') && digitsOnly.length == 12) {
+      return '0${digitsOnly.substring(2)}';
+    }
+    if (digitsOnly.startsWith('9') && digitsOnly.length == 10) {
+      return '0$digitsOnly';
+    }
+    return digitsOnly;
   }
 
   List<dynamic> _decodeListResponse(

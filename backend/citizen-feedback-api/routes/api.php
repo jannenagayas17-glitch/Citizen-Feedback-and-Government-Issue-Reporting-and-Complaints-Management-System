@@ -10,7 +10,7 @@ use App\Http\Controllers\Api\PasswordResetController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\ReportImageController;
 use App\Http\Controllers\Api\SystemSettingController;
-use Illuminate\Http\Request;
+use App\Http\Controllers\Api\UserProfileImageController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -57,6 +57,8 @@ Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/offices', [OfficeController::class, 'index']);
 Route::get('/report-images/{path}', [ReportImageController::class, 'show'])
     ->where('path', '.*');
+Route::get('/profile-images/{path}', [UserProfileImageController::class, 'show'])
+    ->where('path', '.*');
 
 /*
 |--------------------------------------------------------------------------
@@ -76,6 +78,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/user', [AuthController::class, 'currentUser']);
     Route::put('/user/profile', [AuthController::class, 'updateProfile']);
+    Route::post('/user/profile-image', [UserProfileImageController::class, 'update']);
     Route::match(['put', 'post'], '/user/password', [AuthController::class, 'changePassword'])
         ->name('api/user/password');
 
@@ -114,6 +117,16 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/dashboard', [DashboardController::class, 'index']);
     Route::get('/admin/analytics', [DashboardController::class, 'analytics']);
+
+    Route::prefix('front-desk')->group(function () {
+        Route::post('/reports', [ReportController::class, 'storeWalkIn']);
+        Route::get('/reports', [ReportController::class, 'frontDeskReports']);
+    });
+
+    Route::prefix('administrative-staff')->group(function () {
+        Route::post('/reports', [ReportController::class, 'storeWalkIn']);
+        Route::get('/reports', [ReportController::class, 'frontDeskReports']);
+    });
 
     /*
     |--------------------------------------------------------------------------
