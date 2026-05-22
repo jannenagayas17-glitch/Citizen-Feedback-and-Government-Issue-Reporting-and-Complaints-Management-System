@@ -25,6 +25,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class ReportController extends Controller
 {
     private const EMOJI_REGEX = '/[\x{1F1E6}-\x{1F1FF}\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}]/u';
+    private const CITIZEN_DESCRIPTION_MAX_LENGTH = 100;
     private const OTP_TTL_MINUTES = 10;
     private const MEDIA_MAX_KB = 50 * 1024;
     private const MEDIA_TYPES = ['jpg', 'jpeg', 'png', 'mp4', 'mov', 'avi', 'webm', '3gp', 'm4v'];
@@ -257,7 +258,9 @@ class ReportController extends Controller
 
         $this->reportQueries->applyFilters($query, $validated);
         $this->reportQueries->applyDateRangeFilter($query, $validated);
-        $availableFilters = $this->buildAdminReportAvailableFilters($request, $validated);
+        $availableFilters = $this->shouldIncludeReportAvailableFilters($request)
+            ? $this->buildAdminReportAvailableFilters($request, $validated)
+            : $this->emptyReportAvailableFilters();
 
         $shouldPaginate = $request->boolean('paginate')
             || $request->filled('page')
@@ -306,6 +309,7 @@ class ReportController extends Controller
             'status' => ['nullable', 'string', 'in:New,Pending,In Progress,Resolved,Rejected'],
             'search' => ['nullable', 'string', 'max:255'],
             'category' => ['nullable', 'string', 'max:255'],
+            'barangay' => ['nullable', 'string', 'max:255'],
             'page' => ['nullable', 'integer', 'min:1'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:50'],
         ]);
@@ -317,6 +321,9 @@ class ReportController extends Controller
             ->with($this->adminListRelations());
 
         $this->reportQueries->applyFilters($query, $validated);
+        $availableFilters = $this->shouldIncludeReportAvailableFilters($request)
+            ? $this->buildAdminReportAvailableFilters($request, $validated)
+            : $this->emptyReportAvailableFilters();
 
         $perPage = (int) ($validated['per_page'] ?? 15);
         $reports = $query->paginate($perPage)->appends($request->query());
@@ -326,7 +333,21 @@ class ReportController extends Controller
             )
         );
 
-        return response()->json($reports);
+        return response()->json([
+            ...$reports->toArray(),
+            'available_filters' => $availableFilters,
+            'applied_filters' => [
+                'search' => $validated['search'] ?? null,
+                'status' => $validated['status'] ?? null,
+                'category' => $validated['category'] ?? null,
+                'barangay' => $validated['barangay'] ?? null,
+            ],
+            'role_scope' => [
+                'role' => (string) ($request->user()->role ?? User::ROLE_ADMINISTRATIVE_STAFF),
+                'department_locked' => true,
+                'selected_department' => $this->scopeLabelForUser($request->user()),
+            ],
+        ]);
     }
 
     public function updateStatus(Request $request, $id)
@@ -662,6 +683,24 @@ class ReportController extends Controller
         ];
     }
 
+    private function emptyReportAvailableFilters(): array
+    {
+        return [
+            'offices' => [],
+            'categories' => [],
+            'barangays' => [],
+        ];
+    }
+
+    private function shouldIncludeReportAvailableFilters(Request $request): bool
+    {
+        if (! $request->has('include_filters')) {
+            return true;
+        }
+
+        return $request->boolean('include_filters');
+    }
+
     private function availableReportOffices(Request $request, array $filters): array
     {
         $query = $this->reportQueries->scopedForUser($request->user());
@@ -850,7 +889,7 @@ class ReportController extends Controller
             'category_name' => ['nullable', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
             'office_id' => 'required|exists:offices,id',
             'title' => ['required', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
-            'description' => ['required', 'string', 'not_regex:' . self::EMOJI_REGEX],
+            'description' => ['required', 'string', 'max:' . self::CITIZEN_DESCRIPTION_MAX_LENGTH, 'not_regex:' . self::EMOJI_REGEX],
             'location' => ['required', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
             'barangay' => ['required', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
             'latitude' => 'nullable|numeric',
@@ -862,6 +901,7 @@ class ReportController extends Controller
             'office_id.required' => 'Please select the office that should handle this report.',
             'title.not_regex' => 'Emoji characters are not allowed.',
             'description.not_regex' => 'Emoji characters are not allowed.',
+            'description.max' => 'Description must be ' . self::CITIZEN_DESCRIPTION_MAX_LENGTH . ' characters or fewer.',
             'location.not_regex' => 'Emoji characters are not allowed.',
             'barangay.not_regex' => 'Emoji characters are not allowed.',
             'barangay.required' => 'Barangay is required.',
@@ -876,12 +916,13 @@ class ReportController extends Controller
             'category_name' => ['nullable', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
             'office_id' => 'required|exists:offices,id',
             'title' => ['required', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
-            'description' => ['required', 'string', 'not_regex:' . self::EMOJI_REGEX],
+            'description' => ['required', 'string', 'max:' . self::CITIZEN_DESCRIPTION_MAX_LENGTH, 'not_regex:' . self::EMOJI_REGEX],
             'location' => ['required', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
             'barangay' => ['required', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
             'latitude' => 'nullable|numeric',
             'longitude' => 'nullable|numeric',
             'priority' => 'nullable|string|in:Low,Normal,High,Urgent',
+            'is_anonymous' => ['nullable', 'boolean'],
             'walk_in_full_name' => ['required', 'string', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
             'walk_in_contact_number' => ['required', 'regex:/^09\d{9}$/'],
             'walk_in_email' => ['nullable', 'email', 'max:255', 'not_regex:' . self::EMOJI_REGEX],
@@ -894,6 +935,7 @@ class ReportController extends Controller
             'office_id.required' => 'Please select the office that should handle this report.',
             'title.not_regex' => 'Emoji characters are not allowed.',
             'description.not_regex' => 'Emoji characters are not allowed.',
+            'description.max' => 'Complaint description must be ' . self::CITIZEN_DESCRIPTION_MAX_LENGTH . ' characters or fewer.',
             'location.not_regex' => 'Emoji characters are not allowed.',
             'barangay.not_regex' => 'Emoji characters are not allowed.',
             'walk_in_full_name.required' => 'Complainant name is required.',

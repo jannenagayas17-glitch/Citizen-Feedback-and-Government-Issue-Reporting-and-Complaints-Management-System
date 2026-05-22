@@ -346,6 +346,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
   Widget build(BuildContext context) {
     final colors = AdminThemeColors.of(context);
     final mediaQuery = MediaQuery.of(context);
+    final bottomInset = mediaQuery.viewInsets.bottom;
     final bottomSafeArea = mediaQuery.padding.bottom;
     final isDesktop = mediaQuery.size.width >= 1100;
 
@@ -360,11 +361,12 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
               elevation: 0,
             ),
       body: ListView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: EdgeInsets.fromLTRB(
           isDesktop ? 28 : 18,
           isDesktop ? 28 : 16,
           isDesktop ? 28 : 18,
-          26 + bottomSafeArea,
+          26 + bottomSafeArea + bottomInset,
         ),
         children: [
           ConstrainedBox(

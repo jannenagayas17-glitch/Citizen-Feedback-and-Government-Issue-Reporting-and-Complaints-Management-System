@@ -11,7 +11,7 @@ void main() {
             currentIndex: 3,
             onHomeTap: () {},
             onReportsTap: () {},
-            onAlertsTap: () {},
+            onUpdatesTap: () {},
             onProfileTap: () {},
           ),
         ),

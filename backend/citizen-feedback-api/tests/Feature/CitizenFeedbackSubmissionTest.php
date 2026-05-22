@@ -105,4 +105,86 @@ class CitizenFeedbackSubmissionTest extends TestCase
 
         $this->assertSame(1, CitizenFeedback::query()->count());
     }
+
+    public function test_citizen_feedback_submission_is_visible_to_super_admin_and_the_matching_department_admin(): void
+    {
+        $citizen = User::create([
+            'name' => 'Feedback Citizen',
+            'email' => 'feedback-visibility@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'citizen',
+            'is_active' => true,
+        ]);
+
+        $office = Office::create([
+            'name' => "City Engineer's Office",
+            'is_active' => true,
+        ]);
+
+        $otherOffice = Office::create([
+            'name' => 'City Health Office',
+            'is_active' => true,
+        ]);
+
+        Sanctum::actingAs($citizen);
+
+        $createResponse = $this->postJson('/api/feedback', [
+            'office_id' => $office->id,
+            'type' => 'Complaint',
+            'message' => 'Road repair follow-up feedback',
+            'rating' => 4,
+        ]);
+
+        $createResponse->assertCreated()
+            ->assertJsonPath('feedback.office_id', $office->id)
+            ->assertJsonPath('feedback.report_id', null);
+
+        $matchingAdmin = User::create([
+            'name' => 'Engineer Admin',
+            'email' => 'engineer-admin@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'admin',
+            'department' => $office->name,
+            'is_active' => true,
+        ]);
+
+        $otherAdmin = User::create([
+            'name' => 'Health Admin',
+            'email' => 'health-admin@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'admin',
+            'department' => $otherOffice->name,
+            'is_active' => true,
+        ]);
+
+        $superAdmin = User::create([
+            'name' => 'Feedback Super Admin',
+            'email' => 'feedback-super-admin-visibility@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'super_admin',
+            'is_active' => true,
+        ]);
+
+        Sanctum::actingAs($matchingAdmin);
+        $this->getJson('/api/feedback?paginate=true&per_page=10&page=1')
+            ->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonFragment(['message' => 'Road repair follow-up feedback']);
+
+        $this->getJson('/api/feedback/summary')
+            ->assertOk()
+            ->assertJsonPath('total_feedback', 1);
+
+        Sanctum::actingAs($otherAdmin);
+        $this->getJson('/api/feedback?paginate=true&per_page=10&page=1')
+            ->assertOk()
+            ->assertJsonPath('total', 0)
+            ->assertJsonMissing(['message' => 'Road repair follow-up feedback']);
+
+        Sanctum::actingAs($superAdmin);
+        $this->getJson('/api/feedback?paginate=true&per_page=10&page=1')
+            ->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonFragment(['message' => 'Road repair follow-up feedback']);
+    }
 }

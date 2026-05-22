@@ -8,9 +8,16 @@ import '../../services/feedback_service.dart';
 import '../../utils/admin_theme.dart';
 
 class FeedbackManagementScreen extends StatefulWidget {
-  const FeedbackManagementScreen({super.key, this.embedded = false});
+  const FeedbackManagementScreen({
+    super.key,
+    this.embedded = false,
+    this.initialUser,
+    this.initialSummary,
+  });
 
   final bool embedded;
+  final Map<String, dynamic>? initialUser;
+  final FeedbackSummaryData? initialSummary;
 
   @override
   State<FeedbackManagementScreen> createState() =>
@@ -61,7 +68,18 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
   @override
   void initState() {
     super.initState();
-    _payloadFuture = _queueLoad(refreshContext: true);
+    if (widget.initialUser != null) {
+      _contextCache = _FeedbackContext(
+        user: Map<String, dynamic>.from(widget.initialUser!),
+      );
+    }
+    if (_contextCache != null) {
+      _resolvedPayload = _seededPayload(
+        context: _contextCache!,
+        summary: widget.initialSummary,
+      );
+    }
+    _payloadFuture = _queueLoad(refreshContext: _contextCache == null);
     _searchController.addListener(_onSearchChanged);
   }
 
@@ -101,6 +119,56 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
     );
     _contextCache = context;
     return context;
+  }
+
+  _FeedbackPayload _seededPayload({
+    required _FeedbackContext context,
+    FeedbackSummaryData? summary,
+  }) {
+    return _FeedbackPayload(
+      context: context,
+      summary: summary ?? _emptySummaryData(),
+      charts: _emptyChartsData(),
+      page: _emptyPage(),
+      query: _currentQuery(),
+      isHydrating: true,
+    );
+  }
+
+  FeedbackSummaryData _emptySummaryData() {
+    return const FeedbackSummaryData(
+      totalFeedback: 0,
+      averageRating: 0,
+      recentFeedbackCount: 0,
+      typeCounts: <String, int>{},
+      typeBreakdown: <FeedbackBreakdownItem>[],
+      availableFilters: FeedbackAvailableFilters(
+        offices: <String>[],
+        barangays: <String>[],
+      ),
+    );
+  }
+
+  FeedbackChartsData _emptyChartsData() {
+    return const FeedbackChartsData(
+      ratingBreakdown: <FeedbackRatingBreakdownItem>[],
+      typeBreakdown: <FeedbackBreakdownItem>[],
+      officeBreakdown: <FeedbackBreakdownItem>[],
+      barangayBreakdown: <FeedbackBreakdownItem>[],
+      trendBreakdown: <FeedbackTrendPoint>[],
+    );
+  }
+
+  FeedbackPage _emptyPage() {
+    return const FeedbackPage(
+      entries: <Map<String, dynamic>>[],
+      currentPage: 1,
+      lastPage: 1,
+      perPage: _pageSize,
+      total: 0,
+      from: 0,
+      to: 0,
+    );
   }
 
   _FeedbackQuery _currentQuery({int? page}) {
@@ -170,6 +238,7 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
     return _feedbackService.getFeedbackPage(
       page: query.page,
       perPage: query.perPage,
+      includeFilters: false,
       search: query.search,
       type: query.type,
       barangay: query.barangay,
@@ -202,17 +271,26 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
   }) async {
     final context = await _loadContext(refresh: refreshContext);
     final request = _normalizeQuery(query ?? _currentQuery(), context);
+    final shouldLoadFilters =
+        refreshContext ||
+        _resolvedPayload == null ||
+        _hasNoAvailableFilters(_resolvedPayload!.summary.availableFilters);
+    final canReuseSeededSummary = _canReuseSeededSummary(request);
 
     final results = await Future.wait<dynamic>([
-      _feedbackService.getFeedbackSummary(
-        search: request.search,
-        type: request.type,
-        barangay: request.barangay,
-        office: request.office,
-        rating: request.rating,
-        datePreset: request.datePreset,
-      ),
+      canReuseSeededSummary
+          ? Future<FeedbackSummaryData>.value(widget.initialSummary!)
+          : _feedbackService.getFeedbackSummary(
+              includeFilters: shouldLoadFilters,
+              search: request.search,
+              type: request.type,
+              barangay: request.barangay,
+              office: request.office,
+              rating: request.rating,
+              datePreset: request.datePreset,
+            ),
       _feedbackService.getFeedbackCharts(
+        includeFilters: false,
         search: request.search,
         type: request.type,
         barangay: request.barangay,
@@ -224,13 +302,18 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
     ]);
 
     final page = await _normalizePageForQuery(request, results[2] as FeedbackPage);
+    final summary = _resolvedSummaryWithFilters(
+      summary: results[0] as FeedbackSummaryData,
+      shouldLoadFilters: shouldLoadFilters || canReuseSeededSummary,
+    );
 
     final payload = _FeedbackPayload(
       context: context,
-      summary: results[0] as FeedbackSummaryData,
+      summary: summary,
       charts: results[1] as FeedbackChartsData,
       page: page,
       query: request.copyWith(page: page.currentPage),
+      isHydrating: false,
     );
     if (requestId == _requestVersion) {
       _resolvedPayload = payload;
@@ -261,6 +344,7 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
       charts: cachedPayload.charts,
       page: page,
       query: normalizedQuery.copyWith(page: page.currentPage),
+      isHydrating: false,
     );
     if (requestId == _requestVersion) {
       _resolvedPayload = payload;
@@ -324,6 +408,53 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
         ...availableFilters.offices,
       ],
       'All Departments',
+    );
+  }
+
+  bool _canReuseSeededSummary(_FeedbackQuery query) {
+    return widget.initialSummary != null &&
+        _resolvedPayload != null &&
+        _resolvedPayload!.isHydrating &&
+        _isDefaultQuery(query);
+  }
+
+  bool _isDefaultQuery(_FeedbackQuery query) {
+    return query.page <= 1 &&
+        query.search.isEmpty &&
+        query.type == null &&
+        query.barangay == null &&
+        query.office == null &&
+        query.rating == null &&
+        query.datePreset == null;
+  }
+
+  bool _hasNoAvailableFilters(FeedbackAvailableFilters filters) {
+    return filters.offices.isEmpty && filters.barangays.isEmpty;
+  }
+
+  FeedbackSummaryData _resolvedSummaryWithFilters({
+    required FeedbackSummaryData summary,
+    required bool shouldLoadFilters,
+  }) {
+    if (shouldLoadFilters && !_hasNoAvailableFilters(summary.availableFilters)) {
+      return summary;
+    }
+
+    final cachedFilters =
+        _resolvedPayload?.summary.availableFilters ??
+        widget.initialSummary?.availableFilters;
+
+    if (cachedFilters == null || _hasNoAvailableFilters(cachedFilters)) {
+      return summary;
+    }
+
+    return FeedbackSummaryData(
+      totalFeedback: summary.totalFeedback,
+      averageRating: summary.averageRating,
+      recentFeedbackCount: summary.recentFeedbackCount,
+      typeCounts: summary.typeCounts,
+      typeBreakdown: summary.typeBreakdown,
+      availableFilters: cachedFilters,
     );
   }
 
@@ -423,7 +554,7 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
               final payload = snapshot.data ?? _resolvedPayload;
 
               if (isLoading && payload == null) {
-                return const Center(child: CircularProgressIndicator());
+                return const _FeedbackInitialLoadingState();
               }
 
               if (snapshot.hasError && payload == null) {
@@ -476,6 +607,8 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
               final summary = payload.summary;
               final charts = payload.charts;
               final page = payload.page;
+              final showHydrationPlaceholders =
+                  isLoading && payload.isHydrating;
               final headerBadge = _FeedbackHeaderBadge(
                 icon: _isSuperAdmin(payload.context.user)
                     ? Icons.hub_outlined
@@ -670,9 +803,14 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
                               subtitle:
                                   'Grouped over time for the current filters',
                               minContentHeight: 302,
-                              child: _FeedbackTrendChart(
-                                points: charts.trendBreakdown,
-                              ),
+                              child: showHydrationPlaceholders
+                                  ? const _FeedbackChartLoadingState(
+                                      message:
+                                          'Loading trend activity for the current scope...',
+                                    )
+                                  : _FeedbackTrendChart(
+                                      points: charts.trendBreakdown,
+                                    ),
                             ),
                           ),
                         ),
@@ -684,7 +822,14 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
                               title: 'Rating Breakdown',
                               subtitle: '1 to 5 star distribution',
                               minContentHeight: 302,
-                              child: _FeedbackBreakdownBars(items: ratingItems),
+                              child: showHydrationPlaceholders
+                                  ? const _FeedbackChartLoadingState(
+                                      message:
+                                          'Loading rating distribution...',
+                                    )
+                                  : _FeedbackBreakdownBars(
+                                      items: ratingItems,
+                                    ),
                             ),
                           ),
                         ),
@@ -696,9 +841,14 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
                         title: 'Feedback Trend',
                         subtitle: 'Grouped over time for the current filters',
                         minContentHeight: 302,
-                        child: _FeedbackTrendChart(
-                          points: charts.trendBreakdown,
-                        ),
+                        child: showHydrationPlaceholders
+                            ? const _FeedbackChartLoadingState(
+                                message:
+                                    'Loading trend activity for the current scope...',
+                              )
+                            : _FeedbackTrendChart(
+                                points: charts.trendBreakdown,
+                              ),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -707,7 +857,11 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
                         title: 'Rating Breakdown',
                         subtitle: '1 to 5 star distribution',
                         minContentHeight: 302,
-                        child: _FeedbackBreakdownBars(items: ratingItems),
+                        child: showHydrationPlaceholders
+                            ? const _FeedbackChartLoadingState(
+                                message: 'Loading rating distribution...',
+                              )
+                            : _FeedbackBreakdownBars(items: ratingItems),
                       ),
                     ),
                   ],
@@ -716,6 +870,7 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
                     child: _FeedbackTableCard(
                       page: page,
                       isLoading: isLoading,
+                      showLoadingPlaceholder: showHydrationPlaceholders,
                       onPrevious: !isLoading && page.hasPreviousPage
                           ? () => _goToPage(page.currentPage - 1)
                           : null,
@@ -791,6 +946,7 @@ class _FeedbackPayload {
     required this.charts,
     required this.page,
     required this.query,
+    this.isHydrating = false,
   });
 
   final _FeedbackContext context;
@@ -798,6 +954,7 @@ class _FeedbackPayload {
   final FeedbackChartsData charts;
   final FeedbackPage page;
   final _FeedbackQuery query;
+  final bool isHydrating;
 }
 
 class _FeedbackFilterCard extends StatelessWidget {
@@ -1144,6 +1301,49 @@ class _FeedbackSectionCard extends StatelessWidget {
   }
 }
 
+class _FeedbackInitialLoadingState extends StatelessWidget {
+  const _FeedbackInitialLoadingState();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+      children: [
+        Text(
+          'Feedback',
+          style: TextStyle(
+            color: colors.text,
+            fontSize: 28,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Preparing the latest feedback summary, charts, and records...',
+          style: TextStyle(color: colors.mutedText, fontSize: 14),
+        ),
+        const SizedBox(height: 16),
+        const LinearProgressIndicator(
+          minHeight: 3,
+          color: Color(0xFF2557D6),
+        ),
+        const SizedBox(height: 16),
+        const _FeedbackChartLoadingState(
+          message: 'Loading filters, totals, and recent sentiment...',
+        ),
+        const SizedBox(height: 12),
+        const _FeedbackChartLoadingState(
+          message: 'Loading trend activity and rating breakdown...',
+        ),
+        const SizedBox(height: 12),
+        const _FeedbackTableLoadingState(),
+      ],
+    );
+  }
+}
+
 class _FeedbackHeaderBadge extends StatelessWidget {
   const _FeedbackHeaderBadge({
     required this.icon,
@@ -1225,6 +1425,41 @@ class _FeedbackChartSurface extends StatelessWidget {
         border: Border.all(color: colors.border),
       ),
       child: child,
+    );
+  }
+}
+
+class _FeedbackChartLoadingState extends StatelessWidget {
+  const _FeedbackChartLoadingState({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
+
+    return _FeedbackChartSurface(
+      child: SizedBox(
+        height: 232,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(strokeWidth: 3),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: colors.mutedText, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1719,12 +1954,14 @@ class _FeedbackTableCard extends StatelessWidget {
   const _FeedbackTableCard({
     required this.page,
     required this.isLoading,
+    this.showLoadingPlaceholder = false,
     required this.onPrevious,
     required this.onNext,
   });
 
   final FeedbackPage page;
   final bool isLoading;
+  final bool showLoadingPlaceholder;
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
 
@@ -1769,11 +2006,16 @@ class _FeedbackTableCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 16),
-              if (page.entries.isEmpty)
+              if (showLoadingPlaceholder)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 18),
+                  child: _FeedbackTableLoadingState(),
+                )
+              else if (page.entries.isEmpty)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 18),
                   child: _FeedbackEmptyState(
-                    title: 'No feedback found',
+                    title: 'No feedback found yet.',
                     message:
                         'Try adjusting the filters or search terms to see matching feedback.',
                   ),
@@ -1858,6 +2100,64 @@ class _FeedbackTableCard extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _FeedbackTableLoadingState extends StatelessWidget {
+  const _FeedbackTableLoadingState();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AdminThemeColors.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: colors.input,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2.8),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Loading the latest feedback records...',
+                  style: TextStyle(
+                    color: colors.text,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ...List.generate(
+            4,
+            (index) => Padding(
+              padding: EdgeInsets.only(bottom: index == 3 ? 0 : 10),
+              child: Container(
+                height: 58,
+                decoration: BoxDecoration(
+                  color: colors.panel,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: colors.border),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

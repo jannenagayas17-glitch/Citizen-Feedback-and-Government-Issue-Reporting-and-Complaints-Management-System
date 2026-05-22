@@ -45,7 +45,7 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
     );
   }
 
-  Future<void> _openAlerts() async {
+  Future<void> _openUpdates() async {
     await Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (_) => const CitizenNotificationsScreen()),
@@ -240,7 +240,7 @@ class _MyComplaintsScreenState extends State<MyComplaintsScreen> {
         currentIndex: 1,
         onHomeTap: _openHome,
         onReportsTap: () {},
-        onAlertsTap: _openAlerts,
+        onUpdatesTap: _openUpdates,
         onProfileTap: _openProfile,
       ),
       floatingActionButton: SizedBox(

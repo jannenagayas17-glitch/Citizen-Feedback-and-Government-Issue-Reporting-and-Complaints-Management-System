@@ -17,6 +17,7 @@ class SubmitComplaintScreen extends StatefulWidget {
 
 class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   static const int _maxAttachments = 3;
+  static const int _maxDescriptionLength = 100;
   static final RegExp _emojiRegex = RegExp(
     r'[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]',
     unicode: true,
@@ -420,6 +421,9 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
         _descriptionError = 'Description is required.';
       } else if (_containsEmoji(description)) {
         _descriptionError = 'Emoji characters are not allowed.';
+      } else if (description.length > _maxDescriptionLength) {
+        _descriptionError =
+            'Description must be $_maxDescriptionLength characters or fewer.';
       }
     });
 
@@ -627,8 +631,10 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
                       controller: _descriptionController,
                       minLines: 4,
                       maxLines: 5,
+                      maxLength: _maxDescriptionLength,
                       style: TextStyle(color: citizenTitleColor(context)),
                       inputFormatters: [
+                        LengthLimitingTextInputFormatter(_maxDescriptionLength),
                         FilteringTextInputFormatter.deny(_emojiRegex),
                       ],
                       decoration: _inputDecoration(

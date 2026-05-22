@@ -6,6 +6,8 @@ import '../../services/auth_service.dart';
 import '../../services/report_service.dart';
 import '../../utils/admin_theme.dart';
 import '../../utils/file_download.dart';
+import '../front_desk/walk_in_claim_slip_dialog.dart';
+import '../front_desk/walk_in_complaint_screen.dart';
 import 'report_detail_dialog.dart';
 
 class ComplaintManagementScreen extends StatefulWidget {
@@ -13,10 +15,12 @@ class ComplaintManagementScreen extends StatefulWidget {
     super.key,
     this.embedded = false,
     this.initialOfficeName,
+    this.initialUser,
   });
 
   final bool embedded;
   final String? initialOfficeName;
+  final Map<String, dynamic>? initialUser;
 
   @override
   State<ComplaintManagementScreen> createState() =>
@@ -66,9 +70,16 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
     });
   }
 
-  Future<_ReportsPayload> _queueLoad({bool refreshContext = false}) {
+  Future<_ReportsPayload> _queueLoad({
+    bool refreshContext = false,
+    bool includeFilters = true,
+  }) {
     final requestId = ++_requestVersion;
-    return _loadPayload(refreshContext: refreshContext, requestId: requestId);
+    return _loadPayload(
+      refreshContext: refreshContext,
+      includeFilters: includeFilters,
+      requestId: requestId,
+    );
   }
 
   @override
@@ -83,7 +94,9 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
       return _contextCache!;
     }
 
-    final user = await _authService.getCurrentUser();
+    final user = widget.initialUser != null && !refresh
+        ? Map<String, dynamic>.from(widget.initialUser!)
+        : await _authService.getCurrentUser();
     final isSuperAdmin = _isSuperAdmin(user);
     final results = await Future.wait<dynamic>([
       _reportService.getCategories(),
@@ -107,35 +120,20 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
 
   Future<_ReportsPayload> _loadPayload({
     bool refreshContext = false,
+    bool includeFilters = true,
     required int requestId,
   }) async {
     final context = await _loadContext(refresh: refreshContext);
-    var pageData = await _reportService.getAdminReportsPage(
-      page: _page,
-      perPage: _pageSize,
-      search: _search,
-      status: _selectedStatus == 'All Status' ? null : _selectedStatus,
-      category: _selectedCategory == 'All Categories'
-          ? null
-          : _selectedCategory,
-      barangay: _selectedBarangay == 'All Barangays' ? null : _selectedBarangay,
-      office: _selectedOffice == 'All Departments' ? null : _selectedOffice,
+    var pageData = await _fetchReportsPage(
+      context: context,
+      includeFilters: includeFilters,
     );
 
     if (pageData.reports.isEmpty && pageData.total > 0 && _page > 1) {
       _page = pageData.lastPage;
-      pageData = await _reportService.getAdminReportsPage(
-        page: _page,
-        perPage: _pageSize,
-        search: _search,
-        status: _selectedStatus == 'All Status' ? null : _selectedStatus,
-        category: _selectedCategory == 'All Categories'
-            ? null
-            : _selectedCategory,
-        barangay: _selectedBarangay == 'All Barangays'
-            ? null
-            : _selectedBarangay,
-        office: _selectedOffice == 'All Departments' ? null : _selectedOffice,
+      pageData = await _fetchReportsPage(
+        context: context,
+        includeFilters: includeFilters,
       );
     }
 
@@ -161,9 +159,46 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
 
     setState(() {
       _page = page;
-      _payloadFuture = _queueLoad();
+      _payloadFuture = _queueLoad(includeFilters: false);
     });
     await _payloadFuture;
+  }
+
+  Future<AdminReportPage> _fetchReportsPage({
+    required _ReportListContext context,
+    required bool includeFilters,
+  }) {
+    final status = _selectedStatus == 'All Status' ? null : _selectedStatus;
+    final category = _selectedCategory == 'All Categories'
+        ? null
+        : _selectedCategory;
+    final barangay = _selectedBarangay == 'All Barangays'
+        ? null
+        : _selectedBarangay;
+    final office = _selectedOffice == 'All Departments' ? null : _selectedOffice;
+
+    if (_isAdministrativeStaff(context.user)) {
+      return _reportService.getFrontDeskReportsPage(
+        page: _page,
+        perPage: _pageSize,
+        includeFilters: includeFilters,
+        search: _search,
+        status: status,
+        category: category,
+        barangay: barangay,
+      );
+    }
+
+    return _reportService.getAdminReportsPage(
+      page: _page,
+      perPage: _pageSize,
+      includeFilters: includeFilters,
+      search: _search,
+      status: status,
+      category: category,
+      barangay: barangay,
+      office: office,
+    );
   }
 
   Future<void> _exportReports() async {
@@ -241,6 +276,9 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
   bool _isSuperAdmin(Map<String, dynamic> user) =>
       (user['role'] ?? '').toString().trim() == 'super_admin';
 
+  bool _isAdministrativeStaff(Map<String, dynamic> user) =>
+      (user['role'] ?? '').toString().trim() == 'administrative_staff';
+
   String _departmentLabel(Map<String, dynamic> user) {
     final office = user['office'];
     if (office is Map<String, dynamic>) {
@@ -253,6 +291,32 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
 
   DateTime? _createdAt(Map<String, dynamic> report) =>
       DateTime.tryParse((report['created_at'] ?? '').toString())?.toLocal();
+
+  Future<void> _openWalkInComplaint(_ReportListContext contextData) async {
+    final createdReport = await showWalkInComplaintDialog(
+      context: context,
+      initialOfficeName: _departmentLabel(contextData.user),
+    );
+
+    if (!mounted || createdReport == null) {
+      return;
+    }
+
+    await _refresh();
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Walk-in complaint submitted successfully.')),
+    );
+
+    await showWalkInClaimSlipDialog(
+      context: context,
+      report: createdReport,
+      frontDeskUser: contextData.user,
+    );
+  }
 
   List<String> _options(
     Iterable<String> items,
@@ -447,10 +511,14 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
       return;
     }
 
+    final contextData = _resolvedPayload?.context ?? _contextCache;
     await showAdminReportDetailDialog(
       context: context,
       reportId: reportId,
-      onUpdateStatus: _openStatusDialog,
+      onUpdateStatus: contextData != null &&
+              !_isAdministrativeStaff(contextData.user)
+          ? _openStatusDialog
+          : null,
     );
   }
 
@@ -550,6 +618,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
             final contextData = payload.context;
             final pageData = payload.page;
             final superAdmin = _isSuperAdmin(contextData.user);
+            final administrativeStaff = _isAdministrativeStaff(contextData.user);
             final reports = pageData.reports;
             final offices = _departmentOptions(payload);
             if (!offices.contains(_selectedOffice)) {
@@ -580,7 +649,13 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                 : _selectedBarangay != 'All Barangays'
                 ? ' - $_selectedBarangay'
                 : '';
-            final exportDisabled = _exporting || isLoading;
+            final exportDisabled = _exporting || isLoading || administrativeStaff;
+            final pageTitle = administrativeStaff ? 'All Reports' : 'All Reports';
+            final pageSubtitle = administrativeStaff
+                ? 'Review assisted walk-in complaints and submit new complaints without leaving the shared report workspace.'
+                : superAdmin
+                ? 'View and manage all issue reports from across the city.'
+                : 'View and manage reports assigned to your department.';
 
             final content = [
               if (isLoading) ...[
@@ -600,7 +675,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                 const SizedBox(height: 14),
               ],
               Text(
-                'All Reports',
+                pageTitle,
                 style: TextStyle(
                   color: colors.text,
                   fontSize: 22,
@@ -609,9 +684,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                superAdmin
-                    ? 'View and manage all issue reports from across the city.'
-                    : 'View and manage reports assigned to your department.',
+                pageSubtitle,
                 style: TextStyle(color: colors.mutedText, fontSize: 13),
               ),
               const SizedBox(height: 18),
@@ -709,29 +782,52 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                             );
                           },
                         );
-                        final exportButton = FilledButton.icon(
-                          onPressed: exportDisabled ? null : _exportReports,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFF2557D6),
-                          ),
-                          icon: exportDisabled
-                              ? const SizedBox(
-                                  width: 14,
-                                  height: 14,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Icon(
-                                  Icons.file_download_outlined,
+                        final actionButtons = Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: [
+                            if (administrativeStaff)
+                              FilledButton.icon(
+                                onPressed: isLoading
+                                    ? null
+                                    : () => _openWalkInComplaint(contextData),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xFF2557D6),
+                                ),
+                                icon: const Icon(
+                                  Icons.add_task_rounded,
                                   size: 16,
                                 ),
-                          label: Text(
-                            _exporting
-                                ? 'Exporting...'
-                                : (isLoading ? 'Syncing filters...' : 'Export Excel'),
-                          ),
+                                label: const Text('Submit Walk-in Complaint'),
+                              ),
+                            if (!administrativeStaff)
+                              FilledButton.icon(
+                                onPressed: exportDisabled ? null : _exportReports,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xFF2557D6),
+                                ),
+                                icon: exportDisabled
+                                    ? const SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.file_download_outlined,
+                                        size: 16,
+                                      ),
+                                label: Text(
+                                  _exporting
+                                      ? 'Exporting...'
+                                      : (isLoading
+                                            ? 'Syncing filters...'
+                                            : 'Export Excel'),
+                                ),
+                              ),
+                          ],
                         );
 
                         if (!useStackedToolbar) {
@@ -741,7 +837,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                               const SizedBox(width: 12),
                               Expanded(flex: 3, child: filters),
                               const SizedBox(width: 12),
-                              exportButton,
+                              actionButtons,
                             ],
                           );
                         }
@@ -755,7 +851,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
                             const SizedBox(height: 12),
                             Align(
                               alignment: Alignment.centerRight,
-                              child: exportButton,
+                              child: actionButtons,
                             ),
                           ],
                         );

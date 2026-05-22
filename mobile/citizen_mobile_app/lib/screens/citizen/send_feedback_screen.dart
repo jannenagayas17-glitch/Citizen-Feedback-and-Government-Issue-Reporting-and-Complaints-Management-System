@@ -111,6 +111,10 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final bottomInset = mediaQuery.viewInsets.bottom;
+    final bottomSafeArea = mediaQuery.padding.bottom;
+
     return Scaffold(
       backgroundColor: citizenScaffoldColor(context),
       appBar: AppBar(
@@ -150,7 +154,13 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
           final offices = officeSnapshot.data ?? const <dynamic>[];
 
           return ListView(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: EdgeInsets.fromLTRB(
+              12,
+              8,
+              12,
+              bottomInset + bottomSafeArea + 24,
+            ),
             children: [
               _buildInfoBanner(),
               const SizedBox(height: 16),
@@ -196,6 +206,42 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
               FutureBuilder<List<Map<String, dynamic>>>(
                 future: _historyFuture,
                 builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return _buildHistoryStatusCard(
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.2,
+                              color: citizenPrimaryActionColor(context),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Loading your recent feedback...',
+                              style: TextStyle(color: citizenBodyColor(context)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  if (snapshot.hasError) {
+                    return _buildHistoryStatusCard(
+                      child: Text(
+                        snapshot.error.toString().replaceFirst(
+                          'Exception: ',
+                          '',
+                        ),
+                        style: TextStyle(color: citizenBodyColor(context)),
+                      ),
+                    );
+                  }
+
                   final entries =
                       snapshot.data ?? const <Map<String, dynamic>>[];
                   if (entries.isEmpty) {
@@ -268,32 +314,44 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
         children: [
           _buildSectionLabel('Feedback Type'),
           const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _buildTypeChip(
-                  label: 'Suggestion',
-                  icon: Icons.lightbulb_rounded,
-                  accent: citizenPrimaryActionColor(context),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildTypeChip(
-                  label: 'Complaint',
-                  icon: Icons.warning_amber_rounded,
-                  accent: citizenHighlightColor(context),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildTypeChip(
-                  label: 'Praise',
-                  icon: Icons.celebration_rounded,
-                  accent: citizenAccentColor(context),
-                ),
-              ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final stacked = constraints.maxWidth < 520;
+              final chipWidth = stacked
+                  ? constraints.maxWidth
+                  : (constraints.maxWidth - 16) / 3;
+
+              return Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  SizedBox(
+                    width: chipWidth,
+                    child: _buildTypeChip(
+                      label: 'Suggestion',
+                      icon: Icons.lightbulb_rounded,
+                      accent: citizenPrimaryActionColor(context),
+                    ),
+                  ),
+                  SizedBox(
+                    width: chipWidth,
+                    child: _buildTypeChip(
+                      label: 'Complaint',
+                      icon: Icons.warning_amber_rounded,
+                      accent: citizenHighlightColor(context),
+                    ),
+                  ),
+                  SizedBox(
+                    width: chipWidth,
+                    child: _buildTypeChip(
+                      label: 'Praise',
+                      icon: Icons.celebration_rounded,
+                      accent: citizenAccentColor(context),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 16),
           _buildSectionLabel('Regarding'),
@@ -396,6 +454,11 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
   }
 
   Widget _buildRatingRow() {
+    final selectedColor = const Color(0xFFF6C54E);
+    final unselectedColor = citizenIsDark(context)
+        ? const Color(0xFF7E8AA3)
+        : const Color(0xFFB2BDD1);
+
     return Row(
       children: List.generate(5, (index) {
         final star = index + 1;
@@ -406,11 +469,9 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
           child: Padding(
             padding: const EdgeInsets.only(right: 10),
             child: Icon(
-              Icons.star_rounded,
+              isSelected ? Icons.star_rounded : Icons.star_outline_rounded,
               size: 40,
-              color: isSelected
-                  ? citizenHighlightColor(context)
-                  : citizenBorderColor(context),
+              color: isSelected ? selectedColor : unselectedColor,
             ),
           ),
         );
@@ -491,6 +552,15 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
   }
 
   Widget _buildEmptyHistoryCard() {
+    return _buildHistoryStatusCard(
+      child: Text(
+        'No feedback sent yet.',
+        style: TextStyle(color: citizenBodyColor(context)),
+      ),
+    );
+  }
+
+  Widget _buildHistoryStatusCard({required Widget child}) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -498,10 +568,7 @@ class _SendFeedbackScreenState extends State<SendFeedbackScreen> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: citizenBorderColor(context)),
       ),
-      child: Text(
-        'No feedback sent yet.',
-        style: TextStyle(color: citizenBodyColor(context)),
-      ),
+      child: child,
     );
   }
 

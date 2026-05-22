@@ -846,7 +846,12 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
       case _SuperAdminDesktopSection.analytics:
         return AnalyticsReportsScreen(key: sectionKey, embedded: true);
       case _SuperAdminDesktopSection.feedback:
-        return FeedbackManagementScreen(key: sectionKey, embedded: true);
+        return FeedbackManagementScreen(
+          key: sectionKey,
+          embedded: true,
+          initialUser: _cachedDashboardData?.user,
+          initialSummary: _cachedDashboardData?.feedbackSummary,
+        );
       case _SuperAdminDesktopSection.settings:
         return SystemSettingsScreen(key: sectionKey, embedded: true);
       case _SuperAdminDesktopSection.users:

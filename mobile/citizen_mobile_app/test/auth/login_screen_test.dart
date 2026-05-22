@@ -1,5 +1,6 @@
 import 'package:citizen_mobile_app/screens/auth/login_screen.dart';
 import 'package:citizen_mobile_app/services/auth_service.dart';
+import 'package:citizen_mobile_app/services/citizen_avatar_service.dart';
 import 'package:citizen_mobile_app/utils/app_routes.dart';
 import 'package:citizen_mobile_app/utils/app_theme_controller.dart';
 import 'package:citizen_mobile_app/utils/token_storage.dart';
@@ -11,8 +12,9 @@ import '../test_helpers.dart';
 void main() {
   setupWidgetTestEnvironment();
 
-  setUp(() {
+  setUp(() async {
     resetMockPreferences();
+    await CitizenAvatarService.clearAvatar();
   });
 
   Future<void> pumpLoginScreen(
@@ -88,6 +90,33 @@ void main() {
       expect(find.text('Administrative Staff Home'), findsOneWidget);
     },
   );
+
+  testWidgets('syncs the cached avatar URL from the login response', (
+    tester,
+  ) async {
+    await pumpLoginScreen(
+      tester,
+      authService: _FakeAuthService(
+        user: const {
+          'id': 18,
+          'role': 'citizen',
+          'email': 'citizen@test.com',
+          'profile_image_url':
+              'http://localhost:8000/api/profile-images/profile_images/18/avatar.png',
+        },
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField).at(0), 'citizen@test.com');
+    await tester.enterText(find.byType(TextField).at(1), 'CitizenPass123');
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Sign In'));
+    await tester.pumpAndSettle();
+
+    expect(
+      CitizenAvatarService.cachedAvatarUrl,
+      'http://localhost:8000/api/profile-images/profile_images/18/avatar.png',
+    );
+  });
 }
 
 class _FakeAuthService extends AuthService {
