@@ -1,5 +1,6 @@
 import '../models/report_model.dart';
 import 'auth_service.dart';
+import 'citizen_avatar_service.dart';
 import 'report_service.dart';
 
 class CitizenDataCache {
@@ -34,6 +35,7 @@ class CitizenDataCache {
       clear();
       rethrow;
     }
+    CitizenAvatarService.syncFromUser(_user);
     return _user!;
   }
 
@@ -120,6 +122,7 @@ class CitizenDataCache {
 
   static void updateUser(Map<String, dynamic> user) {
     _user = Map<String, dynamic>.from(user);
+    CitizenAvatarService.syncFromUser(_user);
   }
 
   static void prependReport(Map<String, dynamic> report) {

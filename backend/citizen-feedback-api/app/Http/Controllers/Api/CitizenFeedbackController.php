@@ -8,6 +8,7 @@ use App\Models\Report;
 use App\Support\CitizenFeedbackQueryService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -33,26 +34,30 @@ class CitizenFeedbackController extends Controller
 
         $this->feedbackQueries->applyFilters($query, $filters);
         $dateRange = $this->feedbackQueries->applyDateRangeFilter($query, $filters);
-        $availableFilters = $this->buildAvailableFilters($request, $filters);
+        $availableFilters = $this->shouldIncludeAvailableFilters($request)
+            ? $this->buildAvailableFilters($request, $filters)
+            : $this->emptyAvailableFilters();
         $appliedFilters = $this->appliedFiltersPayload($filters, $dateRange);
+        $pagination = $this->normalizedPaginationOptions($request);
 
-        $shouldPaginate = $request->boolean('paginate')
-            || $request->filled('page')
-            || $request->filled('per_page');
-
-        if (! $shouldPaginate) {
+        if (! $pagination['enabled']) {
             return response()->json($query->get());
         }
 
-        $perPage = (int) ($filters['per_page'] ?? 20);
-        $page = $query->paginate($perPage)->appends($request->query());
+        $page = $this->paginateFeedbackResults(
+            $query,
+            $pagination['per_page'],
+            $pagination['page'],
+        );
 
-        return response()->json([
-            ...$page->toArray(),
-            'available_filters' => $availableFilters,
-            'applied_filters' => $appliedFilters,
-            'role_scope' => $this->roleScopePayload($request),
-        ]);
+        return response()->json(
+            $this->feedbackPagePayload(
+                $page,
+                $availableFilters,
+                $appliedFilters,
+                $request,
+            ),
+        );
     }
 
     public function summary(Request $request)
@@ -65,7 +70,9 @@ class CitizenFeedbackController extends Controller
         $this->feedbackQueries->applyFilters($query, $filters);
         $dateRange = $this->feedbackQueries->applyDateRangeFilter($query, $filters);
         $summary = $this->feedbackQueries->buildSummary($query);
-        $availableFilters = $this->buildAvailableFilters($request, $filters);
+        $availableFilters = $this->shouldIncludeAvailableFilters($request)
+            ? $this->buildAvailableFilters($request, $filters)
+            : $this->emptyAvailableFilters();
 
         return response()->json([
             ...$summary,
@@ -93,7 +100,7 @@ class CitizenFeedbackController extends Controller
             ->groupBy('citizen_feedback.rating')
             ->pluck('total', 'citizen_feedback.rating');
 
-        $ratingBreakdown = collect(range(1, 5))->map(function (int $rating) use ($ratingCounts) {
+        $ratingBreakdown = collect($this->integerSequence(1, 5))->map(function (int $rating) use ($ratingCounts) {
             return [
                 'label' => $rating === 1 ? '1 Star' : $rating.' Stars',
                 'rating' => $rating,
@@ -334,11 +341,17 @@ class CitizenFeedbackController extends Controller
 
         if ($includePagination) {
             $rules['paginate'] = ['nullable'];
-            $rules['page'] = ['nullable', 'integer', 'min:1'];
-            $rules['per_page'] = ['nullable', 'integer', 'min:1', 'max:100'];
+            $rules['page'] = ['nullable'];
+            $rules['per_page'] = ['nullable'];
         }
 
-        return $request->validate($rules);
+        $validated = $request->validate($rules);
+
+        if ($includePagination) {
+            unset($validated['paginate'], $validated['page'], $validated['per_page']);
+        }
+
+        return $validated;
     }
 
     private function feedbackBaseQuery(Request $request): Builder
@@ -375,6 +388,23 @@ class CitizenFeedbackController extends Controller
             'offices' => $this->availableOffices($request, $filters),
             'barangays' => $this->availableBarangays($request, $filters),
         ];
+    }
+
+    private function emptyAvailableFilters(): array
+    {
+        return [
+            'offices' => [],
+            'barangays' => [],
+        ];
+    }
+
+    private function shouldIncludeAvailableFilters(Request $request): bool
+    {
+        if (! $request->has('include_filters')) {
+            return true;
+        }
+
+        return $request->boolean('include_filters');
     }
 
     private function availableOffices(Request $request, array $filters): array
@@ -480,7 +510,7 @@ class CitizenFeedbackController extends Controller
                 ->get()
                 ->keyBy('bucket_key');
 
-            return collect(range(0, $spanDays - 1))->map(function (int $offset) use ($rows, $start, $spanDays) {
+            return collect($this->integerSequence(0, $spanDays - 1))->map(function (int $offset) use ($rows, $start, $spanDays) {
                 $date = $start->copy()->addDays($offset);
                 $key = $date->format('Y-m-d');
                 $row = $rows->get($key);
@@ -509,7 +539,7 @@ class CitizenFeedbackController extends Controller
             ->get()
             ->keyBy('bucket_key');
 
-        return collect(range(0, max(0, $monthCount - 1)))->map(function (int $offset) use ($rows, $startMonth) {
+        return collect($this->integerSequence(0, max(0, $monthCount - 1)))->map(function (int $offset) use ($rows, $startMonth) {
             $date = $startMonth->copy()->addMonths($offset);
             $key = $date->format('Y-m');
             $row = $rows->get($key);
@@ -521,6 +551,102 @@ class CitizenFeedbackController extends Controller
                 'average_rating' => round((float) ($row->average_rating ?? 0), 2),
             ];
         })->values()->all();
+    }
+
+    private function normalizedPaginationOptions(Request $request): array
+    {
+        return [
+            'enabled' => $request->boolean('paginate')
+                || $request->filled('page')
+                || $request->filled('per_page'),
+            'page' => $this->normalizePositiveInteger($request->query('page'), default: 1, maximum: 100000),
+            'per_page' => $this->normalizePositiveInteger($request->query('per_page'), default: 20, maximum: 100),
+        ];
+    }
+
+    private function paginateFeedbackResults(
+        Builder $query,
+        int $perPage,
+        int $page,
+    ): LengthAwarePaginator {
+        $paginator = $query->paginate($perPage, ['*'], 'page', $page);
+        $lastPage = max(1, (int) $paginator->lastPage());
+
+        if ($paginator->total() > 0 && $page > $lastPage) {
+            return $query->paginate($perPage, ['*'], 'page', $lastPage);
+        }
+
+        return $paginator;
+    }
+
+    private function feedbackPagePayload(
+        LengthAwarePaginator $page,
+        array $availableFilters,
+        array $appliedFilters,
+        Request $request,
+    ): array {
+        $currentPage = max(1, (int) $page->currentPage());
+        $lastPage = max(1, (int) $page->lastPage());
+        $total = max(0, (int) $page->total());
+        $perPage = max(1, (int) $page->perPage());
+        $from = $total === 0 ? 0 : max(1, (int) ($page->firstItem() ?? 0));
+        $to = $total === 0 ? 0 : max($from, (int) ($page->lastItem() ?? $from));
+
+        return [
+            'current_page' => min($currentPage, $lastPage),
+            'last_page' => $lastPage,
+            'per_page' => $perPage,
+            'total' => $total,
+            'from' => $from,
+            'to' => $to,
+            'data' => $page->items(),
+            'available_filters' => $availableFilters,
+            'applied_filters' => $appliedFilters,
+            'role_scope' => $this->roleScopePayload($request),
+        ];
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function integerSequence(int $start, int $end): array
+    {
+        $values = [];
+        $step = $start <= $end ? 1 : -1;
+
+        for ($value = $start; ; $value += $step) {
+            $values[] = $value;
+
+            if ($value === $end) {
+                break;
+            }
+        }
+
+        return $values;
+    }
+
+    private function normalizePositiveInteger(
+        mixed $value,
+        int $default,
+        ?int $maximum = null,
+    ): int {
+        if (is_int($value)) {
+            $normalized = $value;
+        } elseif (is_numeric($value)) {
+            $normalized = (int) $value;
+        } else {
+            return $default;
+        }
+
+        if ($normalized < 1) {
+            return $default;
+        }
+
+        if ($maximum !== null && $normalized > $maximum) {
+            return $maximum;
+        }
+
+        return $normalized;
     }
 
     private function loadFeedbackResource(CitizenFeedback $feedback): CitizenFeedback

@@ -1,6 +1,8 @@
 <?php
 
 use App\Support\DemoAccountService;
+use App\Support\RealisticComplaintSeedService;
+use App\Support\RealisticFeedbackSeedService;
 use App\Support\UserEmailDeduplicationService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -152,3 +154,185 @@ Artisan::command('users:cleanup-demo {--apply : Archive known seeded demo accoun
 
     return 0;
 })->purpose('Preview or safely archive known seeded demo accounts');
+
+Artisan::command('complaints:seed-realistic {--count=3000 : Number of realistic complaint records to insert} {--batch=250 : Number of reports to insert per transaction batch} {--force : Skip the safety confirmation prompt}', function (RealisticComplaintSeedService $seedService) {
+    $count = (int) $this->option('count');
+    $batchSize = (int) $this->option('batch');
+    $force = (bool) $this->option('force');
+
+    if ($count < 1) {
+        $this->error('The complaint count must be at least 1.');
+
+        return 1;
+    }
+
+    if ($batchSize < 1) {
+        $this->error('The batch size must be at least 1.');
+
+        return 1;
+    }
+
+    try {
+        $context = $seedService->describeContext();
+    } catch (\Throwable $exception) {
+        $this->error($exception->getMessage());
+
+        return 1;
+    }
+
+    $this->info('Realistic complaint seeding preview');
+    $this->line('Active real citizens: '.$context['citizen_count']);
+    $this->line('Active offices: '.$context['office_count']);
+    $this->line('Categories: '.$context['category_count']);
+    $this->line('Active admins: '.$context['admin_count']);
+    $this->line('Active super admins: '.$context['super_admin_count']);
+    $this->line('Requested insert count: '.$count);
+    $this->line('Batch size: '.$batchSize);
+    $this->line('This command appends real report rows only. It does not delete, truncate, or reset existing data.');
+
+    if (! $force && ! $this->confirm('Continue and insert realistic complaint records into the current database?', false)) {
+        $this->warn('Cancelled. No database rows were changed.');
+
+        return 1;
+    }
+
+    try {
+        $summary = $seedService->seed($count, $batchSize);
+    } catch (\Throwable $exception) {
+        $this->error($exception->getMessage());
+
+        return 1;
+    }
+
+    $this->newLine();
+    $this->info('Realistic complaint seeding completed successfully.');
+    $this->line('Reports before: '.$summary['reports_before']);
+    $this->line('Reports after: '.$summary['reports_after']);
+    $this->line('Report delta: '.$summary['reports_delta']);
+    $this->line('Reports created: '.$summary['created_count']);
+    $this->line('Status history rows created: '.$summary['status_histories_created']);
+    $this->line('Admin response rows created: '.$summary['admin_responses_created']);
+    $this->line('Citizens used: '.$summary['citizen_count_used']);
+
+    if (($summary['generated_start'] ?? null) instanceof \Illuminate\Support\Carbon && ($summary['generated_end'] ?? null) instanceof \Illuminate\Support\Carbon) {
+        $this->line(
+            'Generated complaint date range: '
+            .$summary['generated_start']->toDateString()
+            .' to '
+            .$summary['generated_end']->toDateString()
+        );
+    }
+
+    $this->newLine();
+    $this->line('Departments used:');
+    foreach ($summary['office_counts'] as $officeName => $officeCount) {
+        $this->line('- '.$officeName.': '.$officeCount);
+    }
+
+    $this->newLine();
+    $this->line('Statuses generated:');
+    foreach ($summary['status_counts'] as $status => $statusCount) {
+        $this->line('- '.$status.': '.$statusCount);
+    }
+
+    $this->newLine();
+    $this->line('Priorities generated:');
+    foreach ($summary['priority_counts'] as $priority => $priorityCount) {
+        $this->line('- '.$priority.': '.$priorityCount);
+    }
+
+    $this->newLine();
+    $this->line('No existing users, reports, feedback, media, analytics, profile images, or relationships were deleted by this command.');
+
+    return 0;
+})->purpose('Safely append realistic complaint records for analytics and report testing');
+
+Artisan::command('feedback:seed-realistic {--count=300 : Number of realistic feedback records to insert} {--batch=100 : Number of feedback rows to insert per transaction batch} {--force : Skip the safety confirmation prompt}', function (RealisticFeedbackSeedService $seedService) {
+    $count = (int) $this->option('count');
+    $batchSize = (int) $this->option('batch');
+    $force = (bool) $this->option('force');
+
+    if ($count < 1) {
+        $this->error('The feedback count must be at least 1.');
+
+        return 1;
+    }
+
+    if ($batchSize < 1) {
+        $this->error('The batch size must be at least 1.');
+
+        return 1;
+    }
+
+    try {
+        $context = $seedService->describeContext();
+    } catch (\Throwable $exception) {
+        $this->error($exception->getMessage());
+
+        return 1;
+    }
+
+    $this->info('Realistic feedback seeding preview');
+    $this->line('Existing feedback rows: '.$context['feedback_count']);
+    $this->line('Eligible real reports without linked feedback: '.$context['eligible_report_count']);
+    $this->line('Eligible citizens: '.$context['citizen_count']);
+    $this->line('Eligible departments: '.$context['office_count']);
+    $this->line('Requested insert count: '.$count);
+    $this->line('Batch size: '.$batchSize);
+    $this->line('This command appends real feedback rows only. It does not delete, truncate, or reset existing data.');
+
+    if (! $force && ! $this->confirm('Continue and insert realistic feedback records into the current database?', false)) {
+        $this->warn('Cancelled. No database rows were changed.');
+
+        return 1;
+    }
+
+    try {
+        $summary = $seedService->seed($count, $batchSize);
+    } catch (\Throwable $exception) {
+        $this->error($exception->getMessage());
+
+        return 1;
+    }
+
+    $this->newLine();
+    $this->info('Realistic feedback seeding completed successfully.');
+    $this->line('Feedback before: '.$summary['feedback_before']);
+    $this->line('Feedback after: '.$summary['feedback_after']);
+    $this->line('Feedback delta: '.$summary['feedback_delta']);
+    $this->line('Feedback created: '.$summary['created_count']);
+    $this->line('Reports linked: '.$summary['reports_linked']);
+    $this->line('Citizens used: '.$summary['citizen_count_used']);
+
+    if (($summary['generated_start'] ?? null) instanceof \Illuminate\Support\Carbon && ($summary['generated_end'] ?? null) instanceof \Illuminate\Support\Carbon) {
+        $this->line(
+            'Generated feedback date range: '
+            .$summary['generated_start']->toDateString()
+            .' to '
+            .$summary['generated_end']->toDateString()
+        );
+    }
+
+    $this->newLine();
+    $this->line('Departments used:');
+    foreach ($summary['office_counts'] as $officeName => $officeCount) {
+        $this->line('- '.$officeName.': '.$officeCount);
+    }
+
+    $this->newLine();
+    $this->line('Rating distribution:');
+    foreach ($summary['rating_counts'] as $rating => $ratingCount) {
+        $this->line('- '.$rating.' star'.($rating === '1' ? '' : 's').': '.$ratingCount);
+    }
+
+    $this->newLine();
+    $this->line('Feedback types generated:');
+    foreach ($summary['type_counts'] as $type => $typeCount) {
+        $this->line('- '.$type.': '.$typeCount);
+    }
+
+    $this->newLine();
+    $this->line('No existing users, reports, feedback, media, analytics, profile images, or relationships were deleted by this command.');
+
+    return 0;
+})->purpose('Safely append realistic feedback records for feedback analytics and portal testing');

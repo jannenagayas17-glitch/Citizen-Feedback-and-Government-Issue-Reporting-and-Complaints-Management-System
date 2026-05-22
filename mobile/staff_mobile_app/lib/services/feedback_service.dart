@@ -10,6 +10,7 @@ class FeedbackService {
   Future<FeedbackPage> getFeedbackPage({
     int page = 1,
     int perPage = 20,
+    bool includeFilters = true,
     String? search,
     String? type,
     String? barangay,
@@ -26,6 +27,7 @@ class FeedbackService {
         'paginate': '1',
         'page': page,
         'per_page': perPage,
+        'include_filters': includeFilters ? '1' : '0',
         ..._filterQueryParameters(
           search: search,
           type: type,
@@ -52,6 +54,7 @@ class FeedbackService {
   }
 
   Future<FeedbackSummaryData> getFeedbackSummary({
+    bool includeFilters = true,
     String? search,
     String? type,
     String? barangay,
@@ -64,16 +67,19 @@ class FeedbackService {
     final response = await _apiClient.get(
       '/feedback/summary',
       authRequired: true,
-      queryParameters: _filterQueryParameters(
-        search: search,
-        type: type,
-        barangay: barangay,
-        office: office,
-        rating: rating,
-        datePreset: datePreset,
-        startDate: startDate,
-        endDate: endDate,
-      ),
+      queryParameters: {
+        'include_filters': includeFilters ? '1' : '0',
+        ..._filterQueryParameters(
+          search: search,
+          type: type,
+          barangay: barangay,
+          office: office,
+          rating: rating,
+          datePreset: datePreset,
+          startDate: startDate,
+          endDate: endDate,
+        ),
+      },
     );
 
     final data = _decodeMapResponse(response.body);
@@ -89,6 +95,7 @@ class FeedbackService {
   }
 
   Future<FeedbackChartsData> getFeedbackCharts({
+    bool includeFilters = true,
     String? search,
     String? type,
     String? barangay,
@@ -101,16 +108,19 @@ class FeedbackService {
     final response = await _apiClient.get(
       '/feedback/charts',
       authRequired: true,
-      queryParameters: _filterQueryParameters(
-        search: search,
-        type: type,
-        barangay: barangay,
-        office: office,
-        rating: rating,
-        datePreset: datePreset,
-        startDate: startDate,
-        endDate: endDate,
-      ),
+      queryParameters: {
+        'include_filters': includeFilters ? '1' : '0',
+        ..._filterQueryParameters(
+          search: search,
+          type: type,
+          barangay: barangay,
+          office: office,
+          rating: rating,
+          datePreset: datePreset,
+          startDate: startDate,
+          endDate: endDate,
+        ),
+      },
     );
 
     final data = _decodeMapResponse(response.body);
@@ -361,17 +371,35 @@ class FeedbackPage {
   });
 
   factory FeedbackPage.fromJson(Map<String, dynamic> json) {
+    final rawLastPage = _parseInt(json['last_page'], fallback: 1);
+    final rawCurrentPage = _parseInt(json['current_page'], fallback: 1);
+    final rawPerPage = _parseInt(json['per_page'], fallback: 20);
+    final total = _parseInt(json['total']);
+    final lastPage = rawLastPage < 1 ? 1 : rawLastPage;
+    final currentPage = rawCurrentPage < 1
+        ? 1
+        : rawCurrentPage > lastPage
+        ? lastPage
+        : rawCurrentPage;
+    final perPage = rawPerPage < 1
+        ? 20
+        : rawPerPage > 100
+        ? 100
+        : rawPerPage;
+    final from = total <= 0 ? 0 : _parseInt(json['from']);
+    final to = total <= 0 ? 0 : _parseInt(json['to']);
+
     return FeedbackPage(
       entries: (json['data'] as List<dynamic>? ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(Map<String, dynamic>.from)
           .toList(),
-      currentPage: _parseInt(json['current_page'], fallback: 1),
-      lastPage: _parseInt(json['last_page'], fallback: 1),
-      perPage: _parseInt(json['per_page'], fallback: 20),
-      total: _parseInt(json['total']),
-      from: _parseInt(json['from']),
-      to: _parseInt(json['to']),
+      currentPage: currentPage,
+      lastPage: lastPage,
+      perPage: perPage,
+      total: total,
+      from: from,
+      to: to < from && total > 0 ? from : to,
     );
   }
 

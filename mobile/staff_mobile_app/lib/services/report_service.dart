@@ -85,8 +85,7 @@ class ReportService {
     required String complainantContactNumber,
     String? complainantEmail,
     required String complainantAddress,
-    bool isSeniorCitizen = false,
-    bool isPwd = false,
+    bool isAnonymous = false,
     DateTime? expectedReturnAt,
     String? priority,
     double? latitude,
@@ -122,8 +121,7 @@ class ReportService {
     addField('walk_in_contact_number', complainantContactNumber);
     addField('walk_in_email', complainantEmail);
     addField('walk_in_address', complainantAddress);
-    request.fields['walk_in_is_senior_citizen'] = isSeniorCitizen ? '1' : '0';
-    request.fields['walk_in_is_pwd'] = isPwd ? '1' : '0';
+    request.fields['is_anonymous'] = isAnonymous ? '1' : '0';
 
     if (categoryId != null) {
       request.fields['category_id'] = '$categoryId';
@@ -208,6 +206,7 @@ class ReportService {
   Future<AdminReportPage> getAdminReportsPage({
     int page = 1,
     int perPage = 25,
+    bool includeFilters = true,
     String? search,
     String? status,
     String? category,
@@ -221,6 +220,7 @@ class ReportService {
         'paginate': 'true',
         'page': page,
         'per_page': perPage,
+        'include_filters': includeFilters ? '1' : '0',
         if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
         if (status != null && status.trim().isNotEmpty) 'status': status.trim(),
         if (category != null && category.trim().isNotEmpty)
@@ -249,20 +249,26 @@ class ReportService {
   Future<AdminReportPage> getFrontDeskReportsPage({
     int page = 1,
     int perPage = 15,
+    bool includeFilters = true,
     String? search,
     String? status,
     String? category,
+    String? barangay,
   }) async {
     final response = await _apiClient.get(
       '/front-desk/reports',
       authRequired: true,
       queryParameters: {
+        'paginate': 'true',
         'page': page,
         'per_page': perPage,
+        'include_filters': includeFilters ? '1' : '0',
         if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
         if (status != null && status.trim().isNotEmpty) 'status': status.trim(),
         if (category != null && category.trim().isNotEmpty)
           'category': category.trim(),
+        if (barangay != null && barangay.trim().isNotEmpty)
+          'barangay': barangay.trim(),
       },
     );
 

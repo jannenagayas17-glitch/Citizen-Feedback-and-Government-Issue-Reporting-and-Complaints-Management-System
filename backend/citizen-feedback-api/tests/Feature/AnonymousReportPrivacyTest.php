@@ -49,6 +49,24 @@ class AnonymousReportPrivacyTest extends TestCase
             ->assertJsonPath('user_id', $citizen->id);
     }
 
+    public function test_citizen_report_submission_rejects_descriptions_longer_than_one_hundred_characters(): void
+    {
+        [$citizen, $office, $category] = $this->seedCitizenReportDependencies();
+
+        Sanctum::actingAs($citizen);
+
+        $response = $this->postJson('/api/reports', $this->validReportPayload($office, $category, [
+            'description' => str_repeat('A', 101),
+        ]));
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['description'])
+            ->assertJsonPath(
+                'errors.description.0',
+                'Description must be 100 characters or fewer.'
+            );
+    }
+
     public function test_admin_listing_and_detail_hide_anonymous_reporter_identity(): void
     {
         [$citizen, $office, $category] = $this->seedCitizenReportDependencies();

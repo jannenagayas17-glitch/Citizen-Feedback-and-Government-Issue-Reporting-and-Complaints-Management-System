@@ -4,7 +4,7 @@ import '../screens/admin/admin_home_screen.dart';
 import '../screens/auth/forgot_password_screen.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
-import '../screens/front_desk/front_desk_home_screen.dart';
+import '../screens/front_desk/administrative_staff_home_screen.dart';
 import '../screens/super_admin/super_admin_dashboard.dart';
 import 'protected_portal_route.dart';
 import 'session_gate.dart';
@@ -57,6 +57,6 @@ class AppRoutes {
     BuildContext context,
     Map<String, dynamic> user,
   ) {
-    return const FrontDeskHomeScreen();
+    return const AdministrativeStaffHomeScreen();
   }
 }

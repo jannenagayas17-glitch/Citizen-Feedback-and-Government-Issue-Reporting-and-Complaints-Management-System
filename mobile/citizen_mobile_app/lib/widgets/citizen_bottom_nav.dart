@@ -8,14 +8,14 @@ class CitizenBottomNav extends StatelessWidget {
     required this.currentIndex,
     required this.onHomeTap,
     required this.onReportsTap,
-    required this.onAlertsTap,
+    required this.onUpdatesTap,
     required this.onProfileTap,
   });
 
   final int currentIndex;
   final VoidCallback onHomeTap;
   final VoidCallback onReportsTap;
-  final VoidCallback onAlertsTap;
+  final VoidCallback onUpdatesTap;
   final VoidCallback onProfileTap;
 
   @override
@@ -59,7 +59,7 @@ class CitizenBottomNav extends StatelessWidget {
               selected: currentIndex == 3,
               color: activeColor,
               inactiveColor: inactiveColor,
-              onTap: onAlertsTap,
+              onTap: onUpdatesTap,
             ),
             _CitizenNavItem(
               icon: Icons.person_outline,

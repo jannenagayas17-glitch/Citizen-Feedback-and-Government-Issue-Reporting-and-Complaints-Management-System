@@ -211,7 +211,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
           setState(() => _currentIndex = 1);
           _openMyReports();
         },
-        onAlertsTap: () {
+        onUpdatesTap: () {
           setState(() => _currentIndex = 3);
           _openNotifications();
         },

@@ -184,8 +184,10 @@ class _AdminReportDetailDialogState extends State<_AdminReportDetailDialog> {
                   Divider(height: 1, color: colors.border),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(22, 14, 22, 18),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
+                    child: OverflowBar(
+                      alignment: MainAxisAlignment.end,
+                      spacing: 12,
+                      overflowSpacing: 12,
                       children: [
                         TextButton(
                           onPressed: () =>
@@ -193,7 +195,6 @@ class _AdminReportDetailDialogState extends State<_AdminReportDetailDialog> {
                           child: const Text('Close'),
                         ),
                         if (widget.onUpdateStatus != null) ...[
-                          const SizedBox(width: 12),
                           FilledButton.icon(
                             onPressed:
                                 snapshot.connectionState !=

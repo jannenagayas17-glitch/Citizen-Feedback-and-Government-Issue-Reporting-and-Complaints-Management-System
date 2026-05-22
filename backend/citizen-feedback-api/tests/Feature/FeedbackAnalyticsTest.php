@@ -241,6 +241,67 @@ class FeedbackAnalyticsTest extends TestCase
         $this->assertStringNotContainsString($feedbackB[0]->message, $content);
     }
 
+    public function test_feedback_endpoints_handle_empty_datasets_without_range_errors(): void
+    {
+        $superAdmin = User::create([
+            'name' => 'Empty Feedback Super Admin',
+            'email' => 'empty-feedback-super-admin@example.com',
+            'password' => Hash::make('password123'),
+            'role' => 'super_admin',
+            'is_active' => true,
+        ]);
+
+        Sanctum::actingAs($superAdmin);
+
+        $this->getJson('/api/feedback/summary')
+            ->assertOk()
+            ->assertJsonPath('total_feedback', 0);
+
+        $this->getJson('/api/feedback/charts')
+            ->assertOk()
+            ->assertJsonPath('rating_breakdown.0.count', 0)
+            ->assertJsonCount(0, 'trend_breakdown');
+
+        $this->getJson('/api/feedback?paginate=true&page=1&per_page=20')
+            ->assertOk()
+            ->assertJsonPath('total', 0)
+            ->assertJsonPath('current_page', 1)
+            ->assertJsonPath('last_page', 1)
+            ->assertJsonCount(0, 'data');
+    }
+
+    public function test_feedback_listing_normalizes_invalid_pagination_values_instead_of_crashing(): void
+    {
+        [$superAdmin, , , $feedbackA] = $this->seedFeedbackScenario();
+
+        Sanctum::actingAs($superAdmin);
+
+        $response = $this->getJson('/api/feedback?paginate=true&page=-9&per_page=999');
+
+        $response->assertOk()
+            ->assertJsonPath('current_page', 1)
+            ->assertJsonPath('per_page', 100)
+            ->assertJsonPath('total', 4)
+            ->assertJsonFragment(['message' => $feedbackA[0]->message]);
+    }
+
+    public function test_feedback_listing_clamps_out_of_range_pages_to_the_last_available_page(): void
+    {
+        [$superAdmin, , , $feedbackA, $feedbackB] = $this->seedFeedbackScenario();
+
+        Sanctum::actingAs($superAdmin);
+
+        $response = $this->getJson('/api/feedback?paginate=true&page=99&per_page=3');
+
+        $response->assertOk()
+            ->assertJsonPath('current_page', 2)
+            ->assertJsonPath('last_page', 2)
+            ->assertJsonPath('total', 4)
+            ->assertJsonCount(1, 'data')
+            ->assertJsonFragment(['message' => $feedbackA[0]->message])
+            ->assertJsonMissing(['message' => $feedbackB[0]->message]);
+    }
+
     private function seedFeedbackScenario(): array
     {
         $citizen = User::create([

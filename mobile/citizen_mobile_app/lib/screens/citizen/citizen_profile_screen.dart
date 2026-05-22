@@ -449,7 +449,7 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
     );
   }
 
-  Future<void> _openAlerts() async {
+  Future<void> _openUpdates() async {
     await Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (_) => const CitizenNotificationsScreen()),
@@ -485,6 +485,7 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
     final mobile = (_user['mobile_number'] ?? 'No mobile number').toString();
     final role = (_user['role'] ?? 'citizen').toString();
     final bottomSafeArea = MediaQuery.of(context).padding.bottom;
+    final bottomContentPadding = bottomSafeArea + 116;
     final themeController = AppThemeScope.of(context);
     return Scaffold(
       backgroundColor: citizenScaffoldColor(context),
@@ -503,28 +504,56 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
         decoration: BoxDecoration(gradient: citizenPageGradient(context)),
         child: ListView(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: EdgeInsets.fromLTRB(16, 18, 16, bottomSafeArea + 28),
+          padding: EdgeInsets.fromLTRB(16, 18, 16, bottomContentPadding),
           children: [
             _buildHeroCard(name, email, role),
             const SizedBox(height: 18),
-            Row(
-              children: [
-                Expanded(
-                  child: _ProfileStatCard(
-                    icon: Icons.badge_outlined,
-                    label: 'Role',
-                    value: _prettyRole(role),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _ProfileStatCard(
-                    icon: Icons.call_outlined,
-                    label: 'Mobile',
-                    value: mobile == 'No mobile number' ? 'Not set' : mobile,
-                  ),
-                ),
-              ],
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final stacked = constraints.maxWidth < 420;
+
+                if (stacked) {
+                  return Column(
+                    children: [
+                      _ProfileStatCard(
+                        icon: Icons.badge_outlined,
+                        label: 'Role',
+                        value: _prettyRole(role),
+                      ),
+                      const SizedBox(height: 12),
+                      _ProfileStatCard(
+                        icon: Icons.call_outlined,
+                        label: 'Mobile',
+                        value: mobile == 'No mobile number'
+                            ? 'Not set'
+                            : mobile,
+                      ),
+                    ],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    Expanded(
+                      child: _ProfileStatCard(
+                        icon: Icons.badge_outlined,
+                        label: 'Role',
+                        value: _prettyRole(role),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _ProfileStatCard(
+                        icon: Icons.call_outlined,
+                        label: 'Mobile',
+                        value: mobile == 'No mobile number'
+                            ? 'Not set'
+                            : mobile,
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 18),
             _buildActionCard(
@@ -626,7 +655,7 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
         currentIndex: 4,
         onHomeTap: _openHome,
         onReportsTap: _openReports,
-        onAlertsTap: _openAlerts,
+        onUpdatesTap: _openUpdates,
         onProfileTap: () {},
       ),
       floatingActionButton: SizedBox(

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../services/auth_service.dart';
+import '../../services/citizen_avatar_service.dart';
 import '../../services/citizen_data_cache.dart';
 import '../../services/google_auth_service.dart';
 import '../../utils/auth_redirect.dart';
@@ -165,6 +166,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final themeController = AppThemeScope.of(context);
       CitizenDataCache.clear();
+      CitizenDataCache.updateUser(user);
+      CitizenAvatarService.syncFromUser(user);
       await TokenStorage.saveLastEmailForRole(role: role, email: email);
       await themeController.loadForUser(user);
 
@@ -232,6 +235,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final themeController = AppThemeScope.of(context);
       CitizenDataCache.clear();
+      CitizenDataCache.updateUser(backendUser);
+      CitizenAvatarService.syncFromUser(backendUser);
       await TokenStorage.saveLastEmailForRole(
         role: 'citizen',
         email: user.email ?? '',
