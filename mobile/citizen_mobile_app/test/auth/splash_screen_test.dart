@@ -14,7 +14,7 @@ class _FakeAuthService extends AuthService {
   final Future<Map<String, dynamic>> Function() _handler;
 
   @override
-  Future<Map<String, dynamic>> getCurrentUser() {
+  Future<Map<String, dynamic>> getCurrentUser({bool refresh = false}) {
     return _handler();
   }
 }

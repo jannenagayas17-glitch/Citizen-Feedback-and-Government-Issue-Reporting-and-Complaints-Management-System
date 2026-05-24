@@ -19,6 +19,22 @@ class AuthSessionExpiredException implements Exception {
 }
 
 class AuthService {
+  static Map<String, dynamic>? _cachedCurrentUser;
+  static Future<Map<String, dynamic>>? _currentUserFuture;
+
+  static void _clearUserCache() {
+    _cachedCurrentUser = null;
+    _currentUserFuture = null;
+  }
+
+  static Map<String, dynamic> _cloneUser(Map<String, dynamic> user) =>
+      Map<String, dynamic>.from(user);
+
+  static void _cacheCurrentUser(Map<String, dynamic> user) {
+    _cachedCurrentUser = _cloneUser(user);
+    _currentUserFuture = null;
+  }
+
   Future<void> persistSession({
     required String token,
     required Map<String, dynamic> user,
@@ -26,9 +42,11 @@ class AuthService {
   }) async {
     await TokenStorage.saveToken(token);
     await TokenStorage.saveRole(user['role']?.toString() ?? fallbackRole);
+    _cacheCurrentUser(user);
   }
 
   Future<void> clearLocalSession() async {
+    _clearUserCache();
     await TokenStorage.clearAll();
   }
 
@@ -256,29 +274,22 @@ class AuthService {
     throw Exception(data['message']?.toString() ?? 'Failed to send reset link');
   }
 
-  Future<Map<String, dynamic>> getCurrentUser() async {
+  Future<Map<String, dynamic>> getCurrentUser({bool refresh = false}) async {
+    if (!refresh && _cachedCurrentUser != null) {
+      return _cloneUser(_cachedCurrentUser!);
+    }
+
+    if (!refresh && _currentUserFuture != null) {
+      final user = await _currentUserFuture!;
+      return _cloneUser(user);
+    }
+
+    final future = _fetchCurrentUser();
+    _currentUserFuture = future;
+
     try {
-      final response = await http.get(
-        _buildUri('/user'),
-        headers: await _headers(authRequired: true),
-      );
-
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200 && data is Map<String, dynamic>) {
-        return data;
-      }
-
-      if (response.statusCode == 401 || response.statusCode == 403) {
-        await TokenStorage.clearAll();
-        throw const AuthSessionExpiredException();
-      }
-
-      if (data is Map<String, dynamic>) {
-        throw Exception(_extractErrorMessage(data, 'Failed to fetch user'));
-      }
-
-      throw Exception('Failed to fetch user');
+      final user = await future;
+      return _cloneUser(user);
     } on AuthSessionExpiredException {
       rethrow;
     } on http.ClientException {
@@ -289,7 +300,37 @@ class AuthService {
       throw Exception(
         'The server returned an invalid response. Please restart the backend and try again.',
       );
+    } finally {
+      if (identical(_currentUserFuture, future)) {
+        _currentUserFuture = null;
+      }
     }
+  }
+
+  Future<Map<String, dynamic>> _fetchCurrentUser() async {
+    final response = await http.get(
+      _buildUri('/user'),
+      headers: await _headers(authRequired: true),
+    );
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200 && data is Map<String, dynamic>) {
+      _cacheCurrentUser(data);
+      return _cloneUser(data);
+    }
+
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      _clearUserCache();
+      await TokenStorage.clearAll();
+      throw const AuthSessionExpiredException();
+    }
+
+    if (data is Map<String, dynamic>) {
+      throw Exception(_extractErrorMessage(data, 'Failed to fetch user'));
+    }
+
+    throw Exception('Failed to fetch user');
   }
 
   Future<Map<String, dynamic>> updateProfile({
@@ -310,6 +351,12 @@ class AuthService {
     final data = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode == 200) {
+      final user = data['user'];
+      if (user is Map<String, dynamic>) {
+        _cacheCurrentUser(user);
+      } else {
+        _clearUserCache();
+      }
       return data;
     }
 
@@ -358,10 +405,17 @@ class AuthService {
     final data = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode == 200) {
+      final user = data['user'];
+      if (user is Map<String, dynamic>) {
+        _cacheCurrentUser(user);
+      } else {
+        _clearUserCache();
+      }
       return data;
     }
 
     if (response.statusCode == 401 || response.statusCode == 403) {
+      _clearUserCache();
       await TokenStorage.clearAll();
       throw const AuthSessionExpiredException();
     }
@@ -467,6 +521,7 @@ class AuthService {
       } catch (_) {
         // Always clear the local session even if Google/Firebase cleanup fails.
       }
+      _clearUserCache();
       await TokenStorage.clearAll();
     }
   }

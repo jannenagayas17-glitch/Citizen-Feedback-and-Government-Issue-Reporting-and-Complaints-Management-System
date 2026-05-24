@@ -52,7 +52,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
     _selectedOffice = widget.initialOfficeName?.trim().isNotEmpty == true
         ? widget.initialOfficeName!.trim()
         : 'All Departments';
-    _payloadFuture = _queueLoad(refreshContext: true);
+    _payloadFuture = _queueLoad(refreshContext: widget.initialUser == null);
     _searchController.addListener(() {
       final nextSearch = _searchController.text.trim();
       _searchDebounce?.cancel();
@@ -99,8 +99,8 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen> {
         : await _authService.getCurrentUser();
     final isSuperAdmin = _isSuperAdmin(user);
     final results = await Future.wait<dynamic>([
-      _reportService.getCategories(),
-      _authService.getOffices(includeInactive: isSuperAdmin),
+      _reportService.getCategories(refresh: refresh),
+      _authService.getOffices(includeInactive: isSuperAdmin, refresh: refresh),
     ]);
 
     final context = _ReportListContext(

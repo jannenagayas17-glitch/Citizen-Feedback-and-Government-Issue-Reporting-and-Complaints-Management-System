@@ -98,7 +98,7 @@ class _FakeAuthService extends AuthService {
   final Exception? error;
 
   @override
-  Future<Map<String, dynamic>> getCurrentUser() async {
+  Future<Map<String, dynamic>> getCurrentUser({bool refresh = false}) async {
     if (error != null) {
       throw error!;
     }

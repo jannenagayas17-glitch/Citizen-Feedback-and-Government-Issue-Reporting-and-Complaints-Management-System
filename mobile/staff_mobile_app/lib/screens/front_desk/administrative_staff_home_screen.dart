@@ -51,7 +51,11 @@ class _AdministrativeStaffHomeScreenState
     final results = await Future.wait<dynamic>([
       _authService.getCurrentUser(),
       _dashboardService.getDashboardStats(),
-      _reportService.getFrontDeskReportsPage(page: 1, perPage: 6),
+      _reportService.getFrontDeskReportsPage(
+        page: 1,
+        perPage: 6,
+        includeFilters: false,
+      ),
     ]);
 
     final data = _AdministrativeStaffHomeData(

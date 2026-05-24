@@ -11,15 +11,42 @@ import 'api_client.dart';
 
 class ReportService {
   static const int maxAttachmentBytes = 50 * 1024 * 1024;
+  static List<dynamic>? _cachedCategories;
+  static Future<List<dynamic>>? _categoriesFuture;
 
   final ApiClient _apiClient = ApiClient();
 
-  Future<List<dynamic>> getCategories() async {
+  Future<List<dynamic>> getCategories({bool refresh = false}) async {
+    if (!refresh && _cachedCategories != null) {
+      return _cloneList(_cachedCategories!);
+    }
+
+    if (!refresh && _categoriesFuture != null) {
+      final categories = await _categoriesFuture!;
+      return _cloneList(categories);
+    }
+
+    final future = _fetchCategories();
+    _categoriesFuture = future;
+
+    try {
+      final categories = await future;
+      return _cloneList(categories);
+    } finally {
+      if (identical(_categoriesFuture, future)) {
+        _categoriesFuture = null;
+      }
+    }
+  }
+
+  Future<List<dynamic>> _fetchCategories() async {
     final response = await _apiClient.get('/categories', authRequired: true);
-    return _decodeListResponse(
+    final categories = _decodeListResponse(
       response,
       fallbackMessage: 'Failed to fetch categories',
     );
+    _cachedCategories = _cloneList(categories);
+    return categories;
   }
 
   Future<List<dynamic>> getOffices() async {
@@ -518,6 +545,13 @@ class ReportService {
       return null;
     }
   }
+
+  static List<dynamic> _cloneList(List<dynamic> values) => values.map((value) {
+    if (value is Map<String, dynamic>) {
+      return Map<String, dynamic>.from(value);
+    }
+    return value;
+  }).toList(growable: false);
 
   String _formatDateOnly(DateTime date) {
     final normalized = DateTime(date.year, date.month, date.day);

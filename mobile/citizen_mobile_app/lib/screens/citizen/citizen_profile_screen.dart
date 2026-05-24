@@ -124,21 +124,6 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
     );
   }
 
-  Future<void> _showSessionExpiredAndRedirect() async {
-    CitizenDataCache.clear();
-    await CitizenAvatarService.clearAvatar();
-
-    if (!mounted) {
-      return;
-    }
-
-    Navigator.pushNamedAndRemoveUntil(
-      context,
-      AppRoutes.login,
-      (route) => false,
-    );
-  }
-
   Future<void> _openEditProfile() async {
     final updatedUser = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
@@ -464,17 +449,11 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
 
     if (!mounted) return;
     if (created != null) {
-      late final Map<String, dynamic> refreshedUser;
-      try {
-        refreshedUser = await _authService.getCurrentUser();
-      } on AuthSessionExpiredException {
-        await _showSessionExpiredAndRedirect();
-        return;
+      if (created is Map<String, dynamic>) {
+        CitizenDataCache.prependReport(created);
+      } else {
+        CitizenDataCache.invalidateReports();
       }
-      if (!mounted) return;
-      setState(() {
-        _user = Map<String, dynamic>.from(refreshedUser);
-      });
     }
   }
 
@@ -692,68 +671,135 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
   Widget _buildHeroCard(String name, String email, String role) {
     final titleColor = citizenTitleColor(context);
     final bodyColor = citizenBodyColor(context);
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
+    final roleBadge = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: citizenCardColor(context),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: citizenBorderColor(context)),
-        boxShadow: citizenCardShadow(context),
+        color: citizenPrimaryActionColor(context).withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: citizenPrimaryActionColor(context).withValues(alpha: 0.30),
+        ),
       ),
-      child: Column(
+      child: Text(
+        _prettyRole(role),
+        style: TextStyle(
+          color: citizenPrimaryActionColor(context),
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+
+    Widget avatarStack() {
+      return Stack(
+        clipBehavior: Clip.none,
         children: [
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              CitizenAvatar(
-                name: name,
-                size: 76,
-                backgroundColor: citizenHighlightColor(
-                  context,
-                ).withValues(alpha: citizenIsDark(context) ? 0.18 : 0.14),
-                textColor: citizenTitleColor(context),
-                fontSize: 26,
-              ),
-              Positioned(
-                right: -4,
-                bottom: -4,
-                child: InkWell(
-                  onTap: _isSavingAvatar ? null : _pickProfileImage,
-                  borderRadius: BorderRadius.circular(18),
-                  child: Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: citizenPrimaryActionColor(context),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: citizenScaffoldColor(context),
-                        width: 2,
-                      ),
-                    ),
-                    child: _isSavingAvatar
-                        ? Padding(
-                            padding: const EdgeInsets.all(7),
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: citizenOnPrimaryActionColor(context),
-                            ),
-                          )
-                        : Icon(
-                            Icons.camera_alt_rounded,
-                            color: citizenOnPrimaryActionColor(context),
-                            size: 16,
-                          ),
+          CitizenAvatar(
+            name: name,
+            size: 76,
+            backgroundColor: citizenHighlightColor(
+              context,
+            ).withValues(alpha: citizenIsDark(context) ? 0.18 : 0.14),
+            textColor: citizenTitleColor(context),
+            fontSize: 26,
+          ),
+          Positioned(
+            right: -4,
+            bottom: -4,
+            child: InkWell(
+              onTap: _isSavingAvatar ? null : _pickProfileImage,
+              borderRadius: BorderRadius.circular(18),
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: citizenPrimaryActionColor(context),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: citizenScaffoldColor(context),
+                    width: 2,
                   ),
                 ),
+                child: _isSavingAvatar
+                    ? Padding(
+                        padding: const EdgeInsets.all(7),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: citizenOnPrimaryActionColor(context),
+                        ),
+                      )
+                    : Icon(
+                        Icons.camera_alt_rounded,
+                        color: citizenOnPrimaryActionColor(context),
+                        size: 16,
+                      ),
               ),
-            ],
+            ),
           ),
-          const SizedBox(height: 14),
+        ],
+      );
+    }
+
+    Widget actionButtons({required bool wide}) {
+      return Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        alignment: wide ? WrapAlignment.start : WrapAlignment.center,
+        children: [
+          FilledButton.tonalIcon(
+            onPressed: _isSavingProfile ? null : _openEditProfile,
+            icon: _isSavingProfile
+                ? SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: citizenPrimaryActionColor(context),
+                    ),
+                  )
+                : const Icon(Icons.edit_outlined, size: 18),
+            label: Text(_isSavingProfile ? 'Saving...' : 'Edit profile'),
+            style: FilledButton.styleFrom(
+              backgroundColor: citizenPrimaryActionColor(
+                context,
+              ).withValues(alpha: 0.14),
+              foregroundColor: citizenPrimaryActionColor(context),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            ),
+          ),
+          OutlinedButton.icon(
+            onPressed: _isSavingAvatar ? null : _pickProfileImage,
+            icon: _isSavingAvatar
+                ? SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: citizenPrimaryActionColor(context),
+                    ),
+                  )
+                : const Icon(Icons.photo_camera_outlined, size: 18),
+            label: Text(_isSavingAvatar ? 'Uploading...' : 'Change photo'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: citizenTitleColor(context),
+              side: BorderSide(color: citizenBorderColor(context)),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            ),
+          ),
+        ],
+      );
+    }
+
+    Widget infoColumn({required bool wide}) {
+      return Column(
+        crossAxisAlignment: wide
+            ? CrossAxisAlignment.start
+            : CrossAxisAlignment.center,
+        children: [
           Text(
             name,
-            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: wide ? TextAlign.left : TextAlign.center,
             style: TextStyle(
               fontSize: 21,
               fontWeight: FontWeight.w700,
@@ -763,30 +809,50 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
           const SizedBox(height: 4),
           Text(
             email,
-            textAlign: TextAlign.center,
-            style: TextStyle(color: bodyColor),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: wide ? TextAlign.left : TextAlign.center,
+            style: TextStyle(color: bodyColor, height: 1.35),
           ),
           const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-            decoration: BoxDecoration(
-              color: citizenPrimaryActionColor(context).withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: citizenPrimaryActionColor(
-                  context,
-                ).withValues(alpha: 0.30),
-              ),
-            ),
-            child: Text(
-              _prettyRole(role),
-              style: TextStyle(
-                color: citizenPrimaryActionColor(context),
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
+          wide ? roleBadge : Center(child: roleBadge),
+          const SizedBox(height: 14),
+          actionButtons(wide: wide),
         ],
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
+      decoration: BoxDecoration(
+        color: citizenCardColor(context),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: citizenBorderColor(context)),
+        boxShadow: citizenCardShadow(context),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = constraints.maxWidth >= 430;
+
+          if (!isWide) {
+            return Column(
+              children: [
+                avatarStack(),
+                const SizedBox(height: 14),
+                infoColumn(wide: false),
+              ],
+            );
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              avatarStack(),
+              const SizedBox(width: 18),
+              Expanded(child: infoColumn(wide: true)),
+            ],
+          );
+        },
       ),
     );
   }

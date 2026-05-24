@@ -11,7 +11,10 @@ class _FakeStaffAuthService extends AuthService {
   Map<String, dynamic>? lastRequest;
 
   @override
-  Future<List<dynamic>> getOffices({bool includeInactive = false}) async {
+  Future<List<dynamic>> getOffices({
+    bool includeInactive = false,
+    bool refresh = false,
+  }) async {
     return const [
       {'name': 'City Engineer\'s Office'},
       {'name': 'City Health Office'},

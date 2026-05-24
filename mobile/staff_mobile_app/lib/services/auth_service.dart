@@ -8,6 +8,35 @@ import '../utils/token_storage.dart';
 
 class AuthService {
   static const String _passwordEndpoint = '/user/password';
+  static Map<String, dynamic>? _cachedCurrentUser;
+  static Future<Map<String, dynamic>>? _currentUserFuture;
+  static final Map<String, List<dynamic>> _cachedOffices =
+      <String, List<dynamic>>{};
+  static final Map<String, Future<List<dynamic>>> _officeFutures =
+      <String, Future<List<dynamic>>>{};
+
+  static void _clearSessionCaches() {
+    _cachedCurrentUser = null;
+    _currentUserFuture = null;
+    _cachedOffices.clear();
+    _officeFutures.clear();
+  }
+
+  static Map<String, dynamic> _cloneUser(Map<String, dynamic> user) =>
+      Map<String, dynamic>.from(user);
+
+  static List<dynamic> _cloneList(List<dynamic> values) =>
+      values.map((value) {
+        if (value is Map<String, dynamic>) {
+          return Map<String, dynamic>.from(value);
+        }
+        return value;
+      }).toList(growable: false);
+
+  static void _cacheCurrentUser(Map<String, dynamic> user) {
+    _cachedCurrentUser = _cloneUser(user);
+    _currentUserFuture = null;
+  }
 
   String _normalizeEmail(String email) {
     return email.trim().toLowerCase();
@@ -77,6 +106,7 @@ class AuthService {
 
       await TokenStorage.saveToken(token);
       await TokenStorage.saveRole(user['role']?.toString() ?? 'citizen');
+      _cacheCurrentUser(user);
 
       return data;
     }
@@ -113,6 +143,7 @@ class AuthService {
 
       await TokenStorage.saveToken(token);
       await TokenStorage.saveRole(user['role']?.toString() ?? 'citizen');
+      _cacheCurrentUser(user);
 
       return data;
     }
@@ -153,6 +184,7 @@ class AuthService {
 
       await TokenStorage.saveToken(token);
       await TokenStorage.saveRole(user['role']?.toString() ?? 'citizen');
+      _cacheCurrentUser(user);
 
       return data;
     }
@@ -200,6 +232,7 @@ class AuthService {
       if (token != null && user != null) {
         await TokenStorage.saveToken(token);
         await TokenStorage.saveRole(user['role']?.toString() ?? 'admin');
+        _cacheCurrentUser(user);
       }
 
       return data;
@@ -235,40 +268,63 @@ class AuthService {
     throw Exception(data['message']?.toString() ?? 'Failed to send reset link');
   }
 
-  Future<Map<String, dynamic>> getCurrentUser() async {
+  Future<Map<String, dynamic>> getCurrentUser({bool refresh = false}) async {
+    if (!refresh && _cachedCurrentUser != null) {
+      return _cloneUser(_cachedCurrentUser!);
+    }
+
+    if (!refresh && _currentUserFuture != null) {
+      final user = await _currentUserFuture!;
+      return _cloneUser(user);
+    }
+
+    final future = _fetchCurrentUser();
+    _currentUserFuture = future;
+
     try {
-      final response = await http.get(
-        _buildUri('/user'),
-        headers: await _headers(authRequired: true),
-      );
-
-      Map<String, dynamic>? data;
-      if (response.body.isNotEmpty) {
-        final decoded = jsonDecode(response.body);
-        if (decoded is Map<String, dynamic>) {
-          data = decoded;
-        }
-      }
-
-      if (response.statusCode == 200 && data != null) {
-        return data;
-      }
-
-      if (response.statusCode == 401 || response.statusCode == 403) {
-        await TokenStorage.clearAll();
-        throw Exception('Session expired. Please log in again.');
-      }
-
-      throw Exception(
-        data == null
-            ? 'Failed to fetch user'
-            : _extractErrorMessage(data, 'Failed to fetch user'),
-      );
+      final user = await future;
+      return _cloneUser(user);
     } on http.ClientException {
       throw Exception(
         'Unable to reach the server. Make sure Laravel is running on port 8000.',
       );
+    } finally {
+      if (identical(_currentUserFuture, future)) {
+        _currentUserFuture = null;
+      }
     }
+  }
+
+  Future<Map<String, dynamic>> _fetchCurrentUser() async {
+    final response = await http.get(
+      _buildUri('/user'),
+      headers: await _headers(authRequired: true),
+    );
+
+    Map<String, dynamic>? data;
+    if (response.body.isNotEmpty) {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) {
+        data = decoded;
+      }
+    }
+
+    if (response.statusCode == 200 && data != null) {
+      _cacheCurrentUser(data);
+      return _cloneUser(data);
+    }
+
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      _clearSessionCaches();
+      await TokenStorage.clearAll();
+      throw Exception('Session expired. Please log in again.');
+    }
+
+    throw Exception(
+      data == null
+          ? 'Failed to fetch user'
+          : _extractErrorMessage(data, 'Failed to fetch user'),
+    );
   }
 
   Future<Map<String, dynamic>> updateProfile({
@@ -290,6 +346,12 @@ class AuthService {
     final data = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode == 200) {
+      final user = data['user'];
+      if (user is Map<String, dynamic>) {
+        _cacheCurrentUser(user);
+      } else {
+        _cachedCurrentUser = null;
+      }
       return data;
     }
 
@@ -436,13 +498,47 @@ class AuthService {
     final data = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode == 200) {
+      _cachedCurrentUser = null;
       return data;
     }
 
     throw Exception(_extractErrorMessage(data, 'Failed to update account'));
   }
 
-  Future<List<dynamic>> getOffices({bool includeInactive = false}) async {
+  Future<List<dynamic>> getOffices({
+    bool includeInactive = false,
+    bool refresh = false,
+  }) async {
+    final cacheKey = includeInactive ? 'with-inactive' : 'active-only';
+    if (!refresh && _cachedOffices.containsKey(cacheKey)) {
+      return _cloneList(_cachedOffices[cacheKey]!);
+    }
+
+    if (!refresh && _officeFutures.containsKey(cacheKey)) {
+      final offices = await _officeFutures[cacheKey]!;
+      return _cloneList(offices);
+    }
+
+    final future = _fetchOffices(
+      includeInactive: includeInactive,
+      cacheKey: cacheKey,
+    );
+    _officeFutures[cacheKey] = future;
+
+    try {
+      final offices = await future;
+      return _cloneList(offices);
+    } finally {
+      if (identical(_officeFutures[cacheKey], future)) {
+        _officeFutures.remove(cacheKey);
+      }
+    }
+  }
+
+  Future<List<dynamic>> _fetchOffices({
+    required bool includeInactive,
+    required String cacheKey,
+  }) async {
     final suffix = includeInactive ? '?include_inactive=1' : '';
     final response = await http.get(
       _buildUri('/offices$suffix'),
@@ -452,7 +548,9 @@ class AuthService {
     final data = jsonDecode(response.body);
 
     if (response.statusCode == 200 && data is List<dynamic>) {
-      return data;
+      final offices = _cloneList(data);
+      _cachedOffices[cacheKey] = offices;
+      return offices;
     }
 
     if (data is Map<String, dynamic>) {
@@ -481,6 +579,7 @@ class AuthService {
     final data = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode == 200 || response.statusCode == 201) {
+      _cachedOffices.clear();
       return data;
     }
 
@@ -501,6 +600,7 @@ class AuthService {
     final data = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode == 200) {
+      _cachedCurrentUser = null;
       return data;
     }
 
@@ -516,6 +616,7 @@ class AuthService {
     final data = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode == 200) {
+      _cachedCurrentUser = null;
       return data;
     }
 
@@ -531,6 +632,7 @@ class AuthService {
     final data = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode == 200) {
+      _cachedCurrentUser = null;
       return data;
     }
 
@@ -546,6 +648,7 @@ class AuthService {
     final data = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode == 200) {
+      _cachedCurrentUser = null;
       return data;
     }
 
@@ -554,6 +657,7 @@ class AuthService {
 
   Future<void> logout() async {
     final token = await TokenStorage.getToken();
+    _clearSessionCaches();
 
     await PortalSessionController.clearStoredSession(signOutGoogle: true);
 

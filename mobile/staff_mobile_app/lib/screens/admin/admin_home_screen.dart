@@ -108,9 +108,12 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       _selectDesktopSection(_AdminDesktopSection.reports);
       return;
     }
+    final initialUser = _resolvedHomeData?.user;
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const ComplaintManagementScreen()),
+      MaterialPageRoute(
+        builder: (_) => ComplaintManagementScreen(initialUser: initialUser),
+      ),
     );
     await _refresh();
   }
@@ -137,9 +140,16 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       _selectDesktopSection(_AdminDesktopSection.feedback);
       return;
     }
+    final initialUser = _resolvedHomeData?.user;
+    final initialSummary = _resolvedHomeData?.feedbackSummary;
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const FeedbackManagementScreen()),
+      MaterialPageRoute(
+        builder: (_) => FeedbackManagementScreen(
+          initialUser: initialUser,
+          initialSummary: initialSummary,
+        ),
+      ),
     );
     await _refresh();
   }
@@ -750,11 +760,18 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           currentUser: currentUser,
         );
       case _AdminDesktopSection.reports:
-        return const ComplaintManagementScreen(embedded: true);
+        return ComplaintManagementScreen(
+          embedded: true,
+          initialUser: currentUser,
+        );
       case _AdminDesktopSection.analytics:
         return const AnalyticsReportsScreen(embedded: true);
       case _AdminDesktopSection.feedback:
-        return const FeedbackManagementScreen(embedded: true);
+        return FeedbackManagementScreen(
+          embedded: true,
+          initialUser: currentUser,
+          initialSummary: data.feedbackSummary,
+        );
       case _AdminDesktopSection.profile:
         return AdminProfileScreen(
           user: currentUser,

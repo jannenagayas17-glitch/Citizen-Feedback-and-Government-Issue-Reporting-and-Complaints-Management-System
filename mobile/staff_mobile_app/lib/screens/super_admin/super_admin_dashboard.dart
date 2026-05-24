@@ -129,9 +129,12 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
       _selectDesktopSection(_SuperAdminDesktopSection.reports);
       return;
     }
+    final initialUser = _cachedDashboardData?.user;
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const ComplaintManagementScreen()),
+      MaterialPageRoute(
+        builder: (_) => ComplaintManagementScreen(initialUser: initialUser),
+      ),
     );
     await _refresh();
   }
@@ -177,9 +180,16 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
       _selectDesktopSection(_SuperAdminDesktopSection.feedback);
       return;
     }
+    final initialUser = _cachedDashboardData?.user;
+    final initialSummary = _cachedDashboardData?.feedbackSummary;
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const FeedbackManagementScreen()),
+      MaterialPageRoute(
+        builder: (_) => FeedbackManagementScreen(
+          initialUser: initialUser,
+          initialSummary: initialSummary,
+        ),
+      ),
     );
     await _refresh();
   }
@@ -799,39 +809,31 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
     required double bottomSafeArea,
     required Map<String, dynamic> metrics,
   }) {
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: Offstage(
-            offstage: _desktopSection != _SuperAdminDesktopSection.dashboard,
-            child: TickerMode(
-              enabled: _desktopSection == _SuperAdminDesktopSection.dashboard,
-              child: SingleChildScrollView(
+    final sections = _SuperAdminDesktopSection.values;
+
+    return IndexedStack(
+      index: _desktopSection.index,
+      children: sections.map((section) {
+        final shouldBuild = section == _SuperAdminDesktopSection.dashboard ||
+            _loadedDesktopSections.contains(section) ||
+            section == _desktopSection;
+
+        if (!shouldBuild) {
+          return const SizedBox.shrink();
+        }
+
+        final child = section == _SuperAdminDesktopSection.dashboard
+            ? SingleChildScrollView(
                 padding: EdgeInsets.only(bottom: 24 + bottomSafeArea),
                 child: _buildDashboardLanding(metrics: metrics),
-              ),
-            ),
-          ),
-        ),
-        ..._SuperAdminDesktopSection.values
-            .where(
-              (section) =>
-                  section != _SuperAdminDesktopSection.dashboard &&
-                  _loadedDesktopSections.contains(section),
-            )
-            .map((section) {
-              final visible = section == _desktopSection;
-              return Positioned.fill(
-                child: Offstage(
-                  offstage: !visible,
-                  child: TickerMode(
-                    enabled: visible,
-                    child: _buildDesktopSectionContent(section),
-                  ),
-                ),
-              );
-            }),
-      ],
+              )
+            : _buildDesktopSectionContent(section);
+
+        return KeyedSubtree(
+          key: ValueKey('desktop-${section.name}'),
+          child: RepaintBoundary(child: child),
+        );
+      }).toList(),
     );
   }
 
@@ -842,7 +844,11 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
       case _SuperAdminDesktopSection.dashboard:
         return const SizedBox.shrink();
       case _SuperAdminDesktopSection.reports:
-        return ComplaintManagementScreen(key: sectionKey, embedded: true);
+        return ComplaintManagementScreen(
+          key: sectionKey,
+          embedded: true,
+          initialUser: _cachedDashboardData?.user,
+        );
       case _SuperAdminDesktopSection.analytics:
         return AnalyticsReportsScreen(key: sectionKey, embedded: true);
       case _SuperAdminDesktopSection.feedback:
